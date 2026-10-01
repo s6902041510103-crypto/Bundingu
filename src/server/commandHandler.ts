@@ -58,6 +58,7 @@ import {
   validateGamePhase,
   validatePlayerPermission,
 } from './validation';
+import { getJoinBonusMultiplier } from '@/lib/game-data';
 
 // ============================================================================
 // Command Result Types (Extended for Handler)
@@ -162,21 +163,61 @@ function applyJoinGame(state: ServerGameState, command: any): ApplyCommandResult
     };
   }
 
-  // Create new player
-  const newPlayer = {
-    playerId: command.sessionId as any, // sessionId used as playerId for mock
+  // Create new player with server-calculated join order and bonus multiplier
+  const joinOrder = state.players.length + 1;
+  const bonusMultiplier = getJoinBonusMultiplier(joinOrder);
+  const baseScore = 1;
+  const finalScore = baseScore * bonusMultiplier;
+
+  const newPlayer: ServerPlayer = {
+    playerId: command.sessionId as any, // sessionId used as playerId
     displayName: command.displayName,
-    avatarId: command.preferredAvatarId as any || 'avatar-01',
+    avatarId: (command.preferredAvatarId as any) || 'avatar-01',
     position: 1,
-    score: 1,
+    score: finalScore,
+    baseScore,
+    finalScore,
+    joinOrder,
+    bonusMultiplier,
     status: 'waiting' as const,
     joinedAt: new Date().toISOString(),
     isConnected: true,
     sessionId: command.sessionId,
+    correctAnswersCount: 0,
+    wrongAnswersCount: 0,
+    snakesHitCount: 0,
+    laddersUsedCount: 0,
+    specialEventsCount: 0,
+    diceRollsCount: 0,
   };
 
+  const updatedPlayers = [...state.players, newPlayer];
+  const updatedLeaderboard = updatedPlayers
+    .map(p => ({
+      playerId: p.playerId,
+      displayName: p.displayName,
+      avatarId: p.avatarId,
+      position: p.position,
+      score: p.finalScore ?? p.score,
+      baseScore: p.baseScore ?? p.score,
+      finalScore: p.finalScore ?? p.score,
+      joinOrder: p.joinOrder,
+      bonusMultiplier: p.bonusMultiplier,
+      status: p.status,
+      finishOrder: p.finishOrder,
+      finishBonus: p.finishBonus,
+      correctAnswersCount: p.correctAnswersCount ?? 0,
+      wrongAnswersCount: p.wrongAnswersCount ?? 0,
+      snakesHitCount: p.snakesHitCount ?? 0,
+      laddersUsedCount: p.laddersUsedCount ?? 0,
+      specialEventsCount: p.specialEventsCount ?? 0,
+      diceRollsCount: p.diceRollsCount ?? 0,
+    }))
+    .sort((a, b) => b.score - a.score || b.position - a.position);
+
   const newState = updateState(state, {
-    players: [...state.players, newPlayer],
+    players: updatedPlayers,
+    leaderboard: updatedLeaderboard,
     gameStatus: 'lobby' as const,
   });
 
@@ -187,6 +228,10 @@ function applyJoinGame(state: ServerGameState, command: any): ApplyCommandResult
       avatarId: newPlayer.avatarId,
       position: newPlayer.position,
       score: newPlayer.score,
+      baseScore: newPlayer.baseScore,
+      finalScore: newPlayer.finalScore,
+      joinOrder: newPlayer.joinOrder,
+      bonusMultiplier: newPlayer.bonusMultiplier,
       status: newPlayer.status,
     },
     playerCount: newState.players.length,

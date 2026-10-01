@@ -144,6 +144,17 @@ export interface PublicPlayer {
   finishOrder?: number;
   finishBonus?: number;
   isConnected: boolean;
+  // Requirement Part 3: Join Order Bonus & Game Statistics
+  joinOrder?: number;
+  bonusMultiplier?: number;
+  baseScore?: number;
+  finalScore?: number;
+  correctAnswersCount?: number;
+  wrongAnswersCount?: number;
+  snakesHitCount?: number;
+  laddersUsedCount?: number;
+  specialEventsCount?: number;
+  diceRollsCount?: number;
 }
 
 // Dice result safe for client (no rngSeed)
@@ -168,18 +179,26 @@ export function stripDiceSeed(dice: ServerDiceResult): PublicDiceResult {
 
 // Convert ServerPlayer to PublicPlayer (strip sensitive fields)
 export function stripPlayerSession(player: ServerPlayer): PublicPlayer {
-  const { sessionId, answeredAt, answerTimeMs, lastRoll, joinedAt, isConnected, ...rest } = player;
-  // Include only safe fields for client
   return {
     playerId: player.playerId,
     displayName: player.displayName,
     avatarId: player.avatarId,
     position: player.position,
-    score: player.score,
+    score: player.finalScore ?? player.score,
     status: player.status,
     finishOrder: player.finishOrder,
     finishBonus: player.finishBonus,
     isConnected: player.isConnected,
+    joinOrder: player.joinOrder,
+    bonusMultiplier: player.bonusMultiplier,
+    baseScore: player.baseScore ?? player.score,
+    finalScore: player.finalScore ?? player.score,
+    correctAnswersCount: player.correctAnswersCount ?? 0,
+    wrongAnswersCount: player.wrongAnswersCount ?? 0,
+    snakesHitCount: player.snakesHitCount ?? 0,
+    laddersUsedCount: player.laddersUsedCount ?? 0,
+    specialEventsCount: player.specialEventsCount ?? 0,
+    diceRollsCount: player.diceRollsCount ?? 0,
   };
 }
 
@@ -225,6 +244,17 @@ export interface ServerPlayer {
   finishBonus?: number; // bonus points for finish order
   sessionId?: string; // for session tracking
   isConnected: boolean;
+  // Requirement Part 3: Join Order Bonus & Game Statistics
+  joinOrder?: number;
+  bonusMultiplier?: number;
+  baseScore?: number;
+  finalScore?: number;
+  correctAnswersCount?: number;
+  wrongAnswersCount?: number;
+  snakesHitCount?: number;
+  laddersUsedCount?: number;
+  specialEventsCount?: number;
+  diceRollsCount?: number;
 }
 
 // Server-side dice result (includes secure RNG seed)

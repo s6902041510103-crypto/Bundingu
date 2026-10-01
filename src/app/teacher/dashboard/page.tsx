@@ -22,8 +22,13 @@ import {
   HelpCircle,
   Dice5,
   RefreshCw,
-  QrCode
+  QrCode,
+  RotateCcw,
 } from 'lucide-react';
+import { authService, TeacherUser, DEMO_TEACHER } from '@/lib/auth/authService';
+import { ProductionTransport } from '@/lib/transport/ProductionTransport';
+import type { PublicGameState, PublicPlayer } from '@/server/gameState';
+import { AVATARS, getJoinBonusMultiplier } from '@/lib/game-data';
 
 interface QuestionItem {
   id: string;
@@ -32,6 +37,7 @@ interface QuestionItem {
   correctAnswer: number;
   category: string;
   difficulty: 'easy' | 'medium' | 'hard';
+  explanation?: string;
 }
 
 const DEFAULT_QUESTIONS: QuestionItem[] = [
@@ -42,6 +48,7 @@ const DEFAULT_QUESTIONS: QuestionItem[] = [
     correctAnswer: 0,
     category: 'สังคมศึกษา',
     difficulty: 'easy',
+    explanation: 'กรุงเทพมหานครเป็นเมืองหลวงและศูนย์กลางการปกครองของประเทศไทย',
   },
   {
     id: 'q2',
@@ -50,6 +57,7 @@ const DEFAULT_QUESTIONS: QuestionItem[] = [
     correctAnswer: 0,
     category: 'คณิตศาสตร์',
     difficulty: 'easy',
+    explanation: 'ตามลำดับการคำนวณทางคณิตศาสตร์ ต้องทำการคูณก่อนบวก: 2 + (2 × 2) = 6',
   },
   {
     id: 'q3',
@@ -58,6 +66,7 @@ const DEFAULT_QUESTIONS: QuestionItem[] = [
     correctAnswer: 0,
     category: 'วิทยาศาสตร์',
     difficulty: 'medium',
+    explanation: 'ค้างคาวเป็นสัตว์เลี้ยงลูกด้วยนมเพียงชนิดเดียวที่สามารถบินได้จริง',
   },
   {
     id: 'q4',
@@ -66,6 +75,7 @@ const DEFAULT_QUESTIONS: QuestionItem[] = [
     correctAnswer: 0,
     category: 'สังคมศึกษา',
     difficulty: 'medium',
+    explanation: 'แม่น้ำไนล์มีความยาวประมาณ 6,650 กิโลเมตร',
   },
   {
     id: 'q5',
@@ -74,27 +84,29 @@ const DEFAULT_QUESTIONS: QuestionItem[] = [
     correctAnswer: 0,
     category: 'วิทยาศาสตร์',
     difficulty: 'easy',
+    explanation: 'H2O หมายถึงน้ำ ซึ่งประกอบด้วยไฮโดรเจน 2 อะตอมและออกซิเจน 1 อะตอม',
   },
-];
-
-const MOCK_WAITING_STUDENTS = [
-  { id: 'p1', name: 'น้องน้ำหวาน', avatar: '🐘', color: 'bg-indigo-500' },
-  { id: 'p2', name: 'น้องกล้าหาญ', avatar: '🐯', color: 'bg-orange-500' },
-  { id: 'p3', name: 'น้องฟ้าใส', avatar: '🐰', color: 'bg-pink-500' },
-  { id: 'p4', name: 'น้องต้นกล้า', avatar: '🐿️', color: 'bg-emerald-500' },
 ];
 
 export default function TeacherDashboardPage() {
   const router = useRouter();
 
+  // Teacher Profile
+  const [teacher, setTeacher] = useState<TeacherUser>(DEMO_TEACHER);
+
   // Active room state
-  const [gamePin, setGamePin] = useState<string>('');
+  const [gamePin, setGamePin] = useState<string>('KS8821');
   const [roomSubject, setRoomSubject] = useState('รวมทุกวิชา');
   const [roundCount, setRoundCount] = useState(10);
   const [timeLimit, setTimeLimit] = useState(15);
-  const [isRoomActive, setIsRoomActive] = useState(false);
+  const [isRoomActive, setIsRoomActive] = useState(true);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'create' | 'questions' | 'history'>('create');
+
+  // Realtime Live Game State
+  const [gameState, setGameState] = useState<PublicGameState | null>(null);
+  const [transport, setTransport] = useState<ProductionTransport | null>(null);
+  const [isCommandPending, setIsCommandPending] = useState(false);
 
   // Question bank state
   const [questions, setQuestions] = useState<QuestionItem[]>(DEFAULT_QUESTIONS);
@@ -105,7 +117,44 @@ export default function TeacherDashboardPage() {
     correctAnswer: 0,
     category: 'ทั่วไป',
     difficulty: 'easy' as 'easy' | 'medium' | 'hard',
+    explanation: '',
   });
+
+  // Load teacher session & saved questions on mount
+  useEffect(() => {
+    const current = authService.getCurrentUser();
+    if (current) {
+      setTeacher(current);
+    }
+
+    try {
+      const savedQ = localStorage.getItem('knowledge_snake_question_bank');
+      if (savedQ) {
+        setQuestions(JSON.parse(savedQ));
+      }
+    } catch {}
+  }, []);
+
+  // Connect transport to live game when pin is active
+  useEffect(() => {
+    if (!gamePin || !isRoomActive) return;
+
+    const t = new ProductionTransport({ type: 'production' });
+    setTransport(t);
+
+    t.connect(gamePin as any).then(() => {
+      // connected
+    });
+
+    const unsubscribe = t.subscribe((state) => {
+      setGameState(state as any);
+    });
+
+    return () => {
+      unsubscribe();
+      t.disconnect();
+    };
+  }, [gamePin, isRoomActive]);
 
   // Generate random 6-character PIN
   const generatePin = () => {
@@ -130,9 +179,57 @@ export default function TeacherDashboardPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleStartGame = () => {
-    if (!gamePin) return;
-    router.push(`/game/${gamePin}/play`);
+  const handleStartGame = async () => {
+    if (!transport || !gamePin) return;
+    setIsCommandPending(true);
+    try {
+      await transport.sendCommand({
+        type: 'START_GAME',
+        gamePin: gamePin as any,
+        teacherId: teacher.id as any,
+      } as any);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsCommandPending(false);
+    }
+  };
+
+  const handleStartQuestion = async () => {
+    if (!transport || !gamePin) return;
+    setIsCommandPending(true);
+    try {
+      await transport.sendCommand({
+        type: 'START_QUESTION',
+        gamePin: gamePin as any,
+        teacherId: teacher.id as any,
+      } as any);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsCommandPending(false);
+    }
+  };
+
+  const handleAdvanceQuestion = async () => {
+    if (!transport || !gamePin) return;
+    setIsCommandPending(true);
+    try {
+      await transport.sendCommand({
+        type: 'ADVANCE_QUESTION',
+        gamePin: gamePin as any,
+        teacherId: teacher.id as any,
+      } as any);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsCommandPending(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await authService.logout();
+    router.push('/teacher/login');
   };
 
   const handleAddQuestion = (e: React.FormEvent) => {
@@ -154,9 +251,15 @@ export default function TeacherDashboardPage() {
       correctAnswer: newQuestion.correctAnswer,
       category: newQuestion.category,
       difficulty: newQuestion.difficulty,
+      explanation: newQuestion.explanation.trim(),
     };
 
-    setQuestions((prev) => [item, ...prev]);
+    const updated = [item, ...questions];
+    setQuestions(updated);
+    try {
+      localStorage.setItem('knowledge_snake_question_bank', JSON.stringify(updated));
+    } catch {}
+
     setShowAddModal(false);
     setNewQuestion({
       question: '',
@@ -164,12 +267,91 @@ export default function TeacherDashboardPage() {
       correctAnswer: 0,
       category: 'ทั่วไป',
       difficulty: 'easy',
+      explanation: '',
     });
   };
 
   const handleDeleteQuestion = (id: string) => {
-    setQuestions((prev) => prev.filter((q) => q.id !== id));
+    const updated = questions.filter((q) => q.id !== id);
+    setQuestions(updated);
+    try {
+      localStorage.setItem('knowledge_snake_question_bank', JSON.stringify(updated));
+    } catch {}
   };
+
+  const handleResetQuestions = () => {
+    if (confirm('คุณต้องการรีเซ็ตคำถามทั้งหมดเป็นคำถามเริ่มต้นใช่หรือไม่?')) {
+      setQuestions(DEFAULT_QUESTIONS);
+      try {
+        localStorage.setItem('knowledge_snake_question_bank', JSON.stringify(DEFAULT_QUESTIONS));
+      } catch {}
+    }
+  };
+
+  // Connected players from authoritative game state or default preview
+  const livePlayers: PublicPlayer[] = gameState?.players && gameState.players.length > 0
+    ? gameState.players.map(p => ({
+        playerId: p.playerId as any,
+        displayName: p.displayName,
+        avatarId: p.avatarId as any,
+        position: p.position,
+        score: p.finalScore ?? p.score,
+        status: p.status,
+        isConnected: p.isConnected ?? true,
+        joinOrder: p.joinOrder,
+        bonusMultiplier: p.bonusMultiplier,
+        baseScore: p.baseScore,
+        finalScore: p.finalScore,
+      }))
+    : [
+        {
+          playerId: 'p1' as any,
+          displayName: 'น้องนัท',
+          avatarId: 'avatar-09' as any,
+          position: 1,
+          score: 5,
+          status: 'waiting',
+          isConnected: true,
+          joinOrder: 1,
+          bonusMultiplier: 5,
+        },
+        {
+          playerId: 'p2' as any,
+          displayName: 'น้องมายด์',
+          avatarId: 'avatar-05' as any,
+          position: 1,
+          score: 4,
+          status: 'waiting',
+          isConnected: true,
+          joinOrder: 2,
+          bonusMultiplier: 4,
+        },
+        {
+          playerId: 'p3' as any,
+          displayName: 'น้องอาร์ม',
+          avatarId: 'avatar-02' as any,
+          position: 1,
+          score: 3,
+          status: 'waiting',
+          isConnected: true,
+          joinOrder: 3,
+          bonusMultiplier: 3,
+        },
+        {
+          playerId: 'p4' as any,
+          displayName: 'น้องจูน',
+          avatarId: 'avatar-04' as any,
+          position: 1,
+          score: 2,
+          status: 'waiting',
+          isConnected: true,
+          joinOrder: 4,
+          bonusMultiplier: 2,
+        },
+      ];
+
+  const currentPhase = gameState?.gameStatus || 'waiting_for_question';
+  const allAnswered = Boolean(gameState?.allPlayersAnswered);
 
   return (
     <div className="min-h-screen bg-slate-50 font-thai">
@@ -183,20 +365,20 @@ export default function TeacherDashboardPage() {
               </div>
               <div>
                 <h1 className="text-lg font-bold text-gray-900 leading-tight">Knowledge Snake</h1>
-                <span className="text-xs text-indigo-600 font-medium">Teacher Portal</span>
+                <span className="text-xs text-indigo-600 font-medium">Teacher Portal • ระบบผู้สอน</span>
               </div>
             </Link>
           </div>
 
           <div className="flex items-center gap-4">
             <Link
-              href="/game/board"
+              href={`/game/${gamePin}/projector`}
               target="_blank"
-              className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors shadow-sm"
             >
               <LayoutGrid className="w-4 h-4" />
-              ดูตัวอย่างกระดานเกม
-              <ExternalLink className="w-3 h-3 ml-0.5 opacity-60" />
+              <span>จอโปรเจกเตอร์ห้องเรียน</span>
+              <ExternalLink className="w-3 h-3 ml-0.5 opacity-70" />
             </Link>
 
             <div className="flex items-center gap-3 border-l pl-4 border-gray-200">
@@ -204,16 +386,16 @@ export default function TeacherDashboardPage() {
                 ครู
               </div>
               <div className="hidden md:block text-left">
-                <p className="text-sm font-semibold text-gray-800 leading-none">คุณครูสมศรี (Demo)</p>
-                <p className="text-xs text-gray-500 mt-0.5">teacher@demo.com</p>
+                <p className="text-sm font-semibold text-gray-800 leading-none">{teacher.name}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{teacher.email}</p>
               </div>
-              <Link
-                href="/teacher/login"
+              <button
+                onClick={handleLogout}
                 className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                 title="ออกจากระบบ"
               >
                 <LogOut className="w-5 h-5" />
-              </Link>
+              </button>
             </div>
           </div>
         </div>
@@ -227,46 +409,52 @@ export default function TeacherDashboardPage() {
             <div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-xs font-medium backdrop-blur-sm mb-3">
                 <Sparkles className="w-3.5 h-3.5" />
-                ระบบจัดการห้องเรียน Knowledge Snake
+                ระบบจัดการห้องเรียนสด Real-time
               </div>
-              <h2 className="text-2xl font-bold">สวัสดีครับคุณครู! พร้อมเริ่มเล่นเกมหรือยัง?</h2>
+              <h2 className="text-2xl font-bold">สวัสดีครับ {teacher.name}!</h2>
               <p className="text-indigo-100 text-sm mt-1">
-                สร้างห้องเรียนสด สุ่ม Game PIN ให้นักเรียนเข้าร่วมแข่งขันตอบคำถามไต่บันไดงู
+                สร้างห้องเรียนสด สุ่ม Game PIN ให้นักเรียนเข้าร่วมแข่งขันตอบคำถามบนกระดาน 100 ช่อง
               </p>
             </div>
-            <div className="mt-5 flex gap-2">
-              <button
-                onClick={() => {
-                  setActiveTab('create');
-                  if (!isRoomActive) handleCreateRoom();
-                }}
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Link
+                href={`/game/${gamePin}/play`}
+                target="_blank"
                 className="px-4 py-2 rounded-xl bg-white text-indigo-700 font-semibold text-sm hover:bg-indigo-50 transition-all shadow-md flex items-center gap-1.5"
               >
                 <Play className="w-4 h-4 fill-current" />
-                {isRoomActive ? 'ดูห้องเกมที่กำลังเปิด' : 'สร้างห้องเกมใหม่ทันที'}
-              </button>
+                เข้าหน้าเล่นเกม (Play Screen)
+              </Link>
+              <Link
+                href={`/game/${gamePin}/projector`}
+                target="_blank"
+                className="px-4 py-2 rounded-xl bg-indigo-700/80 hover:bg-indigo-700 text-white font-semibold text-sm transition-all flex items-center gap-1.5"
+              >
+                <LayoutGrid className="w-4 h-4" />
+                เปิดจอใหญ่ (Projector)
+              </Link>
             </div>
           </div>
 
-          <div className="card p-5 flex items-center gap-4">
+          <div className="card p-5 flex items-center gap-4 bg-white border border-gray-200 rounded-2xl shadow-sm">
             <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
               <BookOpen className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-xs text-gray-500 font-medium">คลังคำถามทั้งหมด</p>
+              <p className="text-xs text-gray-500 font-medium">คลังคำถามพร้อมใช้</p>
               <h3 className="text-2xl font-bold text-gray-900 mt-0.5">{questions.length} ข้อ</h3>
-              <p className="text-xs text-emerald-600 font-medium mt-0.5">พร้อมใช้งาน 3 หมวดหมู่</p>
+              <p className="text-xs text-emerald-600 font-medium mt-0.5">จับเวลา 15 วินาที/ข้อ</p>
             </div>
           </div>
 
-          <div className="card p-5 flex items-center gap-4">
+          <div className="card p-5 flex items-center gap-4 bg-white border border-gray-200 rounded-2xl shadow-sm">
             <div className="w-12 h-12 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center font-bold">
               <Trophy className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-xs text-gray-500 font-medium">สถิติการเล่นสะสม</p>
-              <h3 className="text-2xl font-bold text-gray-900 mt-0.5">14 ครั้ง</h3>
-              <p className="text-xs text-indigo-600 font-medium mt-0.5">นักเรียน 86 คนเคยเข้าร่วม</p>
+              <p className="text-xs text-gray-500 font-medium">ห้องเกมปัจจุบัน</p>
+              <h3 className="text-2xl font-bold font-mono text-indigo-600 mt-0.5">{gamePin}</h3>
+              <p className="text-xs text-gray-500 font-medium mt-0.5">สถานะ: {currentPhase}</p>
             </div>
           </div>
         </div>
@@ -282,7 +470,7 @@ export default function TeacherDashboardPage() {
             }`}
           >
             <Play className="w-4 h-4" />
-            สร้างห้องและเปิดเกม (Game Lobby)
+            ควบคุมเกมสด (Live Game Controller)
           </button>
           <button
             onClick={() => setActiveTab('questions')}
@@ -304,17 +492,104 @@ export default function TeacherDashboardPage() {
             }`}
           >
             <Clock className="w-4 h-4" />
-            ประวัติเกมที่ผ่านมา
+            ประวัติเกม & สถิติ
           </button>
         </div>
 
-        {/* TAB 1: CREATE ROOM & LOBBY */}
+        {/* TAB 1: LIVE GAME CONTROLLER & LOBBY */}
         {activeTab === 'create' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left: Room Configuration */}
+            {/* Left Column: Room Settings & Teacher Action Controls */}
             <div className="lg:col-span-1 space-y-6">
-              <div className="card p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+              {/* Live Classroom Controls */}
+              <div className="card p-6 bg-white border border-gray-200 rounded-2xl shadow-sm space-y-4">
+                <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-indigo-600" />
+                  แผงควบคุมการดำเนินเกม (Teacher Controls)
+                </h3>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">สถานะเกม:</span>
+                    <span className="font-bold text-indigo-600 font-mono">{currentPhase}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">รอบที่:</span>
+                    <span className="font-bold text-gray-800">{gameState?.currentRound || 1} / {roundCount}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">ตอบครบทุกคนแล้ว:</span>
+                    <span className={`font-bold ${allAnswered ? 'text-green-600' : 'text-gray-500'}`}>
+                      {allAnswered ? 'ใช่ (ครบแล้ว)' : 'ยังไม่ครบ'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Primary Game Action Buttons */}
+                <div className="space-y-2 pt-2">
+                  {/* Start Question with 3s Countdown */}
+                  {(currentPhase === 'waiting_for_question' || currentPhase === 'lobby' || currentPhase === 'round_complete') && (
+                    <button
+                      onClick={handleStartQuestion}
+                      disabled={isCommandPending}
+                      className="w-full py-3.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md shadow-indigo-500/20 flex items-center justify-center gap-2 transition-all"
+                    >
+                      <Play className="w-4 h-4 fill-current" />
+                      เริ่มคำถามรอบนี้ (Countdown 3-2-1)
+                    </button>
+                  )}
+
+                  {/* Advance Question when in question phase */}
+                  {currentPhase === 'question' && (
+                    <button
+                      onClick={handleAdvanceQuestion}
+                      disabled={isCommandPending}
+                      className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all ${
+                        allAnswered
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/25 animate-bounce'
+                          : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20'
+                      }`}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                      {allAnswered ? 'นักเรียนตอบครบแล้ว! กดไปต่อทันที' : 'ไปต่อ (Advance Question)'}
+                    </button>
+                  )}
+
+                  {/* Start Game from Lobby */}
+                  {currentPhase === 'lobby' && (
+                    <button
+                      onClick={handleStartGame}
+                      disabled={isCommandPending}
+                      className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md"
+                    >
+                      <Play className="w-4 h-4 fill-current" />
+                      เริ่มเกม (Start Game)
+                    </button>
+                  )}
+
+                  {/* Open Screens in New Tabs */}
+                  <div className="grid grid-cols-2 gap-2 pt-2">
+                    <Link
+                      href={`/game/${gamePin}/play`}
+                      target="_blank"
+                      className="py-2.5 px-3 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-bold text-center hover:bg-indigo-100 transition-colors"
+                    >
+                      หน้าเล่น Play
+                    </Link>
+                    <Link
+                      href={`/game/${gamePin}/projector`}
+                      target="_blank"
+                      className="py-2.5 px-3 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 text-xs font-bold text-center hover:bg-purple-100 transition-colors"
+                    >
+                      จอโปรเจกเตอร์
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
+              {/* Room Configuration Settings */}
+              <div className="card p-6 bg-white border border-gray-200 rounded-2xl shadow-sm">
+                <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <Dice5 className="w-5 h-5 text-indigo-600" />
                   ตั้งค่าห้องเกม
                 </h3>
@@ -327,7 +602,7 @@ export default function TeacherDashboardPage() {
                     <select
                       value={roomSubject}
                       onChange={(e) => setRoomSubject(e.target.value)}
-                      className="input"
+                      className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       <option value="รวมทุกวิชา">รวมทุกวิชา (ทั่วไป / วิทย์ / สังคม)</option>
                       <option value="วิทยาศาสตร์">วิทยาศาสตร์น่ารู้</option>
@@ -380,133 +655,120 @@ export default function TeacherDashboardPage() {
                     </div>
                   </div>
 
-                  <div className="pt-3">
+                  <div className="pt-2">
                     <button
                       onClick={handleCreateRoom}
-                      className="w-full btn-primary py-3 rounded-xl flex items-center justify-center gap-2 font-bold shadow-md shadow-indigo-500/20"
+                      className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-gray-700 text-xs font-bold flex items-center justify-center gap-2 transition-colors"
                     >
-                      <RefreshCw className="w-4 h-4" />
-                      {isRoomActive ? 'สุ่มสร้าง PIN ใหม่' : 'เปิดห้องรอผู้เล่น'}
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      สุ่มสร้าง Game PIN ใหม่
                     </button>
                   </div>
                 </div>
-              </div>
-
-              {/* Tips for Teachers */}
-              <div className="p-4 rounded-xl bg-indigo-50/70 border border-indigo-100 text-xs text-indigo-900 space-y-2">
-                <p className="font-bold flex items-center gap-1.5">
-                  <HelpCircle className="w-4 h-4 text-indigo-600" />
-                  ขั้นตอนการจัดกิจกรรม:
-                </p>
-                <ol className="list-decimal list-inside space-y-1 text-indigo-800">
-                  <li>กดสร้างห้องเพื่อรับรหัส Game PIN 6 หลัก</li>
-                  <li>ให้นักเรียนเข้าเว็บที่ <span className="font-mono font-bold">/join</span> แล้วใส่ PIN</li>
-                  <li>เมื่อนักเรียนเข้าครบแล้ว กดปุ่ม <b>"เริ่มเกมทันที"</b></li>
-                </ol>
               </div>
             </div>
 
-            {/* Right: Active Room Lobby & PIN Display */}
-            <div className="lg:col-span-2">
-              {isRoomActive ? (
-                <div className="card p-6 border-indigo-200 shadow-md space-y-6">
-                  {/* Big PIN Display */}
-                  <div className="text-center p-8 rounded-2xl bg-gradient-to-b from-indigo-50 via-white to-violet-50 border border-indigo-100">
-                    <span className="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold mb-3 animate-pulse">
-                      ● ห้องเกมกำลังเปิดรอผู้เล่น
-                    </span>
-                    <p className="text-sm font-medium text-gray-500">รหัสเข้าร่วมเกมสำหรับนักเรียน (Game PIN)</p>
-                    <div className="mt-2 flex items-center justify-center gap-3">
-                      <span className="font-mono text-5xl sm:text-6xl font-extrabold tracking-widest text-indigo-700 bg-white px-6 py-2 rounded-2xl border-2 border-indigo-200 shadow-inner">
-                        {gamePin}
-                      </span>
-                      <button
-                        onClick={handleCopyPin}
-                        className="p-3.5 rounded-xl border border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-600 transition-colors shadow-sm"
-                        title="คัดลอก PIN"
-                      >
-                        {copied ? <Check className="w-6 h-6 text-green-600" /> : <Copy className="w-6 h-6" />}
-                      </button>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap items-center justify-center gap-3 text-xs text-gray-600">
-                      <span>ลิงก์เข้าร่วม:</span>
-                      <code className="bg-gray-100 text-indigo-600 font-mono px-2.5 py-1 rounded-md border border-gray-200">
-                        http://localhost:3000/join
-                      </code>
-                      <Link
-                        href="/join"
-                        target="_blank"
-                        className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-800 underline"
-                      >
-                        เปิดหน้านักเรียนในแท็บใหม่ <ExternalLink className="w-3 h-3" />
-                      </Link>
-                    </div>
-                  </div>
-
-                  {/* Joined Students Lobby */}
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-bold text-gray-900 text-sm flex items-center gap-2">
-                        <Users className="w-4 h-4 text-indigo-600" />
-                        ผู้เล่นที่เข้ามาในห้องแล้ว ({MOCK_WAITING_STUDENTS.length} คน)
-                      </h4>
-                      <span className="text-xs text-gray-400">อัปเดตอัตโนมัติ</span>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {MOCK_WAITING_STUDENTS.map((st) => (
-                        <div
-                          key={st.id}
-                          className="p-3 rounded-xl border border-gray-200 bg-white flex items-center gap-3 shadow-sm hover:border-indigo-300 transition-all"
-                        >
-                          <div
-                            className={`w-10 h-10 rounded-xl ${st.color} text-white flex items-center justify-center text-xl shadow-sm`}
-                          >
-                            {st.avatar}
-                          </div>
-                          <div className="truncate">
-                            <p className="text-sm font-semibold text-gray-800 truncate">{st.name}</p>
-                            <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> พร้อมเล่น
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Start Game Action */}
-                  <div className="pt-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="text-xs text-gray-500">
-                      ตั้งค่า: {roomSubject} • {roundCount} รอบ • {timeLimit} วินาที/ข้อ
-                    </div>
-                    <button
-                      onClick={handleStartGame}
-                      className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold text-base hover:from-emerald-600 hover:to-green-700 transition-all shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2"
-                    >
-                      <Play className="w-5 h-5 fill-current" />
-                      เริ่มเกมทันที (Start Game)
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="card p-12 text-center border-dashed border-2 border-gray-300 flex flex-col items-center justify-center min-h-[380px]">
-                  <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-4">
-                    <QrCode className="w-8 h-8" />
-                  </div>
-                  <h4 className="text-lg font-bold text-gray-800">ยังไม่ได้เปิดห้องเกม</h4>
-                  <p className="text-sm text-gray-500 max-w-sm mt-1 mb-6">
-                    เลือกหมวดคำถามและจำนวนรอบทางด้านซ้าย จากนั้นกด &quot;เปิดห้องรอผู้เล่น&quot; เพื่อสุ่มรหัส PIN ให้นักเรียน
-                  </p>
+            {/* Right Column: Active PIN Display & Live Player List */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Big PIN Display */}
+              <div className="card p-6 bg-white border border-indigo-200 rounded-2xl shadow-md text-center space-y-4">
+                <span className="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold animate-pulse">
+                  ● ห้องเรียนสดเปิดอยู่ พร้อมรับนักเรียน
+                </span>
+                <p className="text-sm font-medium text-gray-500">รหัสเข้าร่วมเกมสำหรับนักเรียน (Game PIN)</p>
+                <div className="flex items-center justify-center gap-3">
+                  <span className="font-mono text-5xl sm:text-6xl font-extrabold tracking-widest text-indigo-700 bg-indigo-50/50 px-6 py-2 rounded-2xl border-2 border-indigo-200 shadow-inner">
+                    {gamePin}
+                  </span>
                   <button
-                    onClick={handleCreateRoom}
-                    className="btn-primary py-2.5 px-6 rounded-xl font-bold"
+                    onClick={handleCopyPin}
+                    className="p-3.5 rounded-xl border border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-600 transition-colors shadow-sm"
+                    title="คัดลอก PIN"
                   >
-                    เปิดห้องรอผู้เล่นเดี๋ยวนี้
+                    {copied ? <Check className="w-6 h-6 text-green-600" /> : <Copy className="w-6 h-6" />}
                   </button>
                 </div>
-              )}
+
+                <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-gray-600 pt-2">
+                  <span>ลิงก์เข้าร่วม:</span>
+                  <code className="bg-gray-100 text-indigo-600 font-mono px-2.5 py-1 rounded-md border border-gray-200">
+                    /join (ใส่ PIN {gamePin})
+                  </code>
+                  <Link
+                    href={`/join?pin=${gamePin}`}
+                    target="_blank"
+                    className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-800 underline"
+                  >
+                    ทดลองเข้าห้องแบบนักเรียน <ExternalLink className="w-3 h-3" />
+                  </Link>
+                </div>
+              </div>
+
+              {/* Real-time Players List with Join Bonus Badges */}
+              <div className="card p-6 bg-white border border-gray-200 rounded-2xl shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-bold text-gray-900 text-base flex items-center gap-2">
+                    <Users className="w-5 h-5 text-indigo-600" />
+                    ผู้เล่นในห้องเรียน ({livePlayers.length} คน)
+                  </h4>
+                  <span className="text-xs text-emerald-600 font-semibold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                    Real-time Sync
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {livePlayers.map((player, idx) => {
+                    const avatar = AVATARS.find((a) => a.id === player.avatarId) || AVATARS[idx % AVATARS.length];
+                    const multiplier = player.bonusMultiplier ?? getJoinBonusMultiplier(player.joinOrder ?? idx + 1);
+
+                    return (
+                      <div
+                        key={player.playerId}
+                        className="p-3.5 rounded-xl border border-gray-200 bg-white flex items-center justify-between shadow-sm hover:border-indigo-300 transition-all"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-2xl shadow-inner border border-gray-200">
+                            {avatar.emoji}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-sm font-bold text-gray-900">{player.displayName}</p>
+                              {/* Join Order Bonus Badge */}
+                              <span
+                                className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-md ${
+                                  multiplier === 5
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                    : multiplier === 4
+                                    ? 'bg-slate-200 text-slate-800 border border-slate-300'
+                                    : multiplier === 3
+                                    ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                                    : multiplier === 2
+                                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                    : 'bg-gray-100 text-gray-700'
+                                }`}
+                              >
+                                {multiplier > 1 ? `×${multiplier} โบนัส` : '×1'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {avatar.animal} ({avatar.nameEn}) • เข้าคนที่ {player.joinOrder ?? idx + 1}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <div className="text-xs font-semibold text-indigo-600">
+                            ช่อง {player.position} / 100
+                          </div>
+                          <div className="text-xs font-bold text-gray-800">
+                            {player.score} คะแนน
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -517,22 +779,31 @@ export default function TeacherDashboardPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h3 className="text-xl font-bold text-gray-900">คลังข้อสอบ Knowledge Snake</h3>
-                <p className="text-sm text-gray-500">คำถาม 4 ตัวเลือก พร้อมระบบจับเวลา 15 วินาที</p>
+                <p className="text-sm text-gray-500">คำถาม 4 ตัวเลือก พร้อมระบบจับเวลา 15 วินาที และคำอธิบายเฉลย</p>
               </div>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="btn-primary flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-sm"
-              >
-                <Plus className="w-4 h-4" />
-                เพิ่มคำถามใหม่
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleResetQuestions}
+                  className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  รีเซ็ตคำถามเริ่มต้น
+                </button>
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  เพิ่มคำถามใหม่
+                </button>
+              </div>
             </div>
 
             <div className="grid gap-4">
               {questions.map((q, idx) => (
                 <div
                   key={q.id}
-                  className="card p-5 hover:border-indigo-200 transition-colors space-y-3"
+                  className="card p-5 bg-white border border-gray-200 rounded-2xl hover:border-indigo-300 transition-colors space-y-3 shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-3">
@@ -542,14 +813,16 @@ export default function TeacherDashboardPage() {
                       <div>
                         <h4 className="font-bold text-base text-gray-900">{q.question}</h4>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="badge badge-primary">{q.category}</span>
+                          <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-medium border border-indigo-100">
+                            {q.category}
+                          </span>
                           <span
-                            className={`badge ${
+                            className={`text-xs px-2 py-0.5 rounded-md font-medium ${
                               q.difficulty === 'easy'
-                                ? 'bg-green-100 text-green-800'
+                                ? 'bg-green-50 text-green-700 border border-green-200'
                                 : q.difficulty === 'medium'
-                                ? 'bg-yellow-100 text-yellow-800'
-                                : 'bg-red-100 text-red-800'
+                                ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                                : 'bg-red-50 text-red-700 border border-red-200'
                             }`}
                           >
                             {q.difficulty}
@@ -566,11 +839,11 @@ export default function TeacherDashboardPage() {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                     {q.choices.map((choice, cIdx) => (
                       <div
                         key={cIdx}
-                        className={`px-3 py-2 rounded-lg text-sm border flex items-center justify-between ${
+                        className={`px-3 py-2 rounded-xl text-sm border flex items-center justify-between ${
                           cIdx === q.correctAnswer
                             ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-semibold'
                             : 'bg-gray-50 border-gray-200 text-gray-700'
@@ -588,15 +861,22 @@ export default function TeacherDashboardPage() {
                       </div>
                     ))}
                   </div>
+
+                  {q.explanation && (
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700">
+                      <span className="font-bold text-slate-900">คำอธิบาย: </span>
+                      {q.explanation}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* TAB 3: HISTORY */}
+        {/* TAB 3: GAME HISTORY & REPORTS */}
         {activeTab === 'history' && (
-          <div className="card overflow-hidden">
+          <div className="card bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
             <div className="p-6 border-b border-gray-200 bg-gray-50/50">
               <h3 className="text-lg font-bold text-gray-900">ประวัติการจัดห้องเกม</h3>
               <p className="text-xs text-gray-500 mt-1">ประวัติผลการแข่งขันและคะแนนของผู้ชนะ</p>
@@ -607,25 +887,25 @@ export default function TeacherDashboardPage() {
                   id: 'h1',
                   date: 'วันนี้, 14:30 น.',
                   pin: 'KS8821',
-                  subject: 'วิทยาศาสตร์',
-                  players: 12,
-                  winner: 'น้องสมปอง (อันดับ 1 - 103 คะแนน)',
+                  subject: 'รวมทุกวิชา',
+                  players: 4,
+                  winner: 'น้องนัท (อันดับ 1 - คะแนนโบนัส 500)',
                 },
                 {
                   id: 'h2',
                   date: 'เมื่อวาน, 10:15 น.',
                   pin: 'AB9210',
                   subject: 'คณิตศาสตร์',
-                  players: 16,
-                  winner: 'น้องฟ้าใส (อันดับ 1 - 102 คะแนน)',
+                  players: 6,
+                  winner: 'น้องมายด์ (อันดับ 1 - คะแนนโบนัส 408)',
                 },
                 {
                   id: 'h3',
                   date: '28 ก.ย. 2026',
                   pin: 'MK4411',
-                  subject: 'รวมทุกวิชา',
-                  players: 20,
-                  winner: 'น้องน้ำหวาน (อันดับ 1 - 103 คะแนน)',
+                  subject: 'วิทยาศาสตร์',
+                  players: 8,
+                  winner: 'น้องอาร์ม (อันดับ 1 - คะแนนโบนัส 306)',
                 },
               ].map((item) => (
                 <div key={item.id} className="p-4 sm:px-6 flex items-center justify-between hover:bg-gray-50">
@@ -641,7 +921,7 @@ export default function TeacherDashboardPage() {
                     </p>
                   </div>
                   <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-                    จบเกมแล้ว
+                    เสร็จสิ้น
                   </span>
                 </div>
               ))}
@@ -670,7 +950,7 @@ export default function TeacherDashboardPage() {
                 <textarea
                   required
                   rows={2}
-                  className="input"
+                  className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   placeholder="เช่น ดาวเคราะห์ดวงใดอยู่ใกล้ดวงอาทิตย์ที่สุด?"
                   value={newQuestion.question}
                   onChange={(e) => setNewQuestion({ ...newQuestion, question: e.target.value })}
@@ -682,7 +962,7 @@ export default function TeacherDashboardPage() {
                   <label className="block text-xs font-semibold text-gray-700 mb-1">หมวดหมู่</label>
                   <input
                     type="text"
-                    className="input"
+                    className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     value={newQuestion.category}
                     onChange={(e) => setNewQuestion({ ...newQuestion, category: e.target.value })}
                   />
@@ -690,7 +970,7 @@ export default function TeacherDashboardPage() {
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">ระดับความยาก</label>
                   <select
-                    className="input"
+                    className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     value={newQuestion.difficulty}
                     onChange={(e) =>
                       setNewQuestion({
@@ -708,7 +988,7 @@ export default function TeacherDashboardPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-2">
-                  ตัวเลือก 4 ข้อ (เลือกวงกลมที่ข้อที่ถูกต้อง):
+                  ตัวเลือก 4 ข้อ (คลิกเลือกตัวเลือกที่ถูกต้อง):
                 </label>
                 <div className="space-y-2">
                   {['A', 'B', 'C', 'D'].map((label, idx) => (
@@ -725,13 +1005,13 @@ export default function TeacherDashboardPage() {
                       <input
                         type="text"
                         required
-                        className="input py-1.5 text-sm"
+                        className="w-full p-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         placeholder={`ตัวเลือก ${label}`}
                         value={newQuestion.choices[idx]}
                         onChange={(e) => {
                           const updated = [...newQuestion.choices];
                           updated[idx] = e.target.value;
-                          setNewQuestion({ ...newQuestion, choices: updated });
+                          setNewQuestion({ ...newQuestion, choices: updated as any });
                         }}
                       />
                     </div>
@@ -739,15 +1019,29 @@ export default function TeacherDashboardPage() {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">คำอธิบายเฉลย (Optional)</label>
+                <input
+                  type="text"
+                  className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="เช่น ดาวพุธเป็นดาวเคราะห์ที่อยู่ใกล้ดวงอาทิตย์ที่สุด"
+                  value={newQuestion.explanation}
+                  onChange={(e) => setNewQuestion({ ...newQuestion, explanation: e.target.value })}
+                />
+              </div>
+
               <div className="pt-3 flex justify-end gap-2 border-t">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="btn-secondary text-xs"
+                  className="px-4 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-semibold hover:bg-gray-50"
                 >
                   ยกเลิก
                 </button>
-                <button type="submit" className="btn-primary text-xs font-bold px-4">
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-500/20"
+                >
                   บันทึกคำถาม
                 </button>
               </div>

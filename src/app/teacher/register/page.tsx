@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Crown, Eye, EyeOff, Loader2, Sparkles, CheckCircle2, Mail, User, Lock, AlertCircle } from 'lucide-react';
+import { authService } from '@/lib/auth/authService';
 
 export default function TeacherRegisterPage() {
   const [name, setName] = useState('');
@@ -42,20 +43,18 @@ export default function TeacherRegisterPage() {
     if (!validateForm()) return;
 
     setIsLoading(true);
-    // Mock registration delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    const result = await authService.register(email, password, name);
     setIsLoading(false);
 
-    // Mock registration success
-    setIsRegistered(true);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('teacher_session', JSON.stringify({ email: email.trim(), name: name.trim() }));
+    if (!result.success) {
+      setError(result.error || 'สร้างบัญชีไม่สำเร็จ');
+      return;
     }
 
-    // Redirect to teacher dashboard after short delay
+    setIsRegistered(true);
     setTimeout(() => {
       window.location.href = '/teacher/dashboard';
-    }, 1000);
+    }, 800);
   };
 
   if (isRegistered) {

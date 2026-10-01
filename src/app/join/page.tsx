@@ -3,21 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, MousePointer2, User, Sparkles, Loader2 } from 'lucide-react';
-
-const AVATAR_OPTIONS = [
-  { id: 'avatar-01', label: 'ช้าง', emoji: '🐘' },
-  { id: 'avatar-02', label: 'เสือ', emoji: '🐯' },
-  { id: 'avatar-03', label: 'กระรอก', emoji: '🐿️' },
-  { id: 'avatar-04', label: 'นกแก้ว', emoji: '🦜' },
-  { id: 'avatar-05', label: 'กระต่าย', emoji: '🐰' },
-  { id: 'avatar-06', label: 'หมา', emoji: '🐶' },
-  { id: 'avatar-07', label: 'แมว', emoji: '🐱' },
-  { id: 'avatar-08', label: 'เพนกวิน', emoji: '🐧' },
-  { id: 'avatar-09', label: 'ปิงปอง', emoji: '🐼' },
-  { id: 'avatar-10', label: 'ค้างคาว', emoji: '🦥' },
-  { id: 'avatar-11', label: 'สุนัขจิ้งจอก', emoji: '🦊' },
-  { id: 'avatar-12', label: 'กวาง', emoji: '🦌' },
-];
+import { AVATARS } from '@/lib/game-data';
 
 export default function JoinPage() {
   const [gamePin, setGamePin] = useState('');
@@ -26,10 +12,18 @@ export default function JoinPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Auto-select random avatar on mount
+  // Auto-select random avatar on mount and prefill PIN if present in URL
   useEffect(() => {
-    const randomAvatar = AVATAR_OPTIONS[Math.floor(Math.random() * AVATAR_OPTIONS.length)].id;
+    const randomAvatar = AVATARS[Math.floor(Math.random() * AVATARS.length)].id;
     setSelectedAvatar(randomAvatar);
+
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const queryPin = urlParams.get('pin');
+      if (queryPin) {
+        setGamePin(queryPin.trim().toUpperCase());
+      }
+    }
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -119,7 +113,7 @@ export default function JoinPage() {
   };
 
   const randomizeAvatar = () => {
-    const randomAvatar = AVATAR_OPTIONS[Math.floor(Math.random() * AVATAR_OPTIONS.length)].id;
+    const randomAvatar = AVATARS[Math.floor(Math.random() * AVATARS.length)].id;
     setSelectedAvatar(randomAvatar);
   };
 
@@ -187,7 +181,7 @@ export default function JoinPage() {
               เลือกตัวละคร (Avatar)
             </label>
             <div className="grid grid-cols-4 gap-2 mb-3" role="radiogroup" aria-label="เลือก Avatar">
-              {AVATAR_OPTIONS.map((avatar) => (
+              {AVATARS.map((avatar) => (
                 <button
                   key={avatar.id}
                   type="button"
@@ -199,13 +193,13 @@ export default function JoinPage() {
                   }`}
                   aria-pressed={selectedAvatar === avatar.id}
                 >
-                  <span className="text-3xl mb-1" role="img" aria-label={avatar.label}>
+                  <span className="text-3xl mb-1" role="img" aria-label={avatar.animal}>
                     {avatar.emoji}
                   </span>
-                  <span className="text-xs font-medium text-gray-700">{avatar.label}</span>
+                  <span className="text-[11px] font-medium text-gray-700 truncate max-w-[65px]">{avatar.animal}</span>
                   {selectedAvatar === avatar.id && (
                     <span className="absolute top-1 right-1 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
-                      <span className="w-3 h-3 rounded-full bg-white" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-white" />
                     </span>
                   )}
                 </button>
@@ -219,6 +213,17 @@ export default function JoinPage() {
               <Sparkles className="w-4 h-4" />
               สุ่ม Avatar ใหม่
             </button>
+          </div>
+
+          {/* Join Bonus Tip */}
+          <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+            <span className="text-base">🚀</span>
+            <div>
+              <p className="font-bold">ไม่ต้องสมัครสมาชิก • เข้าห้องเร็วยิ่งได้โบนัส:</p>
+              <p className="text-[11px] text-amber-800">
+                คนที่ 1 คูณ ×5 • คนที่ 2 คูณ ×4 • คนที่ 3 คูณ ×3 • คนที่ 4 คูณ ×2
+              </p>
+            </div>
           </div>
 
           {/* Error Message */}

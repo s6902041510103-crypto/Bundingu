@@ -148,6 +148,8 @@ export default function GameLobbyPage() {
           position: 1,
           score: 1,
           status: 'waiting' as const,
+          joinOrder: 1,
+          bonusMultiplier: 5,
         },
       ]
     : [];
@@ -273,9 +275,26 @@ export default function GameLobbyPage() {
                         <Avatar avatarId={p.avatarId || 'avatar-01'} />
                       </div>
                       <div className="truncate text-left flex-1 min-w-0">
-                        <p className="text-xs font-bold text-gray-800 truncate">
-                          {p.displayName}
-                        </p>
+                        <div className="flex items-center gap-1.5 truncate">
+                          <p className="text-xs font-bold text-gray-800 truncate">
+                            {p.displayName}
+                          </p>
+                          <span
+                            className={`text-[9px] font-extrabold px-1 rounded flex-shrink-0 ${
+                              ((p as any).bonusMultiplier ?? 1) === 5
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                : ((p as any).bonusMultiplier ?? 1) === 4
+                                ? 'bg-slate-200 text-slate-800 border border-slate-300'
+                                : ((p as any).bonusMultiplier ?? 1) === 3
+                                ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                                : ((p as any).bonusMultiplier ?? 1) === 2
+                                ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}
+                          >
+                            ×{(p as any).bonusMultiplier ?? 1}
+                          </span>
+                        </div>
                         <span className={`text-[10px] font-semibold ${isCurrent ? 'text-indigo-600' : 'text-emerald-600'}`}>
                           {isCurrent ? '(คุณ) พร้อม' : 'พร้อมเล่น'}
                         </span>

@@ -65,25 +65,41 @@ export const SPECIAL_CELLS: ReadonlyArray<{
   { cell: 75, type: 'BOOST', label: 'Free Roll Next Turn' },
 ] as const;
 
+// Join Order Bonus Multipliers (Requirement Part 3)
+// 1st player = ×5, 2nd = ×4, 3rd = ×3, 4th = ×2, 5th+ = ×1
+export const JOIN_BONUS_MULTIPLIERS: Readonly<Record<number, number>> = {
+  1: 5,
+  2: 4,
+  3: 3,
+  4: 2,
+} as const;
+export const DEFAULT_JOIN_MULTIPLIER = 1;
+
+export function getJoinBonusMultiplier(joinOrder: number): number {
+  if (joinOrder <= 0) return DEFAULT_JOIN_MULTIPLIER;
+  return JOIN_BONUS_MULTIPLIERS[joinOrder] ?? DEFAULT_JOIN_MULTIPLIER;
+}
+
 // Avatar definitions (stable IDs for consistent rendering)
 export const AVATARS: ReadonlyArray<{
   id: string;
   animal: string;
+  nameEn: string;
   emoji: string;
   gradient: string;
 }> = [
-  { id: 'avatar-01', animal: 'ช้าง', emoji: '🐘', gradient: 'from-blue-400 to-blue-600' },
-  { id: 'avatar-02', animal: 'เสือ', emoji: '🐯', gradient: 'from-orange-400 to-orange-600' },
-  { id: 'avatar-03', animal: 'กระรอก', emoji: '🐿️', gradient: 'from-amber-400 to-amber-600' },
-  { id: 'avatar-04', animal: 'นกแก้ว', emoji: '🦜', gradient: 'from-green-400 to-teal-600' },
-  { id: 'avatar-05', animal: 'กระต่าย', emoji: '🐰', gradient: 'from-pink-400 to-rose-600' },
-  { id: 'avatar-06', animal: 'หมา', emoji: '🐶', gradient: 'from-brown-400 to-amber-600' },
-  { id: 'avatar-07', animal: 'แมว', emoji: '🐱', gradient: 'from-purple-400 to-violet-600' },
-  { id: 'avatar-08', animal: 'เพนกวิน', emoji: '🐧', gradient: 'from-indigo-400 to-blue-600' },
-  { id: 'avatar-09', animal: 'ปิงปอง', emoji: '🐼', gradient: 'from-gray-400 to-gray-600' },
-  { id: 'avatar-10', animal: 'ค้างคาว', emoji: '🦥', gradient: 'from-lime-400 to-green-600' },
-  { id: 'avatar-11', animal: 'สุนัขจิ้งจอก', emoji: '🦊', gradient: 'from-red-400 to-orange-600' },
-  { id: 'avatar-12', animal: 'กวาง', emoji: '🦌', gradient: 'from-amber-500 to-orange-700' },
+  { id: 'avatar-01', animal: 'สุนัขจิ้งจอก', nameEn: 'Fox', emoji: '🦊', gradient: 'from-orange-400 to-red-500' },
+  { id: 'avatar-02', animal: 'แพนด้า', nameEn: 'Panda', emoji: '🐼', gradient: 'from-gray-700 to-gray-900' },
+  { id: 'avatar-03', animal: 'เสือ', nameEn: 'Tiger', emoji: '🐯', gradient: 'from-amber-500 to-orange-600' },
+  { id: 'avatar-04', animal: 'กบ', nameEn: 'Frog', emoji: '🐸', gradient: 'from-green-400 to-emerald-600' },
+  { id: 'avatar-05', animal: 'แมว', nameEn: 'Cat', emoji: '🐱', gradient: 'from-pink-400 to-purple-500' },
+  { id: 'avatar-06', animal: 'หมี', nameEn: 'Bear', emoji: '🐻', gradient: 'from-amber-700 to-amber-900' },
+  { id: 'avatar-07', animal: 'กระต่าย', nameEn: 'Rabbit', emoji: '🐰', gradient: 'from-pink-300 to-rose-400' },
+  { id: 'avatar-08', animal: 'เพนกวิน', nameEn: 'Penguin', emoji: '🐧', gradient: 'from-blue-500 to-indigo-600' },
+  { id: 'avatar-09', animal: 'สิงโต', nameEn: 'Lion', emoji: '🦁', gradient: 'from-yellow-500 to-amber-600' },
+  { id: 'avatar-10', animal: 'โคอาลา', nameEn: 'Koala', emoji: '🐨', gradient: 'from-slate-400 to-slate-600' },
+  { id: 'avatar-11', animal: 'ลิง', nameEn: 'Monkey', emoji: '🐵', gradient: 'from-amber-600 to-orange-700' },
+  { id: 'avatar-12', animal: 'สุนัข', nameEn: 'Dog', emoji: '🐶', gradient: 'from-amber-400 to-amber-600' },
 ] as const;
 
 // Helper functions

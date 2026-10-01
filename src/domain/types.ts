@@ -133,6 +133,17 @@ export interface Player {
   lastRoll?: number; // last dice value
   finishOrder?: number; // 1, 2, 3... when finished
   finishBonus?: number; // bonus points for finish order
+  // Requirement Part 3: Join Order Bonus & Game Statistics
+  joinOrder?: number;
+  bonusMultiplier?: number;
+  baseScore?: number;
+  finalScore?: number;
+  correctAnswersCount?: number;
+  wrongAnswersCount?: number;
+  snakesHitCount?: number;
+  laddersUsedCount?: number;
+  specialEventsCount?: number;
+  diceRollsCount?: number;
 }
 
 export interface PlayerSnapshot {
@@ -144,6 +155,17 @@ export interface PlayerSnapshot {
   status: PlayerStatus;
   finishOrder?: number;
   finishBonus?: number;
+  // Requirement Part 3: Join Order Bonus & Game Statistics
+  joinOrder?: number;
+  bonusMultiplier?: number;
+  baseScore?: number;
+  finalScore?: number;
+  correctAnswersCount?: number;
+  wrongAnswersCount?: number;
+  snakesHitCount?: number;
+  laddersUsedCount?: number;
+  specialEventsCount?: number;
+  diceRollsCount?: number;
 }
 
 // ============================================================================

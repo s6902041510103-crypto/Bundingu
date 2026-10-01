@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { GameBoard } from '@/components/game/GameBoard';
+import { GameBoard, GamePodiumModal } from '@/components/game';
 import { Avatar } from '@/components/avatars/AvatarSVGs';
 import {
   LogOut,
@@ -13,6 +13,7 @@ import {
   User,
   HelpCircle,
   Users,
+  Trophy,
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { ChoiceIndex, GameState, GamePin, PlayerId } from '@/domain/types';
@@ -77,6 +78,7 @@ export default function GamePlayPage() {
   const [diceDisplayValue, setDiceDisplayValue] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
   const [countdownRemaining, setCountdownRemaining] = useState<number>(3);
   const [questionTimeRemaining, setQuestionTimeRemaining] = useState<number>(15);
+  const [showPodium, setShowPodium] = useState<boolean>(false);
 
   // Load student session from localStorage if available
   useEffect(() => {
@@ -108,6 +110,9 @@ export default function GamePlayPage() {
       setGameState(state);
       if (state.dice?.value) {
         setDiceDisplayValue(state.dice.value as any);
+      }
+      if (state.gameStatus === 'finished') {
+        setShowPodium(true);
       }
     });
 
@@ -419,6 +424,14 @@ export default function GamePlayPage() {
             {isTeacher ? '👨‍🏫' : <Avatar avatarId={myPlayer?.avatarId || 'avatar-09'} />}
           </div>
           <button
+            onClick={() => setShowPodium(true)}
+            className="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold border border-amber-500/30 flex items-center gap-1.5 transition-colors shadow-sm"
+            title="ดูโพเดียมสรุปผลคะแนน"
+          >
+            <Trophy className="w-4 h-4 text-amber-400" />
+            <span className="hidden sm:inline">โพเดียม</span>
+          </button>
+          <button
             onClick={() => router.push('/')}
             className="w-10 h-10 rounded-xl bg-[#122A36]/90 border border-white/10 flex items-center justify-center hover:bg-red-500/80 transition text-gray-300 hover:text-white shadow-xl"
             title="ออกจากเกม"
@@ -699,6 +712,20 @@ export default function GamePlayPage() {
             </span>
           </div>
         </div>
+
+        {/* Game Finish Podium Modal */}
+        <GamePodiumModal
+          isOpen={showPodium || gameState?.gameStatus === 'finished'}
+          onClose={() => setShowPodium(false)}
+          players={gameState?.players || []}
+          gamePin={pin}
+          onPlayAgain={() => {
+            setShowPodium(false);
+            if (isTeacher) {
+              router.push('/teacher/dashboard');
+            }
+          }}
+        />
 
       </div>
     </main>

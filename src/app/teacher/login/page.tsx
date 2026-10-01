@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Crown, Eye, EyeOff, Loader2, Sparkles, CheckCircle2 } from 'lucide-react';
+import { authService } from '@/lib/auth/authService';
 
 export default function TeacherLoginPage() {
   const [email, setEmail] = useState('');
@@ -22,21 +23,18 @@ export default function TeacherLoginPage() {
     }
 
     setIsLoading(true);
-    // TODO: Connect to AuthRepository (Supabase Auth in production)
-    // Mock delay for demonstration
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    const result = await authService.login(email, password);
     setIsLoading(false);
 
-    // Mock login success
-    setIsLoggedIn(true);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('teacher_session', JSON.stringify({ email: email.trim(), name: 'คุณครู' }));
+    if (!result.success) {
+      setError(result.error || 'เข้าสู่ระบบไม่สำเร็จ');
+      return;
     }
 
-    // Redirect to teacher dashboard after short delay
+    setIsLoggedIn(true);
     setTimeout(() => {
       window.location.href = '/teacher/dashboard';
-    }, 1000);
+    }, 800);
   };
 
   const handleDemoLogin = async () => {
@@ -44,15 +42,15 @@ export default function TeacherLoginPage() {
     setIsLoading(true);
     setEmail('teacher@demo.com');
     setPassword('demo123456');
-    await new Promise(resolve => setTimeout(resolve, 800));
+    const result = await authService.login('teacher@demo.com', 'demo123456');
     setIsLoading(false);
-    setIsLoggedIn(true);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('teacher_session', JSON.stringify({ email: 'teacher@demo.com', name: 'คุณครูสมศรี (Demo)' }));
+
+    if (result.success) {
+      setIsLoggedIn(true);
+      setTimeout(() => {
+        window.location.href = '/teacher/dashboard';
+      }, 500);
     }
-    setTimeout(() => {
-      window.location.href = '/teacher/dashboard';
-    }, 500);
   };
 
   if (isLoggedIn) {

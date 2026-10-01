@@ -79,6 +79,9 @@ import {
   LADDERS,
   SPECIAL_CELLS,
   getSpecialCellAt,
+  getSnakeAt,
+  getLadderAt,
+  calculateNextPosition,
 } from '@/lib/game-data';
 
 // Question bank for server authoritative game questions
@@ -486,10 +489,16 @@ export class GameEngine {
     );
 
     // 6. Update player state
+    const answeringPlayer = this.state.players.find(p => p.playerId === command.playerId);
+    const correctCount = (answeringPlayer?.correctAnswersCount || 0) + (evaluation.correct ? 1 : 0);
+    const wrongCount = (answeringPlayer?.wrongAnswersCount || 0) + (evaluation.correct ? 0 : 1);
+
     const playerUpdateResult = updatePlayer(this.state, command.playerId, {
       status: 'answered' as const,
       answeredAt: answerTimestamp,
       answerTimeMs: evaluation.answerTimeMs,
+      correctAnswersCount: correctCount,
+      wrongAnswersCount: wrongCount,
     });
     let newState: ServerGameState = playerUpdateResult.success ? playerUpdateResult.state : this.state;
 
@@ -648,6 +657,10 @@ export class GameEngine {
     const bounced = movement.bounced;
     const finished = isFinishCell(toPosition);
 
+    const { position: afterDice } = calculateNextPosition(fromPosition, diceValue);
+    const hitSnake = Boolean(getSnakeAt(afterDice));
+    const hitLadder = Boolean(getLadderAt(afterDice));
+
     let finishOrder = player.finishOrder;
     let finishBonus = player.finishBonus;
     if (finished && finishOrder === undefined) {
@@ -656,19 +669,39 @@ export class GameEngine {
       finishBonus = calculateFinishBonus(finishOrder);
     }
 
-    const finalScore = calculateFinalScore(toPosition, finishBonus || 0);
+    const baseScore = toPosition + (finishBonus || 0);
+    const bonusMultiplier = player.bonusMultiplier || 1;
+    const finalScore = baseScore * bonusMultiplier;
 
     // 5. Update player state
     let newState = this.state;
     const playerUpdateResult = updatePlayer(newState, command.playerId, {
       position: toPosition,
+      baseScore,
+      finalScore,
       score: finalScore,
       lastRoll: diceValue,
       status: finished ? ('finished' as const) : ('waiting' as const),
       finishOrder,
       finishBonus,
+      diceRollsCount: (player.diceRollsCount || 0) + 1,
+      snakesHitCount: (player.snakesHitCount || 0) + (hitSnake ? 1 : 0),
+      laddersUsedCount: (player.laddersUsedCount || 0) + (hitLadder ? 1 : 0),
     });
     newState = playerUpdateResult.success ? playerUpdateResult.state : newState;
+
+    // Update leaderboard sorted by finalScore/score descending, then position descending
+    const updatedLeaderboard = [...newState.players]
+      .sort((a, b) => (b.finalScore ?? b.score) - (a.finalScore ?? a.score) || b.position - a.position)
+      .map(p => ({
+        playerId: p.playerId,
+        displayName: p.displayName,
+        avatarId: p.avatarId,
+        position: p.position,
+        score: p.finalScore ?? p.score,
+        status: p.status,
+      }));
+    newState = updateState(newState, { leaderboard: updatedLeaderboard });
 
     // 6. Manage roll queue using rollQueueRules
     const currentQueue: RollQueue = newState.rollQueue.map(pid => {
@@ -1049,28 +1082,46 @@ export class GameEngine {
     }
 
     let newPosition = player.position;
-    let newScore = player.score;
     let newRollQueue = [...this.state.rollQueue];
+    let extraBonus = 0;
 
     // Apply special cell effect
     if (specialEvent.cell === 25) {
       // Cell 25: BONUS - Roll Again -> Put player at front of rollQueue
       newRollQueue = [player.playerId, ...newRollQueue.filter(id => id !== player.playerId)];
-      newScore += 10;
+      extraBonus = 10;
     } else if (specialEvent.cell === 50) {
       // Cell 50: GIFT - Move Up 3 -> Move position forward 3 cells
       newPosition = Math.min(100, player.position + 3);
-      newScore = Math.max(newScore, newPosition);
     } else if (specialEvent.cell === 75) {
       // Cell 75: BOOST - Free Roll Next Turn / +50 score bonus
-      newScore += 50;
+      extraBonus = 50;
     }
+
+    const baseScore = newPosition + (player.finishBonus || 0);
+    const bonusMultiplier = player.bonusMultiplier || 1;
+    const finalScore = baseScore * bonusMultiplier + extraBonus;
 
     const playerUpdateResult = updatePlayer(this.state, player.playerId, {
       position: newPosition,
-      score: newScore,
+      baseScore,
+      finalScore,
+      score: finalScore,
+      specialEventsCount: (player.specialEventsCount || 0) + 1,
     });
     let newState = playerUpdateResult.success ? playerUpdateResult.state : this.state;
+
+    // Update leaderboard
+    const updatedLeaderboard = [...newState.players]
+      .sort((a, b) => (b.finalScore ?? b.score) - (a.finalScore ?? a.score) || b.position - a.position)
+      .map(p => ({
+        playerId: p.playerId,
+        displayName: p.displayName,
+        avatarId: p.avatarId,
+        position: p.position,
+        score: p.finalScore ?? p.score,
+        status: p.status,
+      }));
 
     const nextPhase: GameStatus = newRollQueue.length > 0 ? 'rolling' : 'waiting_for_question';
     const nextRoller = newRollQueue.length > 0 ? newRollQueue[0] : undefined;
@@ -1080,6 +1131,7 @@ export class GameEngine {
       specialEvent: undefined,
       rollQueue: newRollQueue,
       currentPlayerId: nextRoller,
+      leaderboard: updatedLeaderboard,
       phaseStartedAt: new Date().toISOString(),
       phaseEndsAt: undefined,
     });
@@ -1246,7 +1298,11 @@ export function getGameEngineForPin(pin: string): GameEngine {
         displayName: 'นัท',
         avatarId: 'avatar-09' as any,
         position: 1,
-        score: 1,
+        score: 5,
+        baseScore: 1,
+        finalScore: 5,
+        joinOrder: 1,
+        bonusMultiplier: 5,
         status: 'waiting',
         isConnected: true,
         joinedAt: now,
@@ -1256,7 +1312,11 @@ export function getGameEngineForPin(pin: string): GameEngine {
         displayName: 'มายด์',
         avatarId: 'avatar-05' as any,
         position: 1,
-        score: 1,
+        score: 4,
+        baseScore: 1,
+        finalScore: 4,
+        joinOrder: 2,
+        bonusMultiplier: 4,
         status: 'waiting',
         isConnected: true,
         joinedAt: now,
@@ -1266,7 +1326,11 @@ export function getGameEngineForPin(pin: string): GameEngine {
         displayName: 'อาร์ม',
         avatarId: 'avatar-02' as any,
         position: 1,
-        score: 1,
+        score: 3,
+        baseScore: 1,
+        finalScore: 3,
+        joinOrder: 3,
+        bonusMultiplier: 3,
         status: 'waiting',
         isConnected: true,
         joinedAt: now,
@@ -1276,12 +1340,20 @@ export function getGameEngineForPin(pin: string): GameEngine {
         displayName: 'จูน',
         avatarId: 'avatar-04' as any,
         position: 1,
-        score: 1,
+        score: 2,
+        baseScore: 1,
+        finalScore: 2,
+        joinOrder: 4,
+        bonusMultiplier: 2,
         status: 'waiting',
         isConnected: true,
         joinedAt: now,
       },
     ];
+    const isDemoPin = normalizedPin === '4827' || normalizedPin === 'DEMO99' || normalizedPin === 'KS8821';
+    const initialPlayers: ServerPlayer[] = isDemoPin ? defaultPlayers : [];
+    const initialStatus: GameStatus = isDemoPin ? 'waiting_for_question' : 'lobby';
+
     const initialState: ServerGameState = {
       gameId: `game-${normalizedPin.toLowerCase()}` as any,
       gamePin: normalizedPin as any,
@@ -1293,11 +1365,11 @@ export function getGameEngineForPin(pin: string): GameEngine {
         specialCells: SPECIAL_CELLS,
         totalCells: GAME_CONFIG.board.totalCells,
       },
-      gameStatus: 'waiting_for_question',
+      gameStatus: initialStatus,
       currentRound: 0,
-      players: defaultPlayers,
+      players: initialPlayers,
       rollQueue: [],
-      leaderboard: defaultPlayers.map(p => ({
+      leaderboard: initialPlayers.map(p => ({
         playerId: p.playerId,
         displayName: p.displayName,
         avatarId: p.avatarId,

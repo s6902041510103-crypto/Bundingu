@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { GameState, GamePin, GameEvent } from '@/domain/types';
 import { ProductionTransport } from '@/lib/transport/ProductionTransport';
-import { GameBoard, Player } from '@/components/game/GameBoard';
+import { GameBoard, Player, GamePodiumModal } from '@/components/game';
 import { Avatar } from '@/components/avatars/AvatarSVGs';
 import { Dice } from '@/components/game/Dice';
 
@@ -45,6 +45,7 @@ export default function ProjectorViewPage() {
 
   // Projector Fullscreen state
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showPodium, setShowPodium] = useState(false);
 
   // Local Timers synced to server phaseEndsAt
   const [countdownRemaining, setCountdownRemaining] = useState<number>(3);
@@ -68,6 +69,9 @@ export default function ProjectorViewPage() {
       setIsConnected(true);
       if (state.dice?.value) {
         setDiceDisplayValue(state.dice.value as any);
+      }
+      if (state.gameStatus === 'finished') {
+        setShowPodium(true);
       }
     });
 
@@ -228,6 +232,15 @@ export default function ProjectorViewPage() {
               {gameState?.currentRound || 1} / {gameState?.totalRounds || 10}
             </p>
           </div>
+
+          <button
+            onClick={() => setShowPodium(true)}
+            className="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold border border-amber-500/30 flex items-center gap-1.5 transition-colors shadow-sm"
+            title="ดูโพเดียมสรุปผลคะแนน"
+          >
+            <Trophy className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">โพเดียม</span>
+          </button>
 
           <button
             onClick={toggleFullscreen}
@@ -471,6 +484,14 @@ export default function ProjectorViewPage() {
           </div>
         </div>
       </main>
+
+      {/* Game Finish Podium Modal */}
+      <GamePodiumModal
+        isOpen={showPodium || gameState?.gameStatus === 'finished'}
+        onClose={() => setShowPodium(false)}
+        players={gameState?.players || []}
+        gamePin={pin}
+      />
     </div>
   );
 }
