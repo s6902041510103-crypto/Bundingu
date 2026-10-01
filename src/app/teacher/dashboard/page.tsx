@@ -95,13 +95,14 @@ export default function TeacherDashboardPage() {
   const [teacher, setTeacher] = useState<TeacherUser>(DEMO_TEACHER);
 
   // Active room state
-  const [gamePin, setGamePin] = useState<string>('KS8821');
+  const [gamePin, setGamePin] = useState<string>('');
   const [roomSubject, setRoomSubject] = useState('รวมทุกวิชา');
   const [roundCount, setRoundCount] = useState(10);
   const [timeLimit, setTimeLimit] = useState(15);
-  const [isRoomActive, setIsRoomActive] = useState(true);
+  const [isRoomActive, setIsRoomActive] = useState(false);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'create' | 'questions' | 'history'>('create');
+  const [isAddingBots, setIsAddingBots] = useState(false);
 
   // Realtime Live Game State
   const [gameState, setGameState] = useState<PublicGameState | null>(null);
@@ -166,10 +167,50 @@ export default function TeacherDashboardPage() {
     return pin;
   };
 
-  const handleCreateRoom = () => {
-    const pin = generatePin();
+  const handleCreateRoom = (customPin?: string) => {
+    const pin = customPin || generatePin();
     setGamePin(pin);
     setIsRoomActive(true);
+  };
+
+  const handleCloseRoom = () => {
+    if (confirm('คุณต้องการปิดห้องเรียนนี้และกลับสู่หน้าตั้งค่าใช่หรือไม่?')) {
+      setIsRoomActive(false);
+      setGamePin('');
+      setGameState(null);
+    }
+  };
+
+  const handleAddDemoBots = async () => {
+    if (!gamePin) return;
+    setIsAddingBots(true);
+    const demoBots = [
+      { name: 'น้องนัท', avatar: 'avatar-09' },
+      { name: 'น้องมายด์', avatar: 'avatar-05' },
+      { name: 'น้องอาร์ม', avatar: 'avatar-02' },
+      { name: 'น้องจูน', avatar: 'avatar-04' },
+    ];
+    for (let i = 0; i < demoBots.length; i++) {
+      const bot = demoBots[i];
+      try {
+        await fetch('/api/game/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            command: {
+              type: 'JOIN_GAME',
+              gamePin,
+              sessionId: `bot-${gamePin.toLowerCase()}-${i + 1}-${Date.now().toString(36)}`,
+              displayName: bot.name,
+              preferredAvatarId: bot.avatar,
+            },
+          }),
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    setIsAddingBots(false);
   };
 
   const handleCopyPin = () => {
@@ -288,7 +329,7 @@ export default function TeacherDashboardPage() {
     }
   };
 
-  // Connected players from authoritative game state or default preview
+  // Connected players from authoritative game state
   const livePlayers: PublicPlayer[] = gameState?.players && gameState.players.length > 0
     ? gameState.players.map(p => ({
         playerId: p.playerId as any,
@@ -303,52 +344,7 @@ export default function TeacherDashboardPage() {
         baseScore: p.baseScore,
         finalScore: p.finalScore,
       }))
-    : [
-        {
-          playerId: 'p1' as any,
-          displayName: 'น้องนัท',
-          avatarId: 'avatar-09' as any,
-          position: 1,
-          score: 5,
-          status: 'waiting',
-          isConnected: true,
-          joinOrder: 1,
-          bonusMultiplier: 5,
-        },
-        {
-          playerId: 'p2' as any,
-          displayName: 'น้องมายด์',
-          avatarId: 'avatar-05' as any,
-          position: 1,
-          score: 4,
-          status: 'waiting',
-          isConnected: true,
-          joinOrder: 2,
-          bonusMultiplier: 4,
-        },
-        {
-          playerId: 'p3' as any,
-          displayName: 'น้องอาร์ม',
-          avatarId: 'avatar-02' as any,
-          position: 1,
-          score: 3,
-          status: 'waiting',
-          isConnected: true,
-          joinOrder: 3,
-          bonusMultiplier: 3,
-        },
-        {
-          playerId: 'p4' as any,
-          displayName: 'น้องจูน',
-          avatarId: 'avatar-04' as any,
-          position: 1,
-          score: 2,
-          status: 'waiting',
-          isConnected: true,
-          joinOrder: 4,
-          bonusMultiplier: 2,
-        },
-      ];
+    : [];
 
   const currentPhase = gameState?.gameStatus || 'waiting_for_question';
   const allAnswered = Boolean(gameState?.allPlayersAnswered);
@@ -371,15 +367,25 @@ export default function TeacherDashboardPage() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Link
-              href={`/game/${gamePin}/projector`}
-              target="_blank"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors shadow-sm"
-            >
-              <LayoutGrid className="w-4 h-4" />
-              <span>จอโปรเจกเตอร์ห้องเรียน</span>
-              <ExternalLink className="w-3 h-3 ml-0.5 opacity-70" />
-            </Link>
+            {isRoomActive && gamePin ? (
+              <Link
+                href={`/game/${gamePin}/projector`}
+                target="_blank"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors shadow-sm"
+              >
+                <LayoutGrid className="w-4 h-4" />
+                <span>จอโปรเจกเตอร์ห้องเรียน</span>
+                <ExternalLink className="w-3 h-3 ml-0.5 opacity-70" />
+              </Link>
+            ) : (
+              <button
+                onClick={() => handleCreateRoom()}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-sm cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>เปิดห้องเรียนสด</span>
+              </button>
+            )}
 
             <div className="flex items-center gap-3 border-l pl-4 border-gray-200">
               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow">
@@ -413,26 +419,40 @@ export default function TeacherDashboardPage() {
               </div>
               <h2 className="text-2xl font-bold">สวัสดีครับ {teacher.name}!</h2>
               <p className="text-indigo-100 text-sm mt-1">
-                สร้างห้องเรียนสด สุ่ม Game PIN ให้นักเรียนเข้าร่วมแข่งขันตอบคำถามบนกระดาน 100 ช่อง
+                {isRoomActive
+                  ? `ห้องเรียนสด PIN: ${gamePin} กำลังเปิดอยู่ ให้นักเรียนร่วมแข่งขันตอบคำถามบนกระดาน 100 ช่อง`
+                  : 'ตั้งค่าห้องเรียนแล้วกดเปิดห้องเพื่อรับรหัส Game PIN ให้นักเรียนร่วมแข่งขันตอบคำถามบนกระดาน 100 ช่อง'}
               </p>
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
-              <Link
-                href={`/game/${gamePin}/play`}
-                target="_blank"
-                className="px-4 py-2 rounded-xl bg-white text-indigo-700 font-semibold text-sm hover:bg-indigo-50 transition-all shadow-md flex items-center gap-1.5"
-              >
-                <Play className="w-4 h-4 fill-current" />
-                เข้าหน้าเล่นเกม (Play Screen)
-              </Link>
-              <Link
-                href={`/game/${gamePin}/projector`}
-                target="_blank"
-                className="px-4 py-2 rounded-xl bg-indigo-700/80 hover:bg-indigo-700 text-white font-semibold text-sm transition-all flex items-center gap-1.5"
-              >
-                <LayoutGrid className="w-4 h-4" />
-                เปิดจอใหญ่ (Projector)
-              </Link>
+              {isRoomActive && gamePin ? (
+                <>
+                  <Link
+                    href={`/game/${gamePin}/play`}
+                    target="_blank"
+                    className="px-4 py-2 rounded-xl bg-white text-indigo-700 font-semibold text-sm hover:bg-indigo-50 transition-all shadow-md flex items-center gap-1.5"
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                    เข้าหน้าเล่นเกม (Play Screen)
+                  </Link>
+                  <Link
+                    href={`/game/${gamePin}/projector`}
+                    target="_blank"
+                    className="px-4 py-2 rounded-xl bg-indigo-700/80 hover:bg-indigo-700 text-white font-semibold text-sm transition-all flex items-center gap-1.5"
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                    เปิดจอใหญ่ (Projector)
+                  </Link>
+                </>
+              ) : (
+                <button
+                  onClick={() => handleCreateRoom()}
+                  className="px-4 py-2.5 rounded-xl bg-white text-indigo-700 font-bold text-sm hover:bg-indigo-50 transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4 text-indigo-600" />
+                  เปิดห้องเรียนสดทันที (สร้าง PIN)
+                </button>
+              )}
             </div>
           </div>
 
@@ -448,13 +468,24 @@ export default function TeacherDashboardPage() {
           </div>
 
           <div className="card p-5 flex items-center gap-4 bg-white border border-gray-200 rounded-2xl shadow-sm">
-            <div className="w-12 h-12 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center font-bold">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold ${
+              isRoomActive ? 'bg-violet-50 text-violet-600' : 'bg-slate-100 text-slate-400'
+            }`}>
               <Trophy className="w-6 h-6" />
             </div>
             <div>
               <p className="text-xs text-gray-500 font-medium">ห้องเกมปัจจุบัน</p>
-              <h3 className="text-2xl font-bold font-mono text-indigo-600 mt-0.5">{gamePin}</h3>
-              <p className="text-xs text-gray-500 font-medium mt-0.5">สถานะ: {currentPhase}</p>
+              {isRoomActive && gamePin ? (
+                <>
+                  <h3 className="text-2xl font-bold font-mono text-indigo-600 mt-0.5">{gamePin}</h3>
+                  <p className="text-xs text-emerald-600 font-medium mt-0.5">● กำลังเปิด ({currentPhase})</p>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-base font-bold text-gray-400 mt-0.5">ยังไม่เปิดห้อง</h3>
+                  <p className="text-xs text-gray-400 font-medium mt-0.5">พร้อมเปิดห้องใหม่</p>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -498,279 +529,456 @@ export default function TeacherDashboardPage() {
 
         {/* TAB 1: LIVE GAME CONTROLLER & LOBBY */}
         {activeTab === 'create' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left Column: Room Settings & Teacher Action Controls */}
-            <div className="lg:col-span-1 space-y-6">
-              {/* Live Classroom Controls */}
-              <div className="card p-6 bg-white border border-gray-200 rounded-2xl shadow-sm space-y-4">
-                <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-indigo-600" />
-                  แผงควบคุมการดำเนินเกม (Teacher Controls)
-                </h3>
-
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">สถานะเกม:</span>
-                    <span className="font-bold text-indigo-600 font-mono">{currentPhase}</span>
+          !isRoomActive ? (
+            /* ROOM NOT YET ACTIVE: SETUP & LAUNCH VIEW */
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left Column: Room Settings */}
+              <div className="lg:col-span-1 space-y-6">
+                <div className="card p-6 bg-white border border-indigo-100 rounded-2xl shadow-sm space-y-5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-gray-900">ตั้งค่าและเปิดห้องเรียน</h3>
+                      <p className="text-xs text-gray-500">กำหนดกติกาห้องก่อนสร้าง Game PIN</p>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">รอบที่:</span>
-                    <span className="font-bold text-gray-800">{gameState?.currentRound || 1} / {roundCount}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">ตอบครบทุกคนแล้ว:</span>
-                    <span className={`font-bold ${allAnswered ? 'text-green-600' : 'text-gray-500'}`}>
-                      {allAnswered ? 'ใช่ (ครบแล้ว)' : 'ยังไม่ครบ'}
-                    </span>
-                  </div>
-                </div>
 
-                {/* Primary Game Action Buttons */}
-                <div className="space-y-2 pt-2">
-                  {/* Start Question with 3s Countdown */}
-                  {(currentPhase === 'waiting_for_question' || currentPhase === 'lobby' || currentPhase === 'round_complete') && (
-                    <button
-                      onClick={handleStartQuestion}
-                      disabled={isCommandPending}
-                      className="w-full py-3.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md shadow-indigo-500/20 flex items-center justify-center gap-2 transition-all"
-                    >
-                      <Play className="w-4 h-4 fill-current" />
-                      เริ่มคำถามรอบนี้ (Countdown 3-2-1)
-                    </button>
-                  )}
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                        หมวดวิชา / ชุดคำถาม
+                      </label>
+                      <select
+                        value={roomSubject}
+                        onChange={(e) => setRoomSubject(e.target.value)}
+                        className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="รวมทุกวิชา">รวมทุกวิชา (ทั่วไป / วิทย์ / สังคม)</option>
+                        <option value="วิทยาศาสตร์">วิทยาศาสตร์น่ารู้</option>
+                        <option value="คณิตศาสตร์">คณิตศาสตร์หรรษา</option>
+                        <option value="สังคมศึกษา">สังคมศึกษาและรอบตัว</option>
+                      </select>
+                    </div>
 
-                  {/* Advance Question when in question phase */}
-                  {currentPhase === 'question' && (
-                    <button
-                      onClick={handleAdvanceQuestion}
-                      disabled={isCommandPending}
-                      className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all ${
-                        allAnswered
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/25 animate-bounce'
-                          : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20'
-                      }`}
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                      {allAnswered ? 'นักเรียนตอบครบแล้ว! กดไปต่อทันที' : 'ไปต่อ (Advance Question)'}
-                    </button>
-                  )}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                        จำนวนรอบคำถาม
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[5, 10, 15].map((cnt) => (
+                          <button
+                            key={cnt}
+                            type="button"
+                            onClick={() => setRoundCount(cnt)}
+                            className={`py-2 text-xs font-semibold rounded-lg border transition-all ${
+                              roundCount === cnt
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            {cnt} รอบ
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
-                  {/* Start Game from Lobby */}
-                  {currentPhase === 'lobby' && (
-                    <button
-                      onClick={handleStartGame}
-                      disabled={isCommandPending}
-                      className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md"
-                    >
-                      <Play className="w-4 h-4 fill-current" />
-                      เริ่มเกม (Start Game)
-                    </button>
-                  )}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                        เวลาตอบต่อข้อ
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[15, 20, 30].map((sec) => (
+                          <button
+                            key={sec}
+                            type="button"
+                            onClick={() => setTimeLimit(sec)}
+                            className={`py-2 text-xs font-semibold rounded-lg border transition-all ${
+                              timeLimit === sec
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            {sec} วินาที
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
-                  {/* Open Screens in New Tabs */}
-                  <div className="grid grid-cols-2 gap-2 pt-2">
-                    <Link
-                      href={`/game/${gamePin}/play`}
-                      target="_blank"
-                      className="py-2.5 px-3 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-bold text-center hover:bg-indigo-100 transition-colors"
-                    >
-                      หน้าเล่น Play
-                    </Link>
-                    <Link
-                      href={`/game/${gamePin}/projector`}
-                      target="_blank"
-                      className="py-2.5 px-3 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 text-xs font-bold text-center hover:bg-purple-100 transition-colors"
-                    >
-                      จอโปรเจกเตอร์
-                    </Link>
+                    <div className="pt-3 space-y-2">
+                      <button
+                        onClick={() => handleCreateRoom()}
+                        className="w-full py-3.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md shadow-indigo-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        ✨ เปิดห้องรอผู้เล่น (สร้าง Game PIN ทันที)
+                      </button>
+
+                      <button
+                        onClick={() => handleCreateRoom('4827')}
+                        className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-gray-700 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                      >
+                        <Dice5 className="w-3.5 h-3.5 text-gray-500" />
+                        ทดลองเปิดห้อง Demo (PIN: 4827 พร้อม 4 ผู้เล่น)
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Room Configuration Settings */}
-              <div className="card p-6 bg-white border border-gray-200 rounded-2xl shadow-sm">
-                <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <Dice5 className="w-5 h-5 text-indigo-600" />
-                  ตั้งค่าห้องเกม
-                </h3>
-
-                <div className="space-y-4">
+              {/* Right Column: Instruction Steps & Visual Guide */}
+              <div className="lg:col-span-2 space-y-6">
+                <div className="card p-6 bg-white border border-gray-200 rounded-2xl shadow-sm space-y-6">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      หมวดวิชา / ชุดคำถาม
-                    </label>
-                    <select
-                      value={roomSubject}
-                      onChange={(e) => setRoomSubject(e.target.value)}
-                      className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="รวมทุกวิชา">รวมทุกวิชา (ทั่วไป / วิทย์ / สังคม)</option>
-                      <option value="วิทยาศาสตร์">วิทยาศาสตร์น่ารู้</option>
-                      <option value="คณิตศาสตร์">คณิตศาสตร์หรรษา</option>
-                      <option value="สังคมศึกษา">สังคมศึกษาและรอบตัว</option>
-                    </select>
+                    <h4 className="font-bold text-gray-900 text-base flex items-center gap-2">
+                      <BookOpen className="w-5 h-5 text-indigo-600" />
+                      ขั้นตอนการจัดกิจกรรมการเรียนรู้ Knowledge Snake
+                    </h4>
+                    <p className="text-xs text-gray-500 mt-1">
+                      ระบบเกมบันไดงูตอบคำถามสดสำหรับห้องเรียนแบบ Real-time Multi-client
+                    </p>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      จำนวนรอบคำถาม
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[5, 10, 15].map((cnt) => (
-                        <button
-                          key={cnt}
-                          type="button"
-                          onClick={() => setRoundCount(cnt)}
-                          className={`py-2 text-xs font-semibold rounded-lg border transition-all ${
-                            roundCount === cnt
-                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                              : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-                          }`}
-                        >
-                          {cnt} รอบ
-                        </button>
-                      ))}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-4 rounded-xl border border-indigo-100 bg-indigo-50/40 space-y-2">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-sm">
+                        1
+                      </div>
+                      <h5 className="font-bold text-gray-800 text-sm">เปิดห้องและรับ Game PIN</h5>
+                      <p className="text-xs text-gray-600 leading-relaxed">
+                        กดปุ่ม &quot;เปิดห้องรอผู้เล่น&quot; ระบบจะสุ่ม PIN 6 หลักและเปิดห้อง Lobby สดพร้อมเชื่อมต่อ Realtime ทันที
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-violet-100 bg-violet-50/40 space-y-2">
+                      <div className="w-8 h-8 rounded-lg bg-violet-600 text-white flex items-center justify-center font-bold text-sm">
+                        2
+                      </div>
+                      <h5 className="font-bold text-gray-800 text-sm">นักเรียนเข้าร่วมห้อง</h5>
+                      <p className="text-xs text-gray-600 leading-relaxed">
+                        ให้นักเรียนเปิดเบราว์เซอร์ไปที่ <code className="bg-white px-1.5 py-0.5 rounded border text-indigo-600 font-mono">/join</code> แล้วกรอก PIN พร้อมเลือกอวตารสัตว์น่ารัก 12 แบบ
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-amber-100 bg-amber-50/40 space-y-2">
+                      <div className="w-8 h-8 rounded-lg bg-amber-600 text-white flex items-center justify-center font-bold text-sm">
+                        3
+                      </div>
+                      <h5 className="font-bold text-gray-800 text-sm">โบนัสความเร็ว 5 คนแรก</h5>
+                      <p className="text-xs text-gray-600 leading-relaxed">
+                        ระบบคำนวณโบนัสเข้าห้องเร็วอัตโนมัติ: คนที่ 1 รับ ×5, คนที่ 2 รับ ×4, คนที่ 3 รับ ×3, คนที่ 4 รับ ×2, คนที่ 5 รับ ×1
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50/40 space-y-2">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-sm">
+                        4
+                      </div>
+                      <h5 className="font-bold text-gray-800 text-sm">ฉายจอใหญ่ & ดำเนินเกม</h5>
+                      <p className="text-xs text-gray-600 leading-relaxed">
+                        เปิดจอ Projector แสดงกระดาน 100 ช่อง แล้วกด &quot;เริ่มคำถาม&quot; เพื่อให้นักเรียนตอบคำถามและทอยเต๋าเดินบันไดงู
+                      </p>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      เวลาตอบต่อข้อ
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[15, 20, 30].map((sec) => (
-                        <button
-                          key={sec}
-                          type="button"
-                          onClick={() => setTimeLimit(sec)}
-                          className={`py-2 text-xs font-semibold rounded-lg border transition-all ${
-                            timeLimit === sec
-                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                              : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-                          }`}
-                        >
-                          {sec} วินาที
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="pt-2">
+                  <div className="pt-2 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-indigo-600" />
+                      รองรับผู้เล่นสูงสุด 40 คนพร้อมกันในห้องเรียน
+                    </span>
                     <button
-                      onClick={handleCreateRoom}
-                      className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-gray-700 text-xs font-bold flex items-center justify-center gap-2 transition-colors"
+                      onClick={() => handleCreateRoom()}
+                      className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      คลิกเพื่อเริ่มต้นสร้างห้องทันที
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* ROOM ACTIVE: LIVE GAME CONTROLLER & LOBBY VIEW */
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left Column: Room Settings & Teacher Action Controls */}
+              <div className="lg:col-span-1 space-y-6">
+                {/* Live Classroom Controls */}
+                <div className="card p-6 bg-white border border-gray-200 rounded-2xl shadow-sm space-y-4">
+                  <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-indigo-600" />
+                    แผงควบคุมการดำเนินเกม (Teacher Controls)
+                  </h3>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">สถานะเกม:</span>
+                      <span className="font-bold text-indigo-600 font-mono">{currentPhase}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">รอบที่:</span>
+                      <span className="font-bold text-gray-800">{gameState?.currentRound || 1} / {roundCount}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">ตอบครบทุกคนแล้ว:</span>
+                      <span className={`font-bold ${allAnswered ? 'text-green-600' : 'text-gray-500'}`}>
+                        {allAnswered ? 'ใช่ (ครบแล้ว)' : 'ยังไม่ครบ'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Primary Game Action Buttons */}
+                  <div className="space-y-2 pt-2">
+                    {/* Start Question with 3s Countdown */}
+                    {(currentPhase === 'waiting_for_question' || currentPhase === 'round_complete') && (
+                      <button
+                        onClick={handleStartQuestion}
+                        disabled={isCommandPending}
+                        className="w-full py-3.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md shadow-indigo-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        <Play className="w-4 h-4 fill-current" />
+                        เริ่มคำถามรอบนี้ (Countdown 3-2-1)
+                      </button>
+                    )}
+
+                    {/* Advance Question when in question phase */}
+                    {currentPhase === 'question' && (
+                      <button
+                        onClick={handleAdvanceQuestion}
+                        disabled={isCommandPending}
+                        className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 ${
+                          allAnswered
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/25 animate-bounce'
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20'
+                        }`}
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                        {allAnswered ? 'นักเรียนตอบครบแล้ว! กดไปต่อทันที' : 'ไปต่อ (Advance Question)'}
+                      </button>
+                    )}
+
+                    {/* Start Game from Lobby */}
+                    {currentPhase === 'lobby' && (
+                      <button
+                        onClick={handleStartGame}
+                        disabled={isCommandPending}
+                        className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer disabled:opacity-50"
+                      >
+                        <Play className="w-4 h-4 fill-current" />
+                        เริ่มเกม (Start Game)
+                      </button>
+                    )}
+
+                    {/* Open Screens in New Tabs */}
+                    <div className="grid grid-cols-2 gap-2 pt-2">
+                      <Link
+                        href={`/game/${gamePin}/play`}
+                        target="_blank"
+                        className="py-2.5 px-3 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-bold text-center hover:bg-indigo-100 transition-colors"
+                      >
+                        หน้าเล่น Play
+                      </Link>
+                      <Link
+                        href={`/game/${gamePin}/projector`}
+                        target="_blank"
+                        className="py-2.5 px-3 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 text-xs font-bold text-center hover:bg-purple-100 transition-colors"
+                      >
+                        จอโปรเจกเตอร์
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Room Configuration Settings & Actions */}
+                <div className="card p-6 bg-white border border-gray-200 rounded-2xl shadow-sm space-y-4">
+                  <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <Dice5 className="w-5 h-5 text-indigo-600" />
+                    ข้อมูลห้องเรียน
+                  </h3>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">หมวดวิชา:</span>
+                      <span className="font-bold text-gray-800">{roomSubject}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">จำนวนรอบ:</span>
+                      <span className="font-bold text-gray-800">{roundCount} รอบ</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">เวลาต่อข้อ:</span>
+                      <span className="font-bold text-gray-800">{timeLimit} วินาที</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-1">
+                    <button
+                      onClick={() => handleCreateRoom()}
+                      className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-gray-700 text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
                       สุ่มสร้าง Game PIN ใหม่
                     </button>
+
+                    <button
+                      onClick={handleCloseRoom}
+                      className="w-full py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      ปิดห้องเรียนนี้ (กลับหน้าตั้งค่า)
+                    </button>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Right Column: Active PIN Display & Live Player List */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Big PIN Display */}
-              <div className="card p-6 bg-white border border-indigo-200 rounded-2xl shadow-md text-center space-y-4">
-                <span className="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold animate-pulse">
-                  ● ห้องเรียนสดเปิดอยู่ พร้อมรับนักเรียน
-                </span>
-                <p className="text-sm font-medium text-gray-500">รหัสเข้าร่วมเกมสำหรับนักเรียน (Game PIN)</p>
-                <div className="flex items-center justify-center gap-3">
-                  <span className="font-mono text-5xl sm:text-6xl font-extrabold tracking-widest text-indigo-700 bg-indigo-50/50 px-6 py-2 rounded-2xl border-2 border-indigo-200 shadow-inner">
-                    {gamePin}
+              {/* Right Column: Active PIN Display & Live Player List */}
+              <div className="lg:col-span-2 space-y-6">
+                {/* Big PIN Display */}
+                <div className="card p-6 bg-white border border-indigo-200 rounded-2xl shadow-md text-center space-y-4">
+                  <span className="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold animate-pulse">
+                    ● ห้องเรียนสดเปิดอยู่ พร้อมรับนักเรียน
                   </span>
-                  <button
-                    onClick={handleCopyPin}
-                    className="p-3.5 rounded-xl border border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-600 transition-colors shadow-sm"
-                    title="คัดลอก PIN"
-                  >
-                    {copied ? <Check className="w-6 h-6 text-green-600" /> : <Copy className="w-6 h-6" />}
-                  </button>
+                  <p className="text-sm font-medium text-gray-500">รหัสเข้าร่วมเกมสำหรับนักเรียน (Game PIN)</p>
+                  <div className="flex items-center justify-center gap-3">
+                    <span className="font-mono text-5xl sm:text-6xl font-extrabold tracking-widest text-indigo-700 bg-indigo-50/50 px-6 py-2 rounded-2xl border-2 border-indigo-200 shadow-inner">
+                      {gamePin}
+                    </span>
+                    <button
+                      onClick={handleCopyPin}
+                      className="p-3.5 rounded-xl border border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-600 transition-colors shadow-sm cursor-pointer"
+                      title="คัดลอก PIN"
+                    >
+                      {copied ? <Check className="w-6 h-6 text-green-600" /> : <Copy className="w-6 h-6" />}
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-gray-600 pt-2">
+                    <span>ลิงก์เข้าร่วม:</span>
+                    <code className="bg-gray-100 text-indigo-600 font-mono px-2.5 py-1 rounded-md border border-gray-200">
+                      /join (ใส่ PIN {gamePin})
+                    </code>
+                    <Link
+                      href={`/join?pin=${gamePin}`}
+                      target="_blank"
+                      className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-800 underline"
+                    >
+                      ทดลองเข้าห้องแบบนักเรียน <ExternalLink className="w-3 h-3" />
+                    </Link>
+                  </div>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-gray-600 pt-2">
-                  <span>ลิงก์เข้าร่วม:</span>
-                  <code className="bg-gray-100 text-indigo-600 font-mono px-2.5 py-1 rounded-md border border-gray-200">
-                    /join (ใส่ PIN {gamePin})
-                  </code>
-                  <Link
-                    href={`/join?pin=${gamePin}`}
-                    target="_blank"
-                    className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-800 underline"
-                  >
-                    ทดลองเข้าห้องแบบนักเรียน <ExternalLink className="w-3 h-3" />
-                  </Link>
-                </div>
-              </div>
+                {/* Real-time Players List with Join Bonus Badges */}
+                <div className="card p-6 bg-white border border-gray-200 rounded-2xl shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h4 className="font-bold text-gray-900 text-base flex items-center gap-2">
+                        <Users className="w-5 h-5 text-indigo-600" />
+                        ผู้เล่นในห้องเรียน ({livePlayers.length} คน)
+                      </h4>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        ระบบซิงก์สถานะผู้เล่น Real-time อัตโนมัติ
+                      </p>
+                    </div>
 
-              {/* Real-time Players List with Join Bonus Badges */}
-              <div className="card p-6 bg-white border border-gray-200 rounded-2xl shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-bold text-gray-900 text-base flex items-center gap-2">
-                    <Users className="w-5 h-5 text-indigo-600" />
-                    ผู้เล่นในห้องเรียน ({livePlayers.length} คน)
-                  </h4>
-                  <span className="text-xs text-emerald-600 font-semibold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                    Real-time Sync
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {livePlayers.map((player, idx) => {
-                    const avatar = AVATARS.find((a) => a.id === player.avatarId) || AVATARS[idx % AVATARS.length];
-                    const multiplier = player.bonusMultiplier ?? getJoinBonusMultiplier(player.joinOrder ?? idx + 1);
-
-                    return (
-                      <div
-                        key={player.playerId}
-                        className="p-3.5 rounded-xl border border-gray-200 bg-white flex items-center justify-between shadow-sm hover:border-indigo-300 transition-all"
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleAddDemoBots}
+                        disabled={isAddingBots}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold border border-indigo-200 transition-colors cursor-pointer disabled:opacity-50"
+                        title="เพิ่มผู้เล่นจำลอง 4 คนเพื่อทดสอบ"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-2xl shadow-inner border border-gray-200">
-                            {avatar.emoji}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-sm font-bold text-gray-900">{player.displayName}</p>
-                              {/* Join Order Bonus Badge */}
-                              <span
-                                className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-md ${
-                                  multiplier === 5
-                                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                                    : multiplier === 4
-                                    ? 'bg-slate-200 text-slate-800 border border-slate-300'
-                                    : multiplier === 3
-                                    ? 'bg-amber-50 text-amber-900 border border-amber-200'
-                                    : multiplier === 2
-                                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                                    : 'bg-gray-100 text-gray-700'
-                                }`}
-                              >
-                                {multiplier > 1 ? `×${multiplier} โบนัส` : '×1'}
-                              </span>
-                            </div>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              {avatar.animal} ({avatar.nameEn}) • เข้าคนที่ {player.joinOrder ?? idx + 1}
-                            </p>
-                          </div>
-                        </div>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        {isAddingBots ? 'กำลังเพิ่ม...' : '+ ผู้เล่นจำลอง'}
+                      </button>
+                      <span className="text-xs text-emerald-600 font-semibold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                        Real-time Sync
+                      </span>
+                    </div>
+                  </div>
 
-                        <div className="text-right">
-                          <div className="text-xs font-semibold text-indigo-600">
-                            ช่อง {player.position} / 100
-                          </div>
-                          <div className="text-xs font-bold text-gray-800">
-                            {player.score} คะแนน
-                          </div>
-                        </div>
+                  {livePlayers.length === 0 ? (
+                    <div className="p-8 text-center border-2 border-dashed border-gray-200 rounded-2xl bg-slate-50/50 space-y-3">
+                      <div className="w-14 h-14 mx-auto rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <Users className="w-7 h-7" />
                       </div>
-                    );
-                  })}
+                      <h5 className="font-bold text-gray-800 text-base">กำลังรอนักเรียนเข้าร่วมห้อง...</h5>
+                      <p className="text-xs text-gray-500 max-w-md mx-auto">
+                        แจ้งรหัสนักเรียนให้นำ PIN <span className="font-mono font-bold text-indigo-600">{gamePin}</span> ไปใส่ที่หน้า{' '}
+                        <code className="bg-gray-100 px-1.5 py-0.5 rounded text-indigo-700 font-mono">/join</code>
+                      </p>
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                        5 คนแรกที่เข้าห้องจะได้รับตัวคูณโบนัสคะแนน (×5 ถึง ×1)
+                      </div>
+                      <div className="pt-2 flex items-center justify-center gap-3">
+                        <button
+                          onClick={handleAddDemoBots}
+                          disabled={isAddingBots}
+                          className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                          {isAddingBots ? 'กำลังเพิ่มผู้เล่นจำลอง...' : 'เพิ่มผู้เล่นจำลอง 4 คน (สำหรับทดสอบคนเดียว)'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {livePlayers.map((player, idx) => {
+                        const avatar = AVATARS.find((a) => a.id === player.avatarId) || AVATARS[idx % AVATARS.length];
+                        const multiplier = player.bonusMultiplier ?? getJoinBonusMultiplier(player.joinOrder ?? idx + 1);
+
+                        return (
+                          <div
+                            key={player.playerId}
+                            className="p-3.5 rounded-xl border border-gray-200 bg-white flex items-center justify-between shadow-sm hover:border-indigo-300 transition-all"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-2xl shadow-inner border border-gray-200">
+                                {avatar.emoji}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-sm font-bold text-gray-900">{player.displayName}</p>
+                                  {/* Join Order Bonus Badge */}
+                                  <span
+                                    className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-md ${
+                                      multiplier === 5
+                                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                        : multiplier === 4
+                                        ? 'bg-slate-200 text-slate-800 border border-slate-300'
+                                        : multiplier === 3
+                                        ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                                        : multiplier === 2
+                                        ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                        : 'bg-gray-100 text-gray-700'
+                                    }`}
+                                  >
+                                    {multiplier > 1 ? `×${multiplier} โบนัส` : '×1'}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  {avatar.animal} ({avatar.nameEn}) • เข้าคนที่ {player.joinOrder ?? idx + 1}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="text-right">
+                              <div className="text-xs font-semibold text-indigo-600">
+                                ช่อง {player.position} / 100
+                              </div>
+                              <div className="text-xs font-bold text-gray-800">
+                                {player.score} คะแนน
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
-          </div>
+          )
         )}
 
         {/* TAB 2: QUESTION BANK */}

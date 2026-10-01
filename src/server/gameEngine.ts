@@ -1350,7 +1350,7 @@ export function getGameEngineForPin(pin: string): GameEngine {
         joinedAt: now,
       },
     ];
-    const isDemoPin = normalizedPin === '4827' || normalizedPin === 'DEMO99' || normalizedPin === 'KS8821';
+    const isDemoPin = normalizedPin === '4827' || normalizedPin === 'DEMO99';
     const initialPlayers: ServerPlayer[] = isDemoPin ? defaultPlayers : [];
     const initialStatus: GameStatus = isDemoPin ? 'waiting_for_question' : 'lobby';
 
