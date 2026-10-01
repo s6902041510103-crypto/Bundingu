@@ -64,8 +64,9 @@ export default function GamePlayPage() {
   const isTeacher = role === 'teacher';
 
   // Active student identity
-  const [myPlayerId, setMyPlayerId] = useState<string>('p1');
-  const [myDisplayName, setMyDisplayName] = useState<string>('นัท');
+  const [myPlayerId, setMyPlayerId] = useState<string>('');
+  const [myDisplayName, setMyDisplayName] = useState<string>('');
+  const [myAvatarId, setMyAvatarId] = useState<string>('avatar-01');
 
   // Transport and Server GameState
   const transportRef = useRef<ProductionTransport | null>(null);
@@ -90,6 +91,9 @@ export default function GamePlayPage() {
           if (parsed.playerId) {
             setMyPlayerId(parsed.playerId);
             setMyDisplayName(parsed.displayName || 'นักเรียน');
+            if (parsed.avatarId) {
+              setMyAvatarId(parsed.avatarId);
+            }
             setRole('student');
           }
         }
@@ -167,24 +171,40 @@ export default function GamePlayPage() {
 
   // Prepared player list for board & leaderboard
   const displayPlayers = useMemo(() => {
-    if (!gameState || !gameState.players || gameState.players.length === 0) {
+    if (gameState?.players && gameState.players.length > 0) {
+      return gameState.players.map((p, idx) => ({
+        playerId: p.playerId,
+        displayName: p.displayName,
+        avatarId: p.avatarId || 'avatar-01',
+        position: p.position || 1,
+        score: p.finalScore ?? p.score ?? 1,
+        color: PLAYER_COLORS[idx % PLAYER_COLORS.length],
+        status: p.status,
+      }));
+    }
+
+    if (myPlayerId && myDisplayName) {
       return [
-        { playerId: 'p1', displayName: 'นัท', avatarId: 'avatar-09', position: 1, score: 1, color: PLAYER_COLORS[0], status: 'waiting' as const },
-        { playerId: 'p2', displayName: 'มายด์', avatarId: 'avatar-05', position: 1, score: 1, color: PLAYER_COLORS[1], status: 'waiting' as const },
-        { playerId: 'p3', displayName: 'อาร์ม', avatarId: 'avatar-02', position: 1, score: 1, color: PLAYER_COLORS[2], status: 'waiting' as const },
-        { playerId: 'p4', displayName: 'จูน', avatarId: 'avatar-04', position: 1, score: 1, color: PLAYER_COLORS[3], status: 'waiting' as const },
+        {
+          playerId: myPlayerId,
+          displayName: myDisplayName,
+          avatarId: myAvatarId || 'avatar-01',
+          position: 1,
+          score: 1,
+          color: PLAYER_COLORS[0],
+          status: 'waiting' as const,
+        },
       ];
     }
-    return gameState.players.map((p, idx) => ({
-      playerId: p.playerId,
-      displayName: p.displayName,
-      avatarId: p.avatarId,
-      position: p.position || 1,
-      score: p.score || 1,
-      color: PLAYER_COLORS[idx % PLAYER_COLORS.length],
-      status: p.status,
-    }));
-  }, [gameState]);
+
+    // Fallback for demo preview
+    return [
+      { playerId: 'p1', displayName: 'น้องนัท', avatarId: 'avatar-09', position: 1, score: 5, color: PLAYER_COLORS[0], status: 'waiting' as const },
+      { playerId: 'p2', displayName: 'น้องมายด์', avatarId: 'avatar-05', position: 1, score: 4, color: PLAYER_COLORS[1], status: 'waiting' as const },
+      { playerId: 'p3', displayName: 'น้องอาร์ม', avatarId: 'avatar-02', position: 1, score: 3, color: PLAYER_COLORS[2], status: 'waiting' as const },
+      { playerId: 'p4', displayName: 'น้องจูน', avatarId: 'avatar-04', position: 1, score: 2, color: PLAYER_COLORS[3], status: 'waiting' as const },
+    ];
+  }, [gameState, myPlayerId, myDisplayName, myAvatarId]);
 
   // Current active viewer player object
   const myPlayer = useMemo(() => {
@@ -580,7 +600,27 @@ export default function GamePlayPage() {
 
               {/* Question Body */}
               <div className="bg-white rounded-2xl p-4 flex-1 shadow-inner text-gray-900 flex flex-col relative overflow-hidden">
-                {gameState?.gameStatus === 'waiting_for_question' ? (
+                {gameState?.gameStatus === 'lobby' ? (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-4 space-y-3">
+                    <div className="w-16 h-16 rounded-2xl bg-indigo-50 border-2 border-indigo-200 flex items-center justify-center text-3xl shadow-sm">
+                      🎮
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-base text-gray-900 mb-1">
+                        {isTeacher ? 'ห้องเรียนสดเปิดอยู่ (Lobby)' : `ยินดีต้อนรับ ${myDisplayName || 'นักเรียน'}!`}
+                      </h4>
+                      <p className="text-xs text-gray-500 max-w-xs mx-auto">
+                        {isTeacher
+                          ? `มีนักเรียนในห้อง ${displayPlayers.length} คน • กดปุ่ม "เริ่มคำถาม" ด้านบนเพื่อเริ่มข้อแรก`
+                          : 'คุณเชื่อมต่อเข้าห้องเรียนสดเรียบร้อยแล้ว กำลังรอคุณครูกดเริ่มคำถามข้อแรก...'}
+                      </p>
+                    </div>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                      พร้อมแข่งขันบนกระดาน 100 ช่อง
+                    </div>
+                  </div>
+                ) : gameState?.gameStatus === 'waiting_for_question' ? (
                   <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
                     <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 mb-3">
                       <HelpCircle className="w-6 h-6" />

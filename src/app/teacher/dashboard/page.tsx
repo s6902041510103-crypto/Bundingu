@@ -193,22 +193,23 @@ export default function TeacherDashboardPage() {
     for (let i = 0; i < demoBots.length; i++) {
       const bot = demoBots[i];
       try {
-        await fetch('/api/game/command', {
+        await fetch(`/api/game/${encodeURIComponent(gamePin)}/command`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            command: {
-              type: 'JOIN_GAME',
-              gamePin,
-              sessionId: `bot-${gamePin.toLowerCase()}-${i + 1}-${Date.now().toString(36)}`,
-              displayName: bot.name,
-              preferredAvatarId: bot.avatar,
-            },
+            type: 'JOIN_GAME',
+            gamePin,
+            sessionId: `bot-${gamePin.toLowerCase()}-${i + 1}-${Date.now().toString(36)}`,
+            displayName: bot.name,
+            preferredAvatarId: bot.avatar,
           }),
         });
       } catch (err) {
         console.error(err);
       }
+    }
+    if (transport) {
+      await transport.fetchState().catch(() => {});
     }
     setIsAddingBots(false);
   };

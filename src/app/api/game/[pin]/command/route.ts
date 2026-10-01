@@ -60,13 +60,13 @@ export async function POST(
     }
 
     const normalizedPin = pin.trim().toUpperCase();
-    if (!/^[A-Z0-9]{6}$/.test(normalizedPin)) {
+    if (!/^[A-Z0-9]{4,8}$/.test(normalizedPin)) {
       return NextResponse.json<CommandResult>(
         {
           success: false,
           error: {
             code: 'INVALID_GAME_PIN',
-            message: 'Game PIN must be a 6-character alphanumeric code.',
+            message: 'Game PIN must be a 4 to 8 character alphanumeric code.',
           },
         },
         { status: 400 }

@@ -129,6 +129,16 @@ export class ProductionTransport implements GameStateTransport {
 
     // Setup local BroadcastChannel for browser tabs sync if supported
     this.setupLocalBroadcast();
+
+    // Ensure state sync is active across clients when not connected to remote Supabase
+    const isRealSupabase = Boolean(
+      this.supabaseUrl &&
+      this.supabaseUrl.startsWith('http') &&
+      !this.supabaseUrl.includes('your-project-ref')
+    );
+    if (!isRealSupabase) {
+      this.startFallbackPoll();
+    }
   }
 
   /**
@@ -233,11 +243,22 @@ export class ProductionTransport implements GameStateTransport {
    * Handle Supabase Realtime channel connection status changes
    */
   private handleChannelStatus(channel: 'state' | 'events', status: string, err?: any): void {
+    const isRealSupabase = Boolean(
+      this.supabaseUrl &&
+      this.supabaseUrl.startsWith('http') &&
+      !this.supabaseUrl.includes('your-project-ref')
+    );
+
     if (status === 'SUBSCRIBED') {
-      this.isRealtimeConnected = true;
+      this.isRealtimeConnected = isRealSupabase;
       this.reconnectAttempts = 0;
-      // Realtime is active -> Stop fallback polling
-      this.stopFallbackPoll();
+      if (isRealSupabase) {
+        // Real cloud Supabase Realtime active -> Stop fallback polling
+        this.stopFallbackPoll();
+      } else {
+        // Local in-memory fallback bus -> Keep polling to ensure cross-process / cross-device sync
+        this.startFallbackPoll();
+      }
       // Refresh state to ensure no missed updates during handshake
       this.fetchState().catch(() => {});
     } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
@@ -347,7 +368,7 @@ export class ProductionTransport implements GameStateTransport {
       if (this.isConnected && !this.isRealtimeConnected) {
         this.fetchState().catch(() => {});
       }
-    }, 2000);
+    }, 1000);
   }
 
   /**

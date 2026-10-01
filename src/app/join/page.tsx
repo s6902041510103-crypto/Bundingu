@@ -37,8 +37,8 @@ export default function JoinPage() {
       setError('กรุณากรอก Game PIN');
       return;
     }
-    if (!/^[A-Z0-9]{6}$/.test(cleanPin)) {
-      setError('Game PIN ต้องมี 6 ตัวอักษร (A-Z, 0-9)');
+    if (!/^[A-Z0-9]{4,8}$/.test(cleanPin)) {
+      setError('Game PIN ต้องมี 4-8 ตัวอักษร (A-Z, 0-9)');
       return;
     }
     if (!cleanName) {
@@ -96,6 +96,18 @@ export default function JoinPage() {
 
       if (typeof window !== 'undefined') {
         localStorage.setItem('student_session', JSON.stringify(studentSession));
+
+        // Broadcast to other tabs (e.g. Teacher Dashboard) immediately
+        if ('BroadcastChannel' in window && result.data?.gameState) {
+          try {
+            const bc = new BroadcastChannel(`ks_sync_${cleanPin}`);
+            bc.postMessage({
+              type: 'STATE_UPDATE',
+              gameState: result.data.gameState,
+            });
+            bc.close();
+          } catch {}
+        }
       }
 
       // Navigate to student lobby page
