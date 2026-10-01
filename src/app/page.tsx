@@ -98,18 +98,19 @@ export default function HomePage() {
             </div>
           </Link>
 
-          {/* Loading indicator placeholder */}
-          <div className="text-center text-xs text-gray-400 py-4 animate-in stagger-3">
-            <Loader2 className="w-4 h-4 mx-auto animate-spin text-indigo-400 mb-2" />
-            <p className="text-gray-500">กำลังเตรียมระบบ...</p>
-            <p className="text-xs text-gray-400 mt-1">Phase 2 Development</p>
-          </div>
+          {/* Board Preview Button */}
+          <Link
+            href="/game/board"
+            className="group flex items-center justify-center gap-2 w-full p-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition-all"
+          >
+            <span>🎲 ดูตัวอย่างกระดานเกมบันไดงู 100 ช่อง (Board Preview)</span>
+          </Link>
         </div>
 
         {/* Footer */}
-        <footer className="mt-16 text-center animate-in stagger-3">
-          <p className="text-sm text-gray-500">Knowledge Snake</p>
-          <p className="text-xs text-gray-400 mt-1">Phase 2: Question System Development</p>
+        <footer className="mt-12 text-center animate-in stagger-3">
+          <p className="text-sm font-semibold text-gray-600">Knowledge Snake — บันไดงูพิชิตความรู้</p>
+          <p className="text-xs text-indigo-600 mt-1">พร้อมใช้งานทั้งระบบครูและนักเรียน</p>
         </footer>
       </div>
     </main>

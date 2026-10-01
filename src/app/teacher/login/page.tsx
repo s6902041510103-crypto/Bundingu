@@ -29,7 +29,9 @@ export default function TeacherLoginPage() {
 
     // Mock login success
     setIsLoggedIn(true);
-    console.log('Teacher login:', { email });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('teacher_session', JSON.stringify({ email: email.trim(), name: 'คุณครู' }));
+    }
 
     // Redirect to teacher dashboard after short delay
     setTimeout(() => {
@@ -42,9 +44,12 @@ export default function TeacherLoginPage() {
     setIsLoading(true);
     setEmail('teacher@demo.com');
     setPassword('demo123456');
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 800));
     setIsLoading(false);
     setIsLoggedIn(true);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('teacher_session', JSON.stringify({ email: 'teacher@demo.com', name: 'คุณครูสมศรี (Demo)' }));
+    }
     setTimeout(() => {
       window.location.href = '/teacher/dashboard';
     }, 500);

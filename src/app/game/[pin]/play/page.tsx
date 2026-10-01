@@ -1,14 +1,14 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { QuestionView } from '@/components/game/QuestionView';
+import React, { useState, useEffect, useCallback } from 'react';
 import { GameBoard } from '@/components/game/GameBoard';
-import { Dice, DiceTray } from '@/components/game/Dice';
-import { GAME_CONFIG, calculateFinalPosition, isFinishCell, getRandomAvatarId, AVATARS } from '@/lib/game-data';
-import { Sparkles, ArrowLeft, Loader2, Trophy, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6, CheckCircle2, XCircle, Clock, AlertCircle, ChevronRight } from 'lucide-react';
-import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import { PublicQuestion, ChoiceIndex } from '@/domain/types';
+import { GAME_CONFIG, calculateFinalPosition, isFinishCell } from '@/lib/game-data';
+import { Avatar } from '@/components/avatars/AvatarSVGs';
+import {
+  LogOut, QrCode, Crown, CheckCircle2, Sparkles, Trophy
+} from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { ChoiceIndex } from '@/domain/types';
 
 interface MockPlayer {
   playerId: string;
@@ -19,493 +19,326 @@ interface MockPlayer {
   color: string;
 }
 
-type GamePhase = 'question' | 'roll_queue' | 'rolling' | 'moving' | 'result_show' | 'round_complete';
-
 const PLAYER_COLORS = [
-  'bg-indigo-500', 'bg-red-500', 'bg-green-500', 'bg-yellow-500',
+  'bg-indigo-500', 'bg-red-500', 'bg-emerald-500', 'bg-amber-500',
   'bg-pink-500', 'bg-purple-500', 'bg-orange-500', 'bg-teal-500',
 ];
 
-const MOCK_QUESTIONS: Array<{
-  questionId: string;
-  question: string;
-  choices: readonly [string, string, string, string];
-  correctAnswer: ChoiceIndex;
-  explanation: string;
-  category: string;
-  difficulty: 'easy' | 'medium' | 'hard';
-}> = [
+const MOCK_QUESTIONS = [
   {
     questionId: 'q1',
-    question: 'เมืองหลวงของประเทศไทยคือกรุงไหน?',
-    choices: ['กรุงเทพมหานคร', 'เชียงใหม่', 'ภูเก็ต', 'ขอนแก่น'] as const,
+    question: 'ข้อใดคือสัตว์ที่มีการหายใจด้วยเหงือก?',
+    choices: ['ปลา', 'นก', 'สุนัข', 'แมว'] as const,
     correctAnswer: 0 as ChoiceIndex,
-    explanation: 'กรุงเทพมหานครเป็นเมืองหลวงและนครใหญ่ที่สุดของประเทศไทย',
-    category: 'สังคมศึกษา',
-    difficulty: 'easy',
+    explanation: 'ปลาหายใจด้วยเหงือก',
   },
   {
     questionId: 'q2',
     question: '2 + 2 × 2 = ?',
     choices: ['6', '8', '4', '10'] as const,
     correctAnswer: 0 as ChoiceIndex,
-    explanation: 'ตามลำดับการดำเนินการ คูณก่อนบวก: 2 + (2 × 2) = 2 + 4 = 6',
-    category: 'คณิตศาสตร์',
-    difficulty: 'easy',
-  },
-  {
-    questionId: 'q3',
-    question: 'สัตว์เลี้ยงลูกด้วยนมที่บินได้คือสัตว์ชนิดใด?',
-    choices: ['ค้างคาว', 'นกกระปูด', 'สิงโตทะเล', 'หมูน้ำ'] as const,
-    correctAnswer: 0 as ChoiceIndex,
-    explanation: 'ค้างคาวเป็นสัตว์เลี้ยงลูกด้วยนมเพียงชนิดเดียวที่บินได้จริงๆ',
-    category: 'วิทยาศาสตร์',
-    difficulty: 'medium',
-  },
-  {
-    questionId: 'q4',
-    question: 'แม่น้ำที่ยาวที่สุดในโลกคือแม่น้ำไหน?',
-    choices: ['แม่น้ำไนล์', 'แม่น้ำอเมซอน', 'แม่น้ำมิสซิสซิปปี้', 'แม่น้ำยางซี'] as const,
-    correctAnswer: 0 as ChoiceIndex,
-    explanation: 'แม่น้ำไนล์ยาวประมาณ 6,650 กิโลเมตร เป็นแม่น้ำที่ยาวที่สุดในโลก',
-    category: 'สังคมศึกษา',
-    difficulty: 'medium',
-  },
-  {
-    questionId: 'q5',
-    question: 'H2O คือสูตรเคมีของสารประกอบใด?',
-    choices: ['น้ำ', 'ออกซิเจน', 'ไฮโดรเจน', 'คาร์บอนไดออกไซด์'] as const,
-    correctAnswer: 0 as ChoiceIndex,
-    explanation: 'H2O หมายถึงโมเลกุลน้ำ ประกอบด้วยอะตอมไฮโดรเจน 2 ตัวและออกซิเจน 1 ตัว',
-    category: 'วิทยาศาสตร์',
-    difficulty: 'easy',
+    explanation: 'ตามลำดับการดำเนินการทางคณิตศาสตร์ ให้คูณก่อนบวก',
   },
 ];
 
-function getDiceIcon(value: number, className?: string) {
-  const icons = [null, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6];
-  const Icon = icons[value] || Dice1;
-  return <Icon className={className} />;
+function DiceFace({ value }: { value: number }) {
+  const dots = [
+    [],
+    [5],
+    [1, 9],
+    [1, 5, 9],
+    [1, 3, 7, 9],
+    [1, 3, 5, 7, 9],
+    [1, 2, 3, 7, 8, 9]
+  ];
+  return (
+    <div className="w-16 h-16 bg-white rounded-2xl shadow-[0_4px_0_0_#e2e8f0] border border-gray-100 grid grid-cols-3 grid-rows-3 p-2 gap-1">
+       {Array.from({ length: 9 }).map((_, i) => (
+         <div key={i} className="flex items-center justify-center">
+            {dots[value]?.includes(i + 1) && <div className="w-2.5 h-2.5 bg-slate-800 rounded-full"></div>}
+         </div>
+       ))}
+    </div>
+  );
 }
 
 export default function GamePlayPage() {
   const params = useParams();
-  const pin = params.pin as string;
+  const rawPin = params.pin as string;
+  const pin = rawPin ? rawPin.toUpperCase() : '4827';
 
-  const [gamePhase, setGamePhase] = useState<GamePhase>('question');
-  const [currentRound, setCurrentRound] = useState(1);
-  const [totalRounds] = useState(10);
+  const [currentRound, setCurrentRound] = useState(3);
+  const totalRounds = 15;
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [players, setPlayers] = useState<MockPlayer[]>([
-    {
-      playerId: 'player-1',
-      displayName: 'คุณ (นักเรียน)',
-      avatarId: 'avatar-01',
-      position: 1,
-      score: 1,
-      color: PLAYER_COLORS[0],
-    },
-    // Mock other players
-    ...Array.from({ length: 5 }, (_, i) => ({
-      playerId: `player-${i + 2}`,
-      displayName: `Player ${i + 2}`,
-      avatarId: `avatar-${String(i + 2).padStart(2, '0')}`,
-      position: Math.floor(Math.random() * 50) + 1,
-      score: Math.floor(Math.random() * 50) + 1,
-      color: PLAYER_COLORS[(i + 1) % PLAYER_COLORS.length],
-    })),
-  ]);
-  const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
-  const [diceValue, setDiceValue] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
-  const [isRolling, setIsRolling] = useState(false);
-  const [diceAnimationSeed] = useState('mock-seed');
-  const [animatingPlayer, setAnimatingPlayer] = useState<string | null>(null);
-  const [animationPath, setAnimationPath] = useState<number[]>([]);
-  const [rollQueue, setRollQueue] = useState<string[]>([]);
-  const [isPlayerTurn, setIsPlayerTurn] = useState(false);
-  const [queuePosition, setQueuePosition] = useState(0);
-  const [diceResult, setDiceResult] = useState<number | null>(null);
-  const [moveComplete, setMoveComplete] = useState(false);
-  const [showCorrectAnswer, setShowCorrectAnswer] = useState(false);
-  const [answerCorrect, setAnswerCorrect] = useState(false);
-  const [correctAnswerIndex, setCorrectAnswerIndex] = useState(0);
-  const [questionExplanation, setQuestionExplanation] = useState('');
 
-  const currentPlayer = useMemo(() => players[currentPlayerIndex], [players, currentPlayerIndex]);
+  // Players state
+  const [players, setPlayers] = useState<MockPlayer[]>([
+    { playerId: 'p1', displayName: 'นัท', avatarId: 'avatar-09', position: 38, score: 38, color: PLAYER_COLORS[0] },
+    { playerId: 'p2', displayName: 'มายด์', avatarId: 'avatar-05', position: 32, score: 32, color: PLAYER_COLORS[1] },
+    { playerId: 'p3', displayName: 'อาร์ม', avatarId: 'avatar-02', position: 28, score: 28, color: PLAYER_COLORS[2] },
+    { playerId: 'p4', displayName: 'จูน', avatarId: 'avatar-05', position: 24, score: 24, color: PLAYER_COLORS[3] },
+    { playerId: 'p5', displayName: 'บอส', avatarId: 'avatar-04', position: 20, score: 20, color: PLAYER_COLORS[4] },
+    { playerId: 'p6', displayName: 'พลอย', avatarId: 'avatar-06', position: 16, score: 16, color: PLAYER_COLORS[5] },
+    { playerId: 'p7', displayName: 'กอล์ฟ', avatarId: 'avatar-01', position: 12, score: 12, color: PLAYER_COLORS[6] },
+    { playerId: 'p8', displayName: 'แป้ง', avatarId: 'avatar-08', position: 8, score: 8, color: PLAYER_COLORS[7] },
+  ]);
+
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(0);
+  const [isAnswerCorrect, setIsAnswerCorrect] = useState<boolean>(true);
+  const [diceValue, setDiceValue] = useState<1|2|3|4|5|6>(1);
+  const [isRolling, setIsRolling] = useState(false);
+  const [gamePhase, setGamePhase] = useState<'question' | 'can_roll' | 'moving'>('can_roll');
+
+  const currentPlayer = players[0];
   const currentQuestion = MOCK_QUESTIONS[currentQuestionIndex % MOCK_QUESTIONS.length];
 
-  // Generate roll queue when answer is correct
-  const generateRollQueue = useCallback(() => {
-    const numPlayers = Math.floor(Math.random() * 4) + 3; // 3-6 players in queue
-    const queue = Array.from({ length: numPlayers }, (_, i) => `Player ${i + 1}`);
-    // Ensure current player is at position 0 (first in queue)
-    if (queue[0] !== 'Player 1') {
-      const idx = queue.indexOf('Player 1');
-      if (idx !== -1) {
-        [queue[0], queue[idx]] = [queue[idx], queue[0]];
-      }
-    }
-    setRollQueue(queue);
-    setQueuePosition(queue.indexOf('Player 1') + 1);
-    setIsPlayerTurn(true);
-  }, []);
-
-  // Handle answer evaluation
-  const handleAnswerEvaluation = useCallback((isCorrect: boolean) => {
-    if (isCorrect) {
-      setAnswerCorrect(true);
-      setShowCorrectAnswer(true);
-      generateRollQueue();
-      setGamePhase('roll_queue');
-    } else {
-      setAnswerCorrect(false);
-      setShowCorrectAnswer(true);
-      setGamePhase('result_show');
-    }
-  }, []);
-
-  // Handle time up
-  const handleTimeUp = useCallback(() => {
-    setShowCorrectAnswer(true);
-    setAnswerCorrect(false);
-    setGamePhase('result_show');
-  }, []);
-
-  // Handle roll dice
-  const handleRollDice = useCallback(() => {
+  const handleRollDice = () => {
+    if (isRolling || gamePhase !== 'can_roll') return;
     setIsRolling(true);
-    setGamePhase('rolling');
     
-    // Mock dice roll animation
-    setTimeout(() => {
-      const roll = Math.floor(Math.random() * 6) + 1 as 1 | 2 | 3 | 4 | 5 | 6;
-      setDiceValue(roll);
-      setDiceResult(roll);
-      setIsRolling(false);
-      setGamePhase('moving');
-      
-      // Calculate movement
-      const player = players[currentPlayerIndex];
-      const { path } = calculateFinalPosition(player.position, diceValue);
-      
-      // Update player position after animation
-      setTimeout(() => {
-        const finalPos = path[path.length - 1];
-        setPlayers(prev => prev.map(p => 
-          p.playerId === players[currentPlayerIndex].playerId 
-            ? { ...p, position: finalPos, score: finalPos }
-            : p
-        ));
-        
-        // Check for finish
-        if (isFinishCell(finalPos)) {
-          // Player finished
-        }
-        
-        setMoveComplete(true);
-        setGamePhase('round_complete');
-      }, 2000); // Wait for movement animation
-    }, 1500);
-  }, [currentPlayerIndex, players, diceValue]);
+    // Animate dice
+    let rollCount = 0;
+    const interval = setInterval(() => {
+      setDiceValue((Math.floor(Math.random() * 6) + 1) as any);
+      rollCount++;
+      if (rollCount > 10) {
+        clearInterval(interval);
+        const finalRoll = (Math.floor(Math.random() * 6) + 1) as any;
+        setDiceValue(finalRoll);
+        setIsRolling(false);
+        setGamePhase('moving');
 
-  // Handle next question/round
-  const handleNextQuestion = useCallback(() => {
-    setShowCorrectAnswer(false);
-    setAnswerCorrect(false);
-    setDiceResult(null);
-    setMoveComplete(false);
-    setRollQueue([]);
-    setIsPlayerTurn(false);
-    setQueuePosition(0);
-    setGamePhase('question');
-    
-    // Move to next question
-    setCurrentQuestionIndex(prev => prev + 1);
-    
-    // If round complete, move to next round
-    if (currentQuestionIndex + 1 >= totalRounds) {
-      setCurrentRound(prev => prev + 1);
-      setCurrentQuestionIndex(0);
-    }
-  }, [currentQuestionIndex, totalRounds]);
+        const { position: finalPos, path } = calculateFinalPosition(currentPlayer.position, finalRoll);
+        const duration = Math.min(path.length * 400, 2500);
 
-  // Handle question answer
-  const handleQuestionAnswer = useCallback((choiceIndex: number) => {
-    const isCorrect = choiceIndex === currentQuestion.correctAnswer;
-    if (isCorrect) {
-      setCorrectAnswerIndex(currentQuestion.correctAnswer);
-      setQuestionExplanation(currentQuestion.explanation);
-    }
-  }, [currentQuestion]);
-
-  // Handle question evaluation complete
-  const handleEvaluationComplete = useCallback((isCorrect: boolean) => {
-    // This is called after the mock evaluation delay
-    console.log('Evaluation complete:', isCorrect);
-  }, []);
-
-  // Get current question for display
-  const displayQuestion = MOCK_QUESTIONS[currentQuestionIndex % MOCK_QUESTIONS.length];
+        setTimeout(() => {
+          setPlayers(prev => prev.map((p, i) => i === 0 ? { ...p, position: finalPos, score: finalPos } : p));
+          setGamePhase('question');
+          setSelectedAnswer(null);
+          setIsAnswerCorrect(false);
+        }, duration);
+      }
+    }, 100);
+  };
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-indigo-50 via-white to-violet-50 py-4 px-4">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <header className="flex items-center justify-between mb-6 animate-in">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-indigo-600 hover:text-indigo-700">
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg">
-              <Sparkles className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">Knowledge Snake</h1>
-              <p className="text-sm text-gray-500">Game PIN: {pin}</p>
-            </div>
+    <main className="min-h-screen bg-[#0C1F26] bg-[url('https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?q=80&w=2074&auto=format&fit=crop')] bg-cover bg-center bg-fixed font-thai flex flex-col relative overflow-hidden text-white">
+      {/* Semi-transparent dark overlay to make UI pop */}
+      <div className="absolute inset-0 bg-[#07161B]/60 backdrop-blur-sm z-0"></div>
+
+      {/* Top Header */}
+      <header className="relative z-10 w-full px-4 sm:px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-[#A3E635] rounded-full flex items-center justify-center shadow-lg border-2 border-white/20 text-2xl">
+            🐍
           </div>
+          <div>
+            <h1 className="text-xl font-extrabold text-white leading-tight drop-shadow-md">Knowledge Snake</h1>
+            <p className="text-sm text-yellow-300 font-bold drop-shadow-md">เกมบันไดงูพิชิตความรู้</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="bg-[#122A36]/90 backdrop-blur-md rounded-full px-6 py-2.5 border border-white/10 shadow-xl flex items-center gap-2">
+            <span className="text-gray-300 font-bold">Game PIN:</span>
+            <span className="text-emerald-400 font-black text-2xl tracking-wider">{pin}</span>
+          </div>
+          <button className="bg-[#122A36]/90 backdrop-blur-md rounded-full px-4 py-2 border border-white/10 shadow-xl flex items-center gap-2 hover:bg-[#1A3A4A] transition">
+            <QrCode className="w-6 h-6 text-gray-300" />
+            <div className="text-left leading-tight">
+              <span className="text-sm text-gray-300 font-bold block">สแกน QR</span>
+              <span className="text-[10px] text-gray-400 block">เพื่อเข้าร่วมเกม</span>
+            </div>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-4">
           <div className="text-right">
-            <p className="text-sm text-gray-500">รอบที่ {currentRound} / {totalRounds}</p>
-            <p className="text-sm text-gray-500">คำถามที่ {currentQuestionIndex + 1}</p>
+            <p className="text-sm font-bold text-white drop-shadow-md">ครูสมชาย</p>
+            <p className="text-xs text-gray-300 drop-shadow-md">Teacher</p>
           </div>
-        </header>
+          <div className="w-12 h-12 rounded-full bg-indigo-500 border-2 border-white/20 flex items-center justify-center text-xl overflow-hidden shadow-lg">
+             👨‍🏫
+          </div>
+          <button className="w-12 h-12 rounded-xl bg-[#122A36]/90 border border-white/10 flex items-center justify-center hover:bg-red-500/80 transition text-gray-300 hover:text-white shadow-xl">
+            <LogOut className="w-5 h-5" />
+          </button>
+        </div>
+      </header>
 
-        <div className="flex flex-col lg:flex-row gap-6">
-          {/* Main Content Area */}
-          <main className="flex-1">
-            {/* Question Phase */}
-            {(gamePhase === 'question' || gamePhase === 'result_show') && (
-              <QuestionView
-                question={{
-                  questionId: displayQuestion.questionId as any,
-                  question: displayQuestion.question,
-                  choices: displayQuestion.choices,
-                  category: displayQuestion.category,
-                  difficulty: displayQuestion.difficulty,
-                }}
-                round={currentRound}
-                totalRounds={totalRounds}
-                timeRemaining={15}
-                onAnswer={handleQuestionAnswer}
-                isAnswered={false}
-                correctAnswer={displayQuestion.correctAnswer}
-                explanation={displayQuestion.explanation}
-                onEvaluationComplete={handleEvaluationComplete}
-                onTimeUp={handleTimeUp}
-              />
-            )}
-
-            {/* Roll Queue Phase */}
-            {gamePhase === 'roll_queue' && (
-              <div className="card p-6 animate-in">
-                <div className="text-center mb-6">
-                  <div className="w-16 h-16 mx-auto rounded-full bg-green-500 flex items-center justify-center mb-4">
-                    <CheckCircle2 className="w-8 h-8 text-white" />
+      {/* Main Content Area */}
+      <div className="relative z-10 flex-1 w-full px-4 sm:px-6 pb-6 flex flex-col gap-6 max-w-[1600px] mx-auto">
+        
+        {/* Top 3 Columns: Leaderboard | Board | Question/Dice */}
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-[280px_1fr_300px] gap-6 min-h-0">
+          
+          {/* LEFT: Leaderboard */}
+          <div className="bg-[#122A36]/95 backdrop-blur-md rounded-3xl border border-white/5 flex flex-col shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden">
+            <div className="p-4 border-b border-white/10">
+              <h3 className="text-sm font-bold text-gray-200">ผู้เล่นในห้อง (12/40)</h3>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+              {players.sort((a,b) => b.score - a.score).map((p, i) => (
+                <div key={p.playerId} className="flex items-center justify-between p-2.5 rounded-2xl hover:bg-white/5 transition">
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center border-2 border-white/10 shadow-sm">
+                        <Avatar avatarId={p.avatarId} />
+                      </div>
+                    </div>
+                    <span className="font-bold text-sm text-gray-100">{p.displayName}</span>
                   </div>
-                  <h2 className="text-2xl font-bold text-green-700">ตอบถูกต้อง!</h2>
-                  <p className="text-green-600 mt-1">คุณได้สิทธิ์ทอยลูกเต๋า</p>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-[15px] text-gray-200">{p.score}</span>
+                    {i === 0 && <Crown className="w-4 h-4 text-yellow-400 drop-shadow-sm" />}
+                    {i !== 0 && <div className="w-4"></div>}
+                  </div>
                 </div>
+              ))}
+            </div>
+          </div>
 
-                {/* Roll Queue Display */}
-                <div className="mb-6 p-4 rounded-xl bg-indigo-50 border border-indigo-200">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Trophy className="w-5 h-5 text-indigo-500" />
-                    <span className="font-semibold text-indigo-700">Roll Queue</span>
-                  </div>
-                  <div className="flex flex-wrap justify-center gap-2 mb-3">
-                    {rollQueue.map((player, index) => (
-                      <span
-                        key={player}
-                        className={`px-3 py-1 rounded-full text-sm font-medium border ${
-                          index === 0
-                            ? 'bg-indigo-100 text-indigo-700 border-indigo-300 ring-2 ring-indigo-500/20'
-                            : 'bg-white text-gray-600 border-gray-200'
-                        }`}
+          {/* CENTER: GameBoard */}
+          <div className="flex items-center justify-center p-4">
+            <div className="w-full max-w-[700px] aspect-square rounded-3xl overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)] border-4 border-[#3D6B4F]/50 ring-4 ring-[#223F2D]/50 bg-[#83D160]">
+               <GameBoard
+                 players={players}
+                 currentPlayerId={currentPlayer.playerId}
+                 diceValue={diceValue}
+                 isRolling={isRolling}
+                 round={currentRound}
+                 gameStatus={gamePhase === 'moving' ? 'moving' : 'rolling'}
+                 mode="play"
+               />
+            </div>
+          </div>
+
+          {/* RIGHT: Question + Dice */}
+          <div className="flex flex-col gap-6 h-full">
+            
+            {/* Question Card */}
+            <div className="bg-[#122A36]/95 backdrop-blur-md rounded-3xl border border-white/5 p-4 shadow-[0_8px_32px_rgba(0,0,0,0.4)] flex-1 flex flex-col">
+              <div className="flex items-center gap-2 text-gray-300 font-bold text-sm mb-4">
+                <span className="text-xl">✨</span> คำถามข้อที่ {currentRound}/{totalRounds}
+              </div>
+              
+              <div className="bg-white rounded-2xl p-5 flex-1 shadow-inner text-gray-900 flex flex-col relative overflow-hidden">
+                <h4 className="font-extrabold text-[17px] mb-5 leading-snug">{currentQuestion.question}</h4>
+                <div className="space-y-2.5 flex-1">
+                  {currentQuestion.choices.map((c, i) => {
+                    const isSelected = selectedAnswer === i;
+                    const isCorrect = isSelected && isAnswerCorrect;
+                    return (
+                      <button 
+                        key={i}
+                        className={`w-full text-left px-4 py-3 rounded-xl border-2 transition font-bold text-sm flex items-center gap-3
+                          ${isCorrect ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-gray-100 bg-white hover:border-gray-300'}
+                        `}
                       >
-                        #{index + 1} {player}
-                        {index === 0 && <span className="ml-1 text-indigo-500">← คุณ</span>}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="text-center">
-                    <p className="text-indigo-600 font-medium">
-                      คุณอยู่ที่ #{queuePosition} ในคิว
-                    </p>
-                  </div>
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs
+                          ${isCorrect ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-500'}
+                        `}>
+                          {['A', 'B', 'C', 'D'][i]}
+                        </span>
+                        <span className="flex-1">{c}</span>
+                        {isCorrect && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+                      </button>
+                    )
+                  })}
                 </div>
-
-                {isPlayerTurn && queuePosition === 1 && (
-                  <div className="text-center">
-                    <button
-                      onClick={handleRollDice}
-                      className="w-full btn-primary text-lg py-4 flex items-center justify-center gap-3"
-                    >
-                      <Sparkles className="w-6 h-6" />
-                      ทอยลูกเต๋า
-                    </button>
-                    <p className="text-sm text-indigo-500 mt-2">ถึงตาคุณแล้ว! กดเพื่อทอยลูกเต๋า</p>
+                
+                {/* Result Message */}
+                {isAnswerCorrect && (
+                  <div className="mt-4 bg-[#10B981] text-white p-3.5 rounded-xl font-extrabold text-center flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30">
+                    <CheckCircle2 className="w-5 h-5" /> ตอบถูก!
                   </div>
                 )}
-              </div>
-            )}
-
-            {/* Rolling Phase */}
-            {gamePhase === 'rolling' && (
-              <div className="card p-8 text-center animate-in">
-                <div className="w-24 h-24 mx-auto mb-6 relative">
-                  {isRolling ? (
-                    <Loader2 className="w-full h-full animate-spin text-indigo-500" />
-                  ) : (
-                    <div className="w-full h-full rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-xl">
-                      {getDiceIcon(diceValue)}
-                    </div>
-                  )}
-                </div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                  {isRolling ? 'กำลังทอยลูกเต๋า...' : `ได้ ${diceValue}!`}
-                </h2>
-                <p className="text-gray-500">
-                  {isRolling ? 'กรุณารอสักครู่...' : 'กำลังคำนวณการเคลื่อนที่...'}
-                </p>
-              </div>
-            )}
-
-            {/* Moving Phase */}
-            {gamePhase === 'moving' && (
-              <div className="card p-8 text-center animate-in">
-                <div className="w-24 h-24 mx-auto mb-6">
-                  {getDiceIcon(diceValue)}
-                </div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">กำลังเคลื่อนที่...</h2>
-                <p className="text-gray-500">ลูกเต๋าได้ {diceValue} • กำลังเคลื่อนที่บนกระดาน</p>
-                <div className="mt-6 h-4 bg-gray-200 rounded-full overflow-hidden">
-                  <div className="h-full bg-indigo-500 animate-pulse" style={{ width: '60%' }} />
-                </div>
-              </div>
-            )}
-
-            {/* Round Complete */}
-            {gamePhase === 'round_complete' && (
-              <div className="card p-6 animate-in">
-                <div className="text-center mb-6">
-                  <div className="w-16 h-16 mx-auto rounded-full bg-indigo-500 flex items-center justify-center mb-4">
-                    <Sparkles className="w-8 h-8 text-white" />
-                  </div>
-                  <h2 className="text-2xl font-bold text-indigo-700">รอบที่ {currentRound} เสร็จสิ้น</h2>
-                  <p className="text-indigo-600 mt-1">ลูกเต๋าได้ {diceResult} • เคลื่อนที่เสร็จสิ้น</p>
-                </div>
-
-                <div className="card p-4 mb-6 bg-indigo-50 border-indigo-100">
-                  <h3 className="font-semibold text-indigo-700 mb-3">ตำแหน่งผู้เล่น (จำลอง)</h3>
-                  <div className="space-y-2">
-                    {players
-                      .slice()
-                      .sort((a, b) => b.score - a.score)
-                      .map((p, i) => (
-                        <div key={p.playerId} className="flex items-center gap-3 p-2 rounded-lg bg-white">
-                          <span className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center text-white text-xs font-bold">
-                            {i + 1}
-                          </span>
-                          <div className="w-8 h-8 rounded-full border-2 border-white shadow-sm flex items-center justify-center text-[11px]"
-                               style={{ backgroundImage: `url(/avatars/${p.avatarId}.svg)` }}>
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-900">{p.displayName}</p>
-                            <p className="text-xs text-gray-500">ช่องที่ {p.position} • {p.score} คะแนน</p>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleNextQuestion}
-                  className="w-full btn-primary text-lg py-3 flex items-center justify-center gap-2"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                  คำถามถัดไป / รอบถัดไป
-                </button>
-              </div>
-            )}
-
-            {/* Incorrect / Time Up Result */}
-            {gamePhase === 'result_show' && !answerCorrect && (
-              <div className="card p-6 animate-in">
-                <div className="text-center mb-6">
-                  <div className="w-16 h-16 mx-auto rounded-full bg-yellow-500 flex items-center justify-center mb-4">
-                    <Clock className="w-8 h-8 text-white" />
-                  </div>
-                  <h2 className="text-2xl font-bold text-yellow-700">
-                    {showCorrectAnswer ? 'ตอบผิด' : 'หมดเวลาแล้ว'}
-                  </h2>
-                  <p className="text-yellow-600 mt-1">
-                    {showCorrectAnswer
-                      ? `คำตอบที่ถูกคือ <span className="font-bold">{['A', 'B', 'C', 'D'][correctAnswerIndex]}</span>`
-                      : 'คุณไม่ได้ตอบภายในเวลา'}
-                  </p>
-                  {questionExplanation && (
-                    <p className="text-sm text-yellow-500 mt-2 p-3 bg-white rounded-lg border border-yellow-100">
-                      💡 {questionExplanation}
-                    </p>
-                  )}
-                  <p className="text-sm text-yellow-500 mt-2">รอบนี้คุณไม่ได้สิทธิ์ทอยลูกเต๋า</p>
-                </div>
-
-                <button
-                  onClick={handleNextQuestion}
-                  className="w-full btn-secondary text-lg py-3 flex items-center justify-center gap-2"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                  คำถามถัดไป / รอบถัดไป
-                </button>
-              </div>
-            )}
-          </main>
-
-          {/* Sidebar - Player Info */}
-          <aside className="lg:w-72 flex-shrink-0">
-            <div className="card p-4 sticky top-6">
-              <h3 className="font-semibold text-gray-900 mb-3">ผู้เล่น ({players.length}/40)</h3>
-              <div className="space-y-2">
-                {players
-                  .slice()
-                  .sort((a, b) => b.score - a.score)
-                  .map((p, i) => (
-                    <div
-                      key={p.playerId}
-                      className={`flex items-center gap-2 p-2 rounded-lg transition-colors ${
-                        p.playerId === currentPlayer?.playerId ? 'bg-indigo-50' : 'hover:bg-gray-50'
-                      }`}
-                    >
-                      <span className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center text-white text-xs font-bold">
-                        {i + 1}
-                      </span>
-                      <div className="w-8 h-8 rounded-full border-2 border-white shadow-sm flex items-center justify-center text-[11px]"
-                           style={{ backgroundImage: `url(/avatars/${p.avatarId}.svg)` }}>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{p.displayName}</p>
-                        <p className="text-xs text-gray-500">ช่อง {p.position} • {p.score} คะแนน</p>
-                      </div>
-                    </div>
-                  ))}
+                {isAnswerCorrect && (
+                  <p className="text-center text-[11px] text-gray-500 font-medium mt-2">ได้ทอยลูกเต๋าแล้ว!</p>
+                )}
               </div>
             </div>
 
-            {/* Dice Tray in Sidebar when rolling phase */}
-            {(gamePhase === 'roll_queue' && isPlayerTurn) && (
-              <div className="mt-4 card p-4">
-                <h4 className="font-medium text-gray-900 mb-3">ทอยลูกเต๋า</h4>
-                <DiceTray
-                  value={diceValue}
-                  isRolling={isRolling}
-                  animationSeed={diceAnimationSeed}
-                  onRoll={handleRollDice}
-                  disabled={!isPlayerTurn || gamePhase !== 'roll_queue'}
-                />
+            {/* Dice Card */}
+            <div className="bg-[#122A36]/95 backdrop-blur-md rounded-3xl border border-white/5 p-5 shadow-[0_8px_32px_rgba(0,0,0,0.4)] text-center shrink-0">
+              <div className="flex items-center justify-center gap-2 text-gray-300 font-bold text-sm mb-4">
+                <span className="text-emerald-400">⨉</span> ทอยลูกเต๋า
               </div>
-            )}
-          </aside>
+              <div className="flex justify-center mb-5">
+                <DiceFace value={diceValue} />
+              </div>
+              <button 
+                onClick={handleRollDice} 
+                disabled={gamePhase !== 'can_roll'}
+                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:hover:bg-emerald-500 text-white rounded-xl font-extrabold text-lg shadow-[0_4px_0_0_#059669] hover:translate-y-1 hover:shadow-[0_0px_0_0_#059669] transition-all"
+              >
+                ทอยเลย!
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        {/* Bottom Bar: Player Status & Mini Leaderboard */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 shrink-0">
+          
+          {/* Main Player Info */}
+          <div className="bg-[#122A36]/95 backdrop-blur-md rounded-3xl border border-white/5 p-4 shadow-[0_8px_32px_rgba(0,0,0,0.4)] flex items-center gap-5">
+            <div className="w-20 h-20 bg-[#0B1A24] rounded-2xl flex items-center justify-center border border-white/10 shadow-inner relative">
+              <div className="w-14 h-14">
+                 <Avatar avatarId={currentPlayer.avatarId} />
+              </div>
+              <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-emerald-500 rounded-full border-2 border-[#122A36] flex items-center justify-center">
+                 <Crown className="w-4 h-4 text-white" />
+              </div>
+            </div>
+            
+            <div className="flex-1 max-w-[200px]">
+              <div className="flex items-center gap-2 mb-1">
+                <h2 className="text-2xl font-extrabold text-white tracking-wide">{currentPlayer.displayName}</h2>
+                <Crown className="w-5 h-5 text-yellow-400 drop-shadow-md" />
+              </div>
+              <div className="flex items-center justify-between text-sm text-gray-300 font-medium mb-2">
+                <span>ช่องปัจจุบัน: <span className="text-white font-bold">{currentPlayer.position}</span></span>
+                <span>คะแนน: <span className="text-white font-bold">{currentPlayer.score}</span></span>
+              </div>
+              <div className="h-2.5 w-full bg-[#0B1A24] rounded-full overflow-hidden border border-white/5 shadow-inner">
+                <div className="h-full bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.5)]" style={{ width: `${Math.min(100, (currentPlayer.score / 100) * 100)}%` }}></div>
+              </div>
+            </div>
+
+            <div className="hidden xl:flex ml-auto px-6 py-4 bg-[#1A3A4A]/50 rounded-2xl border border-white/5 items-center gap-4">
+              <div className="w-8 h-8 rounded-full bg-yellow-400/20 flex items-center justify-center">
+                 <span className="text-yellow-400 text-lg">⭐</span>
+              </div>
+              <span className="text-gray-200 font-bold text-sm tracking-wide">ตอบคำถามถูกต้อง! คุณได้สิทธิ์ทอยลูกเต๋าแล้ว</span>
+              <div className="w-8 h-8 opacity-60 ml-2">
+                 <DiceFace value={6} />
+              </div>
+            </div>
+          </div>
+
+          {/* Mini Leaderboard */}
+          <div className="bg-[#122A36]/95 backdrop-blur-md rounded-3xl border border-white/5 p-4 shadow-[0_8px_32px_rgba(0,0,0,0.4)] flex flex-col justify-center">
+            <h4 className="text-[13px] font-bold text-gray-400 flex items-center gap-2 mb-3">
+              <Trophy className="w-4 h-4 text-yellow-500" /> อันดับคะแนน (ปัจจุบัน)
+            </h4>
+            <div className="space-y-2.5">
+              {players.sort((a,b) => b.score - a.score).slice(0,3).map((p, i) => (
+                <div key={p.playerId} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-base font-black text-yellow-500 w-4 text-center">{i + 1}</span>
+                    <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center overflow-hidden border border-white/20">
+                      <Avatar avatarId={p.avatarId} />
+                    </div>
+                    <span className="font-bold text-[13px] text-gray-200">{p.displayName}</span>
+                  </div>
+                  <span className="font-bold text-[13px] text-gray-300">{p.score}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          
         </div>
       </div>
     </main>

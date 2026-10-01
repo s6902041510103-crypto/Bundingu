@@ -58,14 +58,22 @@ export default function JoinPage() {
     }
 
     setIsLoading(true);
-    // TODO: Connect to GameStateTransport JOIN_GAME command
-    // Mock delay for demonstration
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 1000));
     setIsLoading(false);
 
-    // TODO: Redirect to /game/[pin] with player session
-    console.log('Join game:', { gamePin: gamePin.toUpperCase(), displayName, avatarId: selectedAvatar });
-    // window.location.href = `/game/${gamePin.toUpperCase()}`;
+    const cleanPin = gamePin.trim().toUpperCase();
+    const studentSession = {
+      playerId: `player-${Date.now()}`,
+      displayName: displayName.trim(),
+      avatarId: selectedAvatar,
+      gamePin: cleanPin,
+    };
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('student_session', JSON.stringify(studentSession));
+    }
+
+    window.location.href = `/game/${cleanPin}/play`;
   };
 
   const handleAvatarChange = (avatarId: string) => {

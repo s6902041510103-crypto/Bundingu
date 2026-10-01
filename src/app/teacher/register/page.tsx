@@ -48,7 +48,9 @@ export default function TeacherRegisterPage() {
 
     // Mock registration success
     setIsRegistered(true);
-    console.log('Teacher register:', { name, email });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('teacher_session', JSON.stringify({ email: email.trim(), name: name.trim() }));
+    }
 
     // Redirect to teacher dashboard after short delay
     setTimeout(() => {

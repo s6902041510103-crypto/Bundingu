@@ -34,32 +34,34 @@ export function BoardCell({ cell, players = [], isCurrentPlayer, className }: Bo
     gridColumn: col + 1,
   };
 
-  const baseClasses = 'relative flex items-center justify-center text-xs font-medium border transition-colors duration-200';
-  const stateClasses = snake
-    ? 'bg-red-100 text-red-800 border-red-200'
-    : ladder
-    ? 'bg-green-100 text-green-800 border-green-200'
-    : special
-    ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
-    : isStart
-    ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
+  const colors = [
+    'bg-[#40C4FF] border-[#00B0FF] text-[#01579B]', // Blue
+    'bg-[#FFCA28] border-[#FFB300] text-[#FF6F00]', // Yellow
+    'bg-[#69F0AE] border-[#00E676] text-[#1B5E20]', // Green
+    'bg-[#FF7043] border-[#F4511E] text-[#BF360C]', // Orange
+  ];
+  
+  // Deterministic color based on cell number
+  const colorIndex = (cell * 13) % colors.length;
+  const colorTheme = colors[colorIndex];
+
+  const baseClasses = 'relative flex items-center justify-center text-[11px] font-black transition-colors duration-200 rounded-lg shadow-sm border-b-[3px] border-r-2';
+  const stateClasses = isStart
+    ? 'bg-[#FFCA28] border-[#FFB300] text-[#FF6F00]'
     : isFinish
-    ? 'bg-violet-100 text-violet-800 border-violet-200'
-    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50';
+    ? 'bg-[#69F0AE] border-[#00E676] text-[#1B5E20]'
+    : colorTheme;
 
   return (
     <div
-      className={`${baseClasses} ${stateClasses} ${className || ''}`}
+      className={`${baseClasses} ${stateClasses} ${className || ''} m-0.5`}
       style={cellStyle}
       data-cell={cell}
     >
-      <span className="z-10">{cell}</span>
+      <span className="z-10 opacity-70 bg-white/40 px-1 rounded-md leading-none py-0.5 shadow-sm">{cell}</span>
 
-      {isStart && <span className="absolute top-1 left-1 text-indigo-600 text-xs">🚩</span>}
-      {isFinish && <span className="absolute top-1 right-1 text-violet-600 text-xs">🏁</span>}
-      {snake && <span className="absolute bottom-1 right-1 text-red-600 text-xs">🐍</span>}
-      {ladder && <span className="absolute bottom-1 left-1 text-green-600 text-xs">🪜</span>}
-      {special && <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-yellow-600 text-xs">✨</span>}
+      {isStart && <span className="absolute -left-2 -bottom-1 text-xs drop-shadow-md z-20">🚩</span>}
+      {isFinish && <span className="absolute -right-2 top-0 text-xs drop-shadow-md z-20">🏁</span>}
 
       {players.length > 0 && (
         <PlayerStack players={players} isCurrentPlayer={isCurrentPlayer} />

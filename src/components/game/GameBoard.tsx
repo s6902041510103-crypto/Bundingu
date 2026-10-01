@@ -1,10 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { BoardCell } from './BoardCell';
 import { BoardSvgOverlay } from './BoardSvgOverlay';
 import { Dice, DiceTray } from './Dice';
 import { GAME_CONFIG, SNAKES, LADDERS, calculateFinalPosition, isFinishCell, getCellPosition } from '@/lib/game-data';
+import { Avatar } from '@/components/avatars/AvatarSVGs';
 
 export interface Player {
   playerId: string;
@@ -73,13 +75,15 @@ export function GameBoard({
   // Get cell players for rendering
   const getCellPlayers = useCallback((cell: number) => {
     const cellPlayers = playersByPosition.get(cell) || [];
-    return cellPlayers.map((p, index) => ({
-      id: p.playerId,
-      avatarId: p.avatarId,
-      displayName: p.displayName,
-      color: PLAYER_COLORS[index % PLAYER_COLORS.length],
-    }));
-  }, [playersByPosition]);
+    return cellPlayers
+      .filter((p) => p.playerId !== animatingPlayer)
+      .map((p, index) => ({
+        id: p.playerId,
+        avatarId: p.avatarId,
+        displayName: p.displayName,
+        color: PLAYER_COLORS[index % PLAYER_COLORS.length],
+      }));
+  }, [playersByPosition, animatingPlayer]);
 
   const currentPlayer = players.find(p => p.playerId === currentPlayerId);
   const isCurrentPlayerTurn = currentPlayerId && gameStatus === 'rolling';
@@ -100,7 +104,7 @@ export function GameBoard({
         setAnimationPath(path);
 
         // Clear animation after duration
-        const duration = Math.min(path.length * 300, 2000);
+        const duration = Math.min(path.length * 400, 2500);
         setTimeout(() => {
           setAnimatingPlayer(null);
           setAnimationPath([]);
@@ -110,11 +114,11 @@ export function GameBoard({
   }, [diceValue, isRolling, gameStatus, currentPlayerId, players]);
 
   return (
-    <div className={`relative ${className}`}>
+    <div className={`relative ${className} ${mode === 'play' ? 'w-full h-full' : ''}`}>
       {/* Board Container */}
-      <div className="relative aspect-square bg-gray-100 rounded-xl p-1 shadow-inner">
+      <div className={`relative aspect-square rounded-xl p-1 shadow-inner h-full w-full ${mode === 'preview' ? 'bg-gray-100' : ''}`}>
         {/* Grid Background */}
-        <div className="grid grid-cols-10 gap-0.5 bg-gray-200 rounded-lg h-full w-full">
+        <div className={`grid grid-cols-10 gap-0.5 rounded-lg h-full w-full ${mode === 'preview' ? 'bg-gray-200' : ''}`}>
           {Array.from({ length: 100 }, (_, i) => i + 1).map((cell) => (
             <BoardCell
               key={cell}
@@ -128,6 +132,17 @@ export function GameBoard({
         {/* SVG Overlay for Snakes & Ladders */}
         <BoardSvgOverlay />
 
+        {/* Animated Pawn */}
+        <AnimatePresence>
+          {animatingPlayer && animationPath.length > 1 && (
+            <AnimatedPawn
+              key={animatingPlayer}
+              player={players.find(p => p.playerId === animatingPlayer)!}
+              path={animationPath}
+            />
+          )}
+        </AnimatePresence>
+
         {/* Movement Animation Path */}
         {animatingPlayer && animationPath.length > 1 && (
           <MovementPath
@@ -138,20 +153,63 @@ export function GameBoard({
       </div>
 
       {/* Game Info Sidebar */}
-      <div className="mt-4 lg:mt-0 lg:ml-6 flex-1 max-w-xs">
-        <GameInfo
-          round={round}
-          gameStatus={gameStatus}
-          currentPlayer={currentPlayer}
-          diceValue={diceValue}
-          isRolling={isRolling}
-          players={players}
-          mode={mode}
-          onRollDice={handleRollClick}
-          onPlayerClick={onPlayerClick}
-        />
-      </div>
+      {mode === 'preview' && (
+        <div className="mt-4 lg:mt-0 lg:ml-6 flex-1 max-w-xs">
+          <GameInfo
+            round={round}
+            gameStatus={gameStatus}
+            currentPlayer={currentPlayer}
+            diceValue={diceValue}
+            isRolling={isRolling}
+            players={players}
+            mode={mode}
+            onRollDice={handleRollClick}
+            onPlayerClick={onPlayerClick}
+          />
+        </div>
+      )}
     </div>
+  );
+}
+
+interface AnimatedPawnProps {
+  player: Player;
+  path: number[];
+}
+
+function AnimatedPawn({ player, path }: AnimatedPawnProps) {
+  const keyframesX = path.map(cell => {
+    const { col } = getCellPosition(cell);
+    return `${col * 10 + 5}%`;
+  });
+  
+  const keyframesY = path.map(cell => {
+    const { row } = getCellPosition(cell);
+    return `${row * 10 + 5}%`;
+  });
+
+  const duration = Math.min(path.length * 0.4, 2.5);
+
+  return (
+    <motion.div
+      className={`absolute z-50 w-7 h-7 -ml-[14px] -mt-[14px] rounded-full border-2 border-white shadow-xl ${player.playerId === player.playerId ? 'ring-2 ring-indigo-500 ring-offset-2' : ''}`}
+      initial={{ left: keyframesX[0], top: keyframesY[0], scale: 1 }}
+      animate={{
+        left: keyframesX,
+        top: keyframesY,
+        scale: [1, 1.3, 1],
+      }}
+      transition={{
+        duration,
+        ease: "easeInOut",
+        times: path.length > 1 ? path.map((_, i) => i / (path.length - 1)) : undefined
+      }}
+    >
+      <div className="w-full h-full">
+        <Avatar avatarId={player.avatarId} />
+      </div>
+      <div className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-500 rounded-full border-2 border-white animate-pulse" />
+    </motion.div>
   );
 }
 
