@@ -1,6 +1,6 @@
 // Integration verification test for student join and sync
 const BASE_URL = 'http://localhost:3000';
-const PIN = 'SYNC88';
+const PIN = 'S' + Math.floor(Math.random() * 89999 + 10000);
 
 async function run() {
   console.log('--- 1. Checking Initial Empty Room State ---');

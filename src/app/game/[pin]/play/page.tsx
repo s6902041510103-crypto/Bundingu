@@ -59,8 +59,8 @@ export default function GamePlayPage() {
   const rawPin = params.pin as string;
   const pin = rawPin ? rawPin.toUpperCase() : '4827';
 
-  // Role toggle: allow user to easily switch between Teacher and Student view for complete testing
-  const [role, setRole] = useState<'teacher' | 'student'>('teacher');
+  // Role: Student by default (Kahoot-style: student screen controls only student actions, no switcher)
+  const [role, setRole] = useState<'teacher' | 'student'>('student');
   const isTeacher = role === 'teacher';
 
   // Active student identity
@@ -75,6 +75,12 @@ export default function GamePlayPage() {
   // Client UI state
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState<boolean>(false);
+  const [answerResult, setAnswerResult] = useState<{
+    correct: boolean;
+    earnedRoll: boolean;
+    queuePosition?: number;
+    answerTimeMs?: number;
+  } | null>(null);
   const [isRolling, setIsRolling] = useState(false);
   const [diceDisplayValue, setDiceDisplayValue] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
   const [countdownRemaining, setCountdownRemaining] = useState<number>(3);
@@ -85,6 +91,10 @@ export default function GamePlayPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const roleQuery = urlParams.get('role');
+        const teacherToken = localStorage.getItem('teacher_token');
+
         const saved = localStorage.getItem('student_session');
         if (saved) {
           const parsed = JSON.parse(saved);
@@ -95,10 +105,17 @@ export default function GamePlayPage() {
               setMyAvatarId(parsed.avatarId);
             }
             setRole('student');
+            return;
           }
         }
+
+        if (roleQuery === 'teacher' || (teacherToken && !saved)) {
+          setRole('teacher');
+        } else {
+          setRole('student');
+        }
       } catch (e) {
-        console.error('Failed to parse student_session:', e);
+        console.error('Failed to parse session:', e);
       }
     }
   }, []);
@@ -161,13 +178,27 @@ export default function GamePlayPage() {
     return () => clearInterval(interval);
   }, [gameState]);
 
-  // Reset selected answer when a new round or countdown starts
+  // Reset selected answer and answer evaluation when a new round or countdown starts
   useEffect(() => {
     if (gameState?.gameStatus === 'countdown' || gameState?.gameStatus === 'waiting_for_question') {
       setSelectedAnswer(null);
       setIsSubmittingAnswer(false);
+      setAnswerResult(null);
     }
   }, [gameState?.currentRound, gameState?.gameStatus]);
+
+  // Fallback auto-advance when question countdown reaches 0
+  useEffect(() => {
+    if (!gameState || gameState.gameStatus !== 'question') {
+      return;
+    }
+    if (questionTimeRemaining <= 0 && transportRef.current) {
+      transportRef.current.sendCommand({
+        type: 'ADVANCE_QUESTION',
+        gamePin: pin as GamePin,
+      }).catch(() => {});
+    }
+  }, [questionTimeRemaining, gameState?.gameStatus, pin]);
 
   // Prepared player list for board & leaderboard
   const displayPlayers = useMemo(() => {
@@ -214,12 +245,12 @@ export default function GamePlayPage() {
   // Current active question
   const currentQuestion = gameState?.currentQuestion;
 
-  // Requirement 1 & 6: Submit Answer
+  // Requirement 1 & 6: Submit Answer with Immediate Evaluation Feedback
   const handleSelectAnswer = async (choiceIndex: number) => {
     if (isSubmittingAnswer || !gameState || gameState.gameStatus !== 'question') {
       return;
     }
-    if (myPlayer?.status === 'answered') {
+    if (myPlayer?.status === 'answered' || answerResult !== null) {
       return;
     }
 
@@ -228,7 +259,12 @@ export default function GamePlayPage() {
 
     try {
       if (transportRef.current) {
-        await transportRef.current.sendCommand({
+        const res = await transportRef.current.sendCommand<{
+          correct: boolean;
+          answerTimeMs: number;
+          earnedRoll: boolean;
+          queuePosition?: number;
+        }>({
           type: 'SUBMIT_ANSWER',
           gamePin: pin as GamePin,
           playerId: myPlayerId as PlayerId,
@@ -236,6 +272,10 @@ export default function GamePlayPage() {
           choiceIndex: choiceIndex as ChoiceIndex,
           clientTimestamp: Date.now(),
         });
+
+        if (res && res.success && res.data) {
+          setAnswerResult(res.data);
+        }
       }
     } catch (err) {
       console.error('Error submitting answer:', err);
@@ -402,31 +442,11 @@ export default function GamePlayPage() {
           </div>
         </div>
 
-        {/* Center: PIN & Role Toggle */}
+        {/* Center: PIN */}
         <div className="flex items-center gap-3">
           <div className="bg-[#122A36]/90 rounded-full px-5 py-2 border border-white/10 shadow-xl flex items-center gap-2">
             <span className="text-gray-300 font-bold text-xs sm:text-sm">PIN:</span>
             <span className="text-emerald-400 font-black text-xl tracking-wider">{pin}</span>
-          </div>
-
-          {/* Quick Role Switcher for complete teacher & student testing */}
-          <div className="bg-[#122A36]/90 rounded-full p-1 border border-white/10 shadow-xl flex items-center gap-1">
-            <button
-              onClick={() => setRole('teacher')}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 ${
-                isTeacher ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              <span>👨‍🏫</span> ครู
-            </button>
-            <button
-              onClick={() => setRole('student')}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 ${
-                !isTeacher ? 'bg-emerald-600 text-white shadow-md' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              <User className="w-3.5 h-3.5" /> นักเรียน
-            </button>
           </div>
         </div>
 
@@ -640,12 +660,34 @@ export default function GamePlayPage() {
                       {currentQuestion?.question || 'กำลังโหลดคำถาม...'}
                     </h4>
 
-                    {/* Requirement 1: Choice Buttons A, B, C, D */}
+                    {/* Requirement 1: Choice Buttons A, B, C, D with Kahoot-style color feedback */}
                     <div className="space-y-2 flex-1 overflow-y-auto">
                       {(currentQuestion?.choices || ['ก', 'ข', 'ค', 'ง']).map((c, i) => {
                         const isChosen = selectedAnswer === i;
-                        const hasAnswered = myPlayer?.status === 'answered';
+                        const hasAnswered = myPlayer?.status === 'answered' || answerResult !== null;
                         const disabled = gameState?.gameStatus !== 'question' || hasAnswered || isSubmittingAnswer;
+
+                        let btnStyle = 'border-gray-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/40 text-gray-800 disabled:hover:border-gray-200 disabled:hover:bg-white';
+                        let badgeStyle = 'bg-gray-100 text-gray-600';
+                        let icon = null;
+
+                        if (isChosen) {
+                          if (answerResult) {
+                            if (answerResult.correct) {
+                              btnStyle = 'border-emerald-500 bg-emerald-50 text-emerald-900 shadow-md ring-2 ring-emerald-400';
+                              badgeStyle = 'bg-emerald-500 text-white';
+                              icon = <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 animate-bounce" />;
+                            } else {
+                              btnStyle = 'border-red-500 bg-red-50 text-red-900 shadow-md ring-2 ring-red-400';
+                              badgeStyle = 'bg-red-500 text-white';
+                              icon = <span className="text-red-500 font-bold text-lg shrink-0">✕</span>;
+                            }
+                          } else {
+                            btnStyle = 'border-indigo-500 bg-indigo-50 text-indigo-900 shadow-sm';
+                            badgeStyle = 'bg-indigo-500 text-white';
+                            icon = <Clock className="w-4 h-4 text-indigo-500 shrink-0 animate-spin" />;
+                          }
+                        }
 
                         return (
                           <button
@@ -653,30 +695,45 @@ export default function GamePlayPage() {
                             type="button"
                             onClick={() => handleSelectAnswer(i)}
                             disabled={disabled}
-                            className={`w-full text-left px-3.5 py-2.5 rounded-xl border-2 transition font-bold text-xs sm:text-sm flex items-center gap-3 ${
-                              isChosen
-                                ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-sm'
-                                : 'border-gray-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/40 text-gray-800 disabled:hover:border-gray-200 disabled:hover:bg-white'
-                            }`}
+                            className={`w-full text-left px-3.5 py-2.5 rounded-xl border-2 transition font-bold text-xs sm:text-sm flex items-center gap-3 ${btnStyle}`}
                           >
                             <span
-                              className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
-                                isChosen ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-600'
-                              }`}
+                              className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${badgeStyle}`}
                             >
                               {['A', 'B', 'C', 'D'][i]}
                             </span>
                             <span className="flex-1">{c}</span>
-                            {isChosen && <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />}
+                            {icon}
                           </button>
                         );
                       })}
                     </div>
 
-                    {/* Answer Status Message */}
-                    {myPlayer?.status === 'answered' && (
-                      <div className="mt-3 bg-emerald-500 text-white p-2.5 rounded-xl font-extrabold text-xs text-center flex items-center justify-center gap-2 shadow-sm">
-                        <CheckCircle2 className="w-4 h-4" /> ส่งคำตอบเรียบร้อยแล้ว!
+                    {/* Kahoot-style Answer Evaluation & Feedback Banner */}
+                    {answerResult && (
+                      answerResult.correct ? (
+                        <div className="mt-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white p-3 rounded-xl font-extrabold text-xs sm:text-sm text-center flex flex-col items-center justify-center gap-1 shadow-lg animate-in zoom-in-95">
+                          <div className="flex items-center gap-1.5 text-base">
+                            <span>🎉</span> <span>ตอบถูกต้อง! (Correct)</span>
+                          </div>
+                          <p className="text-[11px] text-emerald-100 font-semibold">
+                            คุณได้รับสิทธิ์ทอยลูกเต๋าเดินบนกระดาน 🎲 {answerResult.queuePosition ? `(คิวที่ ${answerResult.queuePosition})` : ''}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="mt-3 bg-gradient-to-r from-red-500 to-rose-600 text-white p-3 rounded-xl font-extrabold text-xs sm:text-sm text-center flex flex-col items-center justify-center gap-1 shadow-lg animate-in zoom-in-95">
+                          <div className="flex items-center gap-1.5 text-base">
+                            <span>❌</span> <span>ตอบไม่ถูกต้อง! (Incorrect)</span>
+                          </div>
+                          <p className="text-[11px] text-red-100 font-semibold">
+                            ในรอบนี้คุณไม่ได้สิทธิ์ทอยลูกเต๋า กรุณารอรอบถัดไป
+                          </p>
+                        </div>
+                      )
+                    )}
+                    {!answerResult && myPlayer?.status === 'answered' && (
+                      <div className="mt-3 bg-indigo-600 text-white p-2.5 rounded-xl font-extrabold text-xs text-center flex items-center justify-center gap-2 shadow-sm">
+                        <CheckCircle2 className="w-4 h-4" /> ส่งคำตอบเรียบร้อยแล้ว กำลังรอประเมินผล...
                       </div>
                     )}
                   </>
@@ -684,7 +741,7 @@ export default function GamePlayPage() {
               </div>
             </div>
 
-            {/* Dice Card (Requirement 6: Answer correct rolls dice) */}
+            {/* Dice Card (Requirement 6: Answer correct rolls dice, wrong answer cannot roll) */}
             <div className="bg-[#122A36]/95 backdrop-blur-md rounded-3xl border border-white/10 p-4 shadow-xl text-center shrink-0">
               <div className="flex items-center justify-between text-gray-300 font-bold text-xs mb-3">
                 <span className="text-emerald-400 flex items-center gap-1">🎲 ทอยลูกเต๋า</span>
@@ -693,6 +750,8 @@ export default function GamePlayPage() {
                     ? isCurrentRoller
                       ? '⭐ ตาคุณทอย!'
                       : `รอ: ${currentRollerName}`
+                    : gameState?.gameStatus === 'question'
+                    ? 'ช่วงตอบคำถาม'
                     : 'รอบทอยเต๋า'}
                 </span>
               </div>
@@ -701,17 +760,76 @@ export default function GamePlayPage() {
                 <DiceFace value={diceDisplayValue} />
               </div>
 
-              <button
-                onClick={handleRollDice}
-                disabled={!isCurrentRoller || isRolling}
-                className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:hover:bg-emerald-500 text-white rounded-xl font-black text-base shadow-[0_4px_0_0_#059669] hover:translate-y-0.5 transition-all"
-              >
-                {isRolling
-                  ? 'กำลังทอย...'
-                  : isCurrentRoller
-                  ? 'ทอยเลย!'
-                  : `รอคุณ ${currentRollerName} ทอยเต๋า`}
-              </button>
+              {/* Status-aware Dice Button */}
+              {(() => {
+                const rollQueue = (gameState?.rollQueue as unknown as string[]) || [];
+                const isInQueue = rollQueue.includes(myPlayerId);
+                const queuePos = rollQueue.indexOf(myPlayerId) + 1;
+
+                if (gameState?.gameStatus === 'rolling') {
+                  if (isCurrentRoller) {
+                    return (
+                      <button
+                        onClick={handleRollDice}
+                        disabled={isRolling}
+                        className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white rounded-xl font-black text-base shadow-[0_4px_0_0_#059669] hover:translate-y-0.5 transition-all animate-pulse"
+                      >
+                        {isRolling ? 'กำลังทอย...' : '🎲 กดเพื่อทอยลูกเต๋า! (ตาของคุณแล้ว)'}
+                      </button>
+                    );
+                  }
+
+                  if (isInQueue) {
+                    return (
+                      <button
+                        disabled
+                        className="w-full py-3 bg-indigo-500/30 border border-indigo-400/40 text-indigo-200 rounded-xl font-bold text-sm cursor-not-allowed"
+                      >
+                        ⏳ รอคิวทอยเต๋า... (คิวของคุณ: ลำดับที่ {queuePos})
+                      </button>
+                    );
+                  }
+
+                  // Not in rollQueue -> either answered wrong or did not earn roll
+                  return (
+                    <div className="space-y-1">
+                      <button
+                        disabled
+                        className="w-full py-3 bg-red-500/20 border border-red-500/30 text-red-300 rounded-xl font-bold text-sm cursor-not-allowed"
+                      >
+                        ❌ คุณตอบผิดในข้อนี้ (ไม่ได้สิทธิ์ทอย)
+                      </button>
+                      <p className="text-[11px] text-gray-400">
+                        รอเพื่อนที่ตอบถูกทอยเต๋า ({currentRollerName})
+                      </p>
+                    </div>
+                  );
+                }
+
+                if (gameState?.gameStatus === 'question') {
+                  return (
+                    <button
+                      disabled
+                      className="w-full py-3 bg-white/5 border border-white/10 text-gray-400 rounded-xl font-bold text-sm cursor-not-allowed"
+                    >
+                      {answerResult?.correct
+                        ? '🎉 ตอบถูกแล้ว! รอเข้าสู่ช่วงทอยเต๋า...'
+                        : answerResult
+                        ? '❌ ตอบไม่ถูกต้อง (ไม่ได้สิทธิ์ทอยในรอบนี้)'
+                        : '✍️ กรุณาเลือกคำตอบด้านบน'}
+                    </button>
+                  );
+                }
+
+                return (
+                  <button
+                    disabled
+                    className="w-full py-3 bg-white/5 border border-white/10 text-gray-400 rounded-xl font-bold text-sm cursor-not-allowed"
+                  >
+                    รอคุณครูเริ่มคำถามถัดไป...
+                  </button>
+                );
+              })()}
             </div>
 
           </div>
@@ -731,7 +849,7 @@ export default function GamePlayPage() {
           <div className="flex-1 max-w-xs">
             <div className="flex items-center gap-2 mb-0.5">
               <h2 className="text-base font-extrabold text-white tracking-wide">{myPlayer?.displayName}</h2>
-              <span className="text-xs text-emerald-400 font-bold">({isTeacher ? 'โหมดครู' : 'โหมดนักเรียน'})</span>
+              <span className="text-xs text-emerald-400 font-bold">({isTeacher ? 'ครูผู้สอน' : 'ผู้เล่น'})</span>
             </div>
             <div className="flex items-center justify-between text-xs text-gray-300 font-medium mb-1.5">
               <span>ช่องปัจจุบัน: <strong className="text-white">{myPlayer?.position || 1}</strong></span>

@@ -306,25 +306,19 @@ export default function GameLobbyPage() {
             )}
           </div>
 
-          {/* Action buttons */}
+          {/* Action / Waiting Status (Kahoot-style: Student waits for Teacher to start) */}
           <div className="pt-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <button
-              onClick={handleEnterGame}
-              disabled={isStarting}
-              className="w-full sm:w-auto px-8 py-3.5 rounded-xl btn-primary text-base font-bold shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2"
-            >
-              {isStarting ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  กำลังเข้าสู่เกม...
-                </>
-              ) : (
-                <>
-                  <Play className="w-5 h-5 fill-current" />
-                  เข้าสู่หน้ากระดานเกม (Enter Game)
-                </>
-              )}
-            </button>
+            {isStarting ? (
+              <div className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-emerald-600 text-white text-base font-bold shadow-lg flex items-center justify-center gap-2 animate-pulse">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                คุณครูเริ่มเกมแล้ว! กำลังเข้าสู่เกม...
+              </div>
+            ) : (
+              <div className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-indigo-50 border-2 border-indigo-200 text-indigo-900 text-sm font-bold flex items-center justify-center gap-2.5 shadow-sm">
+                <Clock className="w-5 h-5 text-indigo-600 animate-spin" />
+                <span>คุณอยู่ในห้องแล้ว! รอคุณครูกดเริ่มเกม... (Waiting for Host)</span>
+              </div>
+            )}
 
             <Link
               href={`/game/${pin}/projector`}

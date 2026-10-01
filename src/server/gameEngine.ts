@@ -554,6 +554,14 @@ export class GameEngine {
     // Update internal state
     this.state = newState;
 
+    // Auto-transition to rolling phase after 1.5s answer reveal when all connected players answered
+    if (allAnswered) {
+      this.stopPhaseTimer();
+      this.startPhaseTimer(1500, () => {
+        this.handlePhaseTimeout();
+      });
+    }
+
     // Emit all events
     for (const event of events) {
       this.emit('game_event', event);
@@ -1020,9 +1028,10 @@ export class GameEngine {
 
     const connectedPlayers = this.state.players.filter(p => p.isConnected !== false);
     const allAnswered = connectedPlayers.length > 0 && connectedPlayers.every(p => p.status === 'answered');
-    const isExpired = this.isPhaseExpired();
+    const isExpired = this.isPhaseExpired() || (this.state.phaseEndsAt ? Date.now() + 1000 >= new Date(this.state.phaseEndsAt).getTime() : false);
+    const isTeacher = Boolean((command as any).teacherId);
 
-    if (!allAnswered && !isExpired) {
+    if (!allAnswered && !isExpired && !isTeacher) {
       return {
         success: false,
         state: this.state,
