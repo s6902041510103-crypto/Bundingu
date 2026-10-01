@@ -53,6 +53,7 @@ export class ProductionTransport implements GameStateTransport {
 
   private gamePin?: GamePin;
   private playerId?: PlayerId;
+  private sessionId?: string;
   private isConnected: boolean = false;
 
   // Cached latest authoritative public game state
@@ -61,6 +62,7 @@ export class ProductionTransport implements GameStateTransport {
   // Subscriptions registries
   private stateSubscribers: Set<(state: GameState) => void> = new Set();
   private eventSubscribers: Set<(event: GameEvent) => void> = new Set();
+  private pollTimer: any = null;
 
   constructor(config: TransportConfig) {
     this.supabaseUrl = config.supabaseUrl || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -93,14 +95,28 @@ export class ProductionTransport implements GameStateTransport {
   /**
    * Connect to game room session
    * Task 4.4E-1: Initializes session state and prepares subscription channels
-   * (Realtime WebSocket channel subscription is wired in Task 4.4E-2)
+   * Task 4.4E-2: Prepares session credentials for HTTP Command Dispatch and state sync
    */
   async connect(gamePin: GamePin, playerId?: PlayerId): Promise<void> {
     this.gamePin = gamePin;
     this.playerId = playerId;
+    this.sessionId = playerId || `session-${gamePin}-${Date.now()}`;
     this.isConnected = true;
 
-    // TODO (Task 4.4E-2): Establish Supabase Realtime channel subscriptions:
+    // Fetch initial state immediately
+    await this.fetchState();
+
+    // Start background sync poll (every 1s) to keep multi-tab / clients in sync
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+    }
+    this.pollTimer = setInterval(() => {
+      if (this.isConnected) {
+        this.fetchState();
+      }
+    }, 1000);
+
+    // TODO (Task 4.4E-2 Realtime): Establish Supabase Realtime channel subscriptions:
     // - Subscribe to stateChannelName (game:{pin}:state)
     // - Subscribe to eventsChannelName (game:{pin}:events)
   }
@@ -109,16 +125,44 @@ export class ProductionTransport implements GameStateTransport {
    * Disconnect from game session and clean up subscriptions
    */
   async disconnect(): Promise<void> {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+
     this.isConnected = false;
     this.gamePin = undefined;
     this.playerId = undefined;
+    this.sessionId = undefined;
     this.currentGameState = null;
 
     // Clear active subscribers
     this.stateSubscribers.clear();
     this.eventSubscribers.clear();
 
-    // TODO (Task 4.4E-2): Unsubscribe from Supabase Realtime channels
+    // TODO (Task 4.4E-2 Realtime): Unsubscribe from Supabase Realtime channels
+  }
+
+  /**
+   * Fetch latest authoritative game state from server
+   */
+  async fetchState(): Promise<GameState | null> {
+    if (!this.gamePin) return null;
+    const baseUrl = this.productionApiUrl ? this.productionApiUrl.replace(/\/+$/, '') : '';
+    const url = `${baseUrl}/api/game/${encodeURIComponent(this.gamePin.toUpperCase())}/command`;
+    try {
+      const response = await fetch(url, { method: 'GET' });
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data && result.data.gameState) {
+          this.handleIncomingStateUpdate(result.data.gameState);
+          return result.data.gameState;
+        }
+      }
+    } catch {
+      // Ignore network errors during polling
+    }
+    return null;
   }
 
   // ==========================================================================
@@ -159,10 +203,11 @@ export class ProductionTransport implements GameStateTransport {
   // ==========================================================================
 
   /**
-   * Send game command to Server Game Logic
-   * In Task 4.4E-1: Contract validated; actual HTTP/WS network dispatch is wired in Task 4.4E-2
+   * Send game command to Server Game Logic via HTTP API Route
+   * Task 4.4E-2: Dispatches commands to /api/game/[pin]/command
    */
   async sendCommand<T = void>(command: GameCommand): Promise<CommandResult<T>> {
+    // Pre-flight check: Must be connected
     if (!this.isConnected) {
       return {
         success: false,
@@ -183,14 +228,64 @@ export class ProductionTransport implements GameStateTransport {
       };
     }
 
-    // TODO (Task 4.4E-2): Send command via HTTP/WebSocket to Server Command Endpoint
-    return {
-      success: false,
-      error: {
-        code: 'COMMAND_API_PENDING',
-        message: 'Command API route integration pending (Task 4.4E-2)',
-      },
+    const pin = (command as any).gamePin || this.gamePin;
+    if (!pin) {
+      return {
+        success: false,
+        error: {
+          code: 'MISSING_GAME_PIN',
+          message: 'Game PIN is required to dispatch command.',
+        },
+      };
+    }
+
+    const baseUrl = this.productionApiUrl ? this.productionApiUrl.replace(/\/+$/, '') : '';
+    const url = `${baseUrl}/api/game/${encodeURIComponent(pin.toUpperCase())}/command`;
+
+    const payload = {
+      gamePin: pin,
+      playerId: (command as any).playerId || this.playerId,
+      sessionId: (command as any).sessionId || this.sessionId,
+      ...command,
     };
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      let result: CommandResult<T>;
+      try {
+        result = await response.json();
+      } catch {
+        return {
+          success: false,
+          error: {
+            code: `HTTP_${response.status}`,
+            message: `Server returned non-JSON response (HTTP status ${response.status})`,
+          },
+        };
+      }
+
+      // If state was returned in result, update local cache and notify subscribers
+      if (result.success && result.data && (result.data as any).gameState) {
+        this.handleIncomingStateUpdate((result.data as any).gameState);
+      }
+
+      return result;
+    } catch (networkError: any) {
+      return {
+        success: false,
+        error: {
+          code: 'NETWORK_ERROR',
+          message: networkError?.message || 'Network error occurred while dispatching command.',
+        },
+      };
+    }
   }
 
   // ==========================================================================

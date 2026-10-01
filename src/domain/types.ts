@@ -55,9 +55,12 @@ export function createSessionId(id: string): SessionId {
 
 export const GameStatus = {
   LOBBY: 'lobby',
+  WAITING_FOR_QUESTION: 'waiting_for_question',
+  COUNTDOWN: 'countdown',
   QUESTION: 'question',
   ROLLING: 'rolling',
   MOVING: 'moving',
+  SPECIAL_EVENT: 'special_event',
   ROUND_COMPLETE: 'round_complete',
   FINISHED: 'finished',
 } as const;
@@ -196,10 +199,21 @@ export interface GameState {
   // Leaderboard (computed)
   leaderboard: ReadonlyArray<PlayerSnapshot>;
 
+  // Special Event
+  specialEvent?: SpecialEventState;
+  allPlayersAnswered?: boolean;
+
   // Metadata
   createdAt: string;
   updatedAt: string;
   version: number; // incremented on each state change (optimistic locking)
+}
+
+export interface SpecialEventState {
+  playerId: PlayerId;
+  cell: number;
+  type: 'BONUS' | 'GIFT' | 'BOOST';
+  label: string;
 }
 
 // ============================================================================
@@ -210,12 +224,37 @@ export type GameCommand =
   | JoinGameCommand
   | RejoinGameCommand
   | AnswerCommand
+  | SubmitAnswerCommand
   | RollDiceCommand
   | ChangeAvatarCommand
   | TeacherStartGameCommand
   | TeacherNextRoundCommand
   | TeacherEndGameCommand
-  | TeacherKickPlayerCommand;
+  | TeacherKickPlayerCommand
+  | StartQuestionCommand
+  | AdvanceQuestionCommand
+  | CompleteSpecialEventCommand;
+
+export interface StartQuestionCommand {
+  type: 'START_QUESTION';
+  gamePin: GamePin;
+  teacherId?: TeacherId;
+  sessionId?: string;
+}
+
+export interface AdvanceQuestionCommand {
+  type: 'ADVANCE_QUESTION';
+  gamePin: GamePin;
+  teacherId?: TeacherId;
+  sessionId?: string;
+}
+
+export interface CompleteSpecialEventCommand {
+  type: 'COMPLETE_SPECIAL_EVENT';
+  gamePin: GamePin;
+  playerId: PlayerId;
+  sessionId?: string;
+}
 
 export interface JoinGameCommand {
   type: 'JOIN_GAME';
@@ -235,11 +274,24 @@ export interface AnswerCommand {
   questionId: QuestionId;
   choiceIndex: ChoiceIndex;
   clientTimestamp: number; // client's Date.now() for timing reference
+  gamePin?: GamePin;
+  playerId?: PlayerId;
+}
+
+export interface SubmitAnswerCommand {
+  type: 'SUBMIT_ANSWER';
+  questionId: QuestionId;
+  choiceIndex: ChoiceIndex;
+  clientTimestamp?: number;
+  gamePin?: GamePin;
+  playerId?: PlayerId;
+  sessionId?: string;
 }
 
 export interface RollDiceCommand {
   type: 'ROLL_DICE';
   playerId: PlayerId;
+  gamePin?: GamePin;
 }
 
 export interface ChangeAvatarCommand {

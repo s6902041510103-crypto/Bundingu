@@ -21,6 +21,7 @@ import type {
   PlayerSnapshot,
   DiceResult,
   GameBoardConfig,
+  SpecialEventState,
 } from '@/domain/types';
 
 // Re-export domain types for server module consumers
@@ -38,6 +39,7 @@ export type {
   PublicQuestion,
   ServerQuestion,
   PlayerSnapshot,
+  SpecialEventState,
 } from '@/domain/types';
 import { GAME_CONFIG, calculateFinalPosition, applyBoardEffects, isFinishCell } from '@/lib/game-data';
 
@@ -75,6 +77,10 @@ export interface ServerGameState {
 
   // Leaderboard (computed)
   leaderboard: PlayerSnapshot[];
+
+  // Special Event
+  specialEvent?: SpecialEventState;
+  allPlayersAnswered?: boolean;
 
   // Metadata
   createdAt: string;
@@ -116,6 +122,10 @@ export interface PublicGameState {
 
   // Leaderboard (computed)
   leaderboard: PlayerSnapshot[];
+
+  // Special Event
+  specialEvent?: SpecialEventState;
+  allPlayersAnswered?: boolean;
 
   // Metadata (limited)
   createdAt: string;
@@ -191,6 +201,8 @@ export function toPublicGameState(state: ServerGameState): PublicGameState {
     phaseStartedAt: state.phaseStartedAt,
     phaseEndsAt: state.phaseEndsAt,
     leaderboard: state.leaderboard,
+    specialEvent: state.specialEvent,
+    allPlayersAnswered: state.players.length > 0 && state.players.filter(p => p.isConnected !== false).every(p => p.status === 'answered'),
     createdAt: state.createdAt,
     updatedAt: state.updatedAt,
     version: state.version,
@@ -238,7 +250,31 @@ export type ServerGameCommand =
   | StartGameCommand
   | NextQuestionCommand
   | SkipQuestionCommand
-  | LeaveGameCommand;
+  | LeaveGameCommand
+  | StartQuestionCommand
+  | AdvanceQuestionCommand
+  | CompleteSpecialEventCommand;
+
+export interface StartQuestionCommand {
+  type: 'START_QUESTION';
+  gamePin: string;
+  teacherId?: string;
+  sessionId?: string;
+}
+
+export interface AdvanceQuestionCommand {
+  type: 'ADVANCE_QUESTION';
+  gamePin: string;
+  teacherId?: string;
+  sessionId?: string;
+}
+
+export interface CompleteSpecialEventCommand {
+  type: 'COMPLETE_SPECIAL_EVENT';
+  gamePin: string;
+  playerId: string;
+  sessionId?: string;
+}
 
 export interface JoinGameCommand {
   type: 'JOIN_GAME';

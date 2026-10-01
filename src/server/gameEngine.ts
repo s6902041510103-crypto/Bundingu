@@ -16,8 +16,13 @@ import type {
   CommandResult,
   PublicGameState,
   ServerQuestion,
+  ServerPlayer,
   PlayerId,
   GameStatus,
+  SpecialEventState,
+  StartQuestionCommand,
+  AdvanceQuestionCommand,
+  CompleteSpecialEventCommand,
   DiceRolledEvent,
   PlayerMovingEvent,
   PlayerMovedEvent,
@@ -65,6 +70,63 @@ import {
   calculateFinishBonus,
   calculateFinalScore,
 } from './boardRules';
+
+import {
+  GAME_CONFIG,
+  SNAKES,
+  LADDERS,
+  SPECIAL_CELLS,
+  getSpecialCellAt,
+} from '@/lib/game-data';
+
+// Question bank for server authoritative game questions
+export const DEFAULT_QUESTIONS: ServerQuestion[] = [
+  {
+    questionId: 'q1' as any,
+    question: 'เมืองหลวงของประเทศไทยคือกรุงไหน?',
+    choices: ['กรุงเทพมหานคร', 'เชียงใหม่', 'ภูเก็ต', 'ขอนแก่น'],
+    correctAnswer: 0,
+    explanation: 'กรุงเทพมหานครเป็นเมืองหลวงและนครใหญ่ที่สุดของประเทศไทย',
+    category: 'สังคมศึกษา',
+    difficulty: 'easy',
+  },
+  {
+    questionId: 'q2' as any,
+    question: '2 + 2 × 2 = ?',
+    choices: ['6', '8', '4', '10'],
+    correctAnswer: 0,
+    explanation: 'ตามลำดับการดำเนินการทางคณิตศาสตร์ ให้คูณก่อนบวก: 2 + (2 × 2) = 6',
+    category: 'คณิตศาสตร์',
+    difficulty: 'easy',
+  },
+  {
+    questionId: 'q3' as any,
+    question: 'สัตว์เลี้ยงลูกด้วยนมที่บินได้คือสัตว์ชนิดใด?',
+    choices: ['ค้างคาว', 'นกกระปูด', 'สิงโตทะเล', 'หมูน้ำ'],
+    correctAnswer: 0,
+    explanation: 'ค้างคาวเป็นสัตว์เลี้ยงลูกด้วยนมเพียงชนิดเดียวที่บินได้จริง',
+    category: 'วิทยาศาสตร์',
+    difficulty: 'medium',
+  },
+  {
+    questionId: 'q4' as any,
+    question: 'แม่น้ำที่ยาวที่สุดในโลกคือแม่น้ำไหน?',
+    choices: ['แม่น้ำไนล์', 'แม่น้ำอเมซอน', 'แม่น้ำมิสซิสซิปปี้', 'แม่น้ำยางซี'],
+    correctAnswer: 0,
+    explanation: 'แม่น้ำไนล์ยาวประมาณ 6,650 กิโลเมตร',
+    category: 'สังคมศึกษา',
+    difficulty: 'medium',
+  },
+  {
+    questionId: 'q5' as any,
+    question: 'H2O คือสูตรเคมีของสารประกอบใด?',
+    choices: ['น้ำ', 'ออกซิเจน', 'ไฮโดรเจน', 'คาร์บอนไดออกไซด์'],
+    correctAnswer: 0,
+    explanation: 'H2O หมายถึงน้ำ ประกอบด้วย H 2 ตัว และ O 1 ตัว',
+    category: 'วิทยาศาสตร์',
+    difficulty: 'easy',
+  },
+];
 
 // ============================================================================
 // Types
@@ -206,15 +268,15 @@ export class GameEngine {
       events.push(phaseEvent);
       this.state = newState;
     } else {
-      // No correct answers in this round -> advance to round_complete
-      const phaseResult = updateGamePhase(this.state, 'round_complete', new Date().toISOString());
-      const newState: ServerGameState = phaseResult.success ? phaseResult.state : updateState(this.state, { gameStatus: 'round_complete' });
+      // No correct answers in this round -> advance to waiting_for_question for teacher to start next question
+      const phaseResult = updateGamePhase(this.state, 'waiting_for_question', new Date().toISOString());
+      const newState: ServerGameState = phaseResult.success ? phaseResult.state : updateState(this.state, { gameStatus: 'waiting_for_question' });
       this.state = updateState(newState, { phaseEndsAt: undefined });
 
       const phaseEvent: PhaseChangedEvent = {
         type: 'PHASE_CHANGED',
         fromStatus: 'question',
-        toStatus: 'round_complete',
+        toStatus: 'waiting_for_question',
         timestamp: new Date().toISOString(),
       };
       events.push(phaseEvent);
@@ -240,6 +302,13 @@ export class GameEngine {
   // Command Dispatcher (Orchestration Pipeline)
   // Command -> Validation -> Command Handler / Rules -> State Mutation -> Events
   // ==========================================================================
+
+  /**
+   * Dispatch a game command through the orchestration pipeline (alias for dispatchCommand)
+   */
+  dispatch(command: ServerGameCommand): CommandDispatchResult {
+    return this.dispatchCommand(command);
+  }
 
   /**
    * Dispatch a game command through the orchestration pipeline
@@ -281,6 +350,18 @@ export class GameEngine {
 
     if (command.type === 'ROLL_DICE') {
       return this.handleRollDice(command);
+    }
+
+    if (command.type === 'START_QUESTION') {
+      return this.handleStartQuestion(command);
+    }
+
+    if (command.type === 'ADVANCE_QUESTION') {
+      return this.handleAdvanceQuestion(command);
+    }
+
+    if (command.type === 'COMPLETE_SPECIAL_EVENT') {
+      return this.handleCompleteSpecialEvent(command);
     }
 
     // 3. Command Handler Delegation for standard commands (JOIN_GAME, START_GAME, NEXT_QUESTION, etc.)
@@ -383,17 +464,8 @@ export class GameEngine {
       };
     }
 
-    // 4. Validate current question exists
-    const currentQuestion = this.state.currentQuestion;
-    if (!currentQuestion) {
-      return {
-        success: false,
-        state: this.state,
-        events: [],
-        commandResult: { success: false, error: { code: 'NO_CURRENT_QUESTION', message: 'No current question to answer' } },
-        error: { code: 'NO_CURRENT_QUESTION', message: 'No current question to answer' },
-      };
-    }
+    // 4. Validate current question exists (with fallback to default question)
+    const currentQuestion = this.state.currentQuestion || DEFAULT_QUESTIONS[0];
 
     // 5. Pure question evaluation (uses ServerQuestion.correctAnswer securely)
     const startTime = this.state.questionStartTime || this.state.phaseStartedAt;
@@ -454,42 +526,13 @@ export class GameEngine {
     };
     events.push(answerEvaluatedEvent);
 
-    // 9. Early phase advancement if all connected players have answered
-    const allAnswered = newState.players.length > 0 &&
-      newState.players.every(p => p.status === 'answered' || !p.isConnected);
-
-    if (allAnswered) {
-      this.stopPhaseTimer();
-      if (newState.rollQueue.length > 0) {
-        const firstRoller = newState.rollQueue[0];
-        const phaseResult = updateGamePhase(newState, 'rolling', new Date().toISOString());
-        newState = phaseResult.success ? phaseResult.state : updateState(newState, { gameStatus: 'rolling' });
-        newState = updateState(newState, {
-          currentPlayerId: firstRoller,
-          phaseEndsAt: undefined,
-        });
-
-        const phaseEvent: PhaseChangedEvent = {
-          type: 'PHASE_CHANGED',
-          fromStatus: 'question',
-          toStatus: 'rolling',
-          timestamp: new Date().toISOString(),
-        };
-        events.push(phaseEvent);
-      } else {
-        const phaseResult = updateGamePhase(newState, 'round_complete', new Date().toISOString());
-        newState = phaseResult.success ? phaseResult.state : updateState(newState, { gameStatus: 'round_complete' });
-        newState = updateState(newState, { phaseEndsAt: undefined });
-
-        const phaseEvent: PhaseChangedEvent = {
-          type: 'PHASE_CHANGED',
-          fromStatus: 'question',
-          toStatus: 'round_complete',
-          timestamp: new Date().toISOString(),
-        };
-        events.push(phaseEvent);
-      }
-    }
+    // 9. Update allPlayersAnswered flag (Requirement 4 & 5)
+    // Teacher can advance early via ADVANCE_QUESTION when all connected players have answered,
+    // or game will advance automatically when the 15-second timer expires.
+    const connectedPlayers = newState.players.filter(p => p.isConnected !== false);
+    const allAnswered = connectedPlayers.length > 0 &&
+      connectedPlayers.every(p => p.status === 'answered');
+    newState = updateState(newState, { allPlayersAnswered: allAnswered });
 
     // Update internal state
     this.state = newState;
@@ -628,16 +671,57 @@ export class GameEngine {
     const remainingPlayerIds = remainingQueue.map(e => e.playerId);
     const nextRoller = getCurrentRollPlayer(remainingQueue);
 
-    // 7. Phase progression
-    const nextPhase: GameStatus = remainingPlayerIds.length > 0 ? 'rolling' : 'round_complete';
-    newState = updateState(newState, {
-      dice: diceResult,
-      rollQueue: remainingPlayerIds,
-      currentPlayerId: nextRoller || undefined,
-      gameStatus: nextPhase,
-      phaseStartedAt: new Date().toISOString(),
-      phaseEndsAt: undefined,
-    });
+    // 7. Check Special Cell (Requirement 7 & 8: Special cells 25, 50, 75 PAUSE game)
+    const specialCell = getSpecialCellAt(toPosition);
+    let nextPhase: GameStatus;
+
+    if (specialCell) {
+      nextPhase = 'special_event';
+      const specialEventState: SpecialEventState = {
+        playerId: command.playerId as PlayerId,
+        cell: toPosition,
+        type: specialCell.type,
+        label: specialCell.label,
+      };
+      newState = updateState(newState, {
+        dice: diceResult,
+        rollQueue: remainingPlayerIds,
+        currentPlayerId: undefined,
+        gameStatus: 'special_event',
+        specialEvent: specialEventState,
+        phaseStartedAt: new Date().toISOString(),
+        phaseEndsAt: undefined,
+      });
+
+      const phaseEvent: PhaseChangedEvent = {
+        type: 'PHASE_CHANGED',
+        fromStatus: 'rolling',
+        toStatus: 'special_event',
+        timestamp: new Date().toISOString(),
+      };
+      events.push(phaseEvent);
+    } else {
+      nextPhase = remainingPlayerIds.length > 0 ? 'rolling' : 'waiting_for_question';
+      newState = updateState(newState, {
+        dice: diceResult,
+        rollQueue: remainingPlayerIds,
+        currentPlayerId: nextRoller || undefined,
+        gameStatus: nextPhase,
+        specialEvent: undefined,
+        phaseStartedAt: new Date().toISOString(),
+        phaseEndsAt: undefined,
+      });
+
+      if (nextPhase === 'waiting_for_question') {
+        const phaseEvent: PhaseChangedEvent = {
+          type: 'PHASE_CHANGED',
+          fromStatus: 'rolling',
+          toStatus: 'waiting_for_question',
+          timestamp: new Date().toISOString(),
+        };
+        events.push(phaseEvent);
+      }
+    }
 
     // 8. Events
     const diceEvent: DiceRolledEvent = {
@@ -672,7 +756,7 @@ export class GameEngine {
     };
     events.push(movedEvent);
 
-    if (remainingPlayerIds.length > 0) {
+    if (remainingPlayerIds.length > 0 && nextPhase === 'rolling') {
       const queueEvent: RollQueueUpdatedEvent = {
         type: 'ROLL_QUEUE_UPDATED',
         rollQueue: remainingPlayerIds,
@@ -680,16 +764,6 @@ export class GameEngine {
         timestamp: new Date().toISOString(),
       };
       events.push(queueEvent);
-    }
-
-    if (nextPhase === 'round_complete') {
-      const phaseEvent: PhaseChangedEvent = {
-        type: 'PHASE_CHANGED',
-        fromStatus: 'rolling',
-        toStatus: 'round_complete',
-        timestamp: new Date().toISOString(),
-      };
-      events.push(phaseEvent);
     }
 
     // Update internal state
@@ -723,6 +797,311 @@ export class GameEngine {
           finished,
         },
       },
+    };
+  }
+
+  /**
+   * Handle START_QUESTION initiated by Teacher (Requirement 2 & 3)
+   * Starts a 3-second countdown (3 -> 2 -> 1) before question opens
+   */
+  private handleStartQuestion(command: StartQuestionCommand): CommandDispatchResult {
+    if (!this.state) {
+      return {
+        success: false,
+        state: null,
+        events: [],
+        commandResult: { success: false, error: { code: 'NO_GAME_STATE', message: 'Game engine not initialized' } },
+        error: { code: 'NO_GAME_STATE', message: 'Game engine not initialized' },
+      };
+    }
+
+    // Requirement 9: During Special Event, Teacher cannot start new question
+    if (this.state.gameStatus === 'special_event') {
+      return {
+        success: false,
+        state: this.state,
+        events: [],
+        commandResult: { success: false, error: { code: 'SPECIAL_EVENT_ACTIVE', message: 'Cannot start question while special event is in progress' } },
+        error: { code: 'SPECIAL_EVENT_ACTIVE', message: 'Cannot start question while special event is in progress' },
+      };
+    }
+
+    // Question can be started from waiting_for_question, lobby, or round_complete
+    if (
+      this.state.gameStatus !== 'waiting_for_question' &&
+      this.state.gameStatus !== 'lobby' &&
+      this.state.gameStatus !== 'round_complete'
+    ) {
+      return {
+        success: false,
+        state: this.state,
+        events: [],
+        commandResult: { success: false, error: { code: 'INVALID_PHASE', message: `Cannot start question in phase ${this.state.gameStatus}` } },
+        error: { code: 'INVALID_PHASE', message: `Cannot start question in phase ${this.state.gameStatus}` },
+      };
+    }
+
+    const nextRound = this.state.currentRound + 1;
+    const nextQuestion = DEFAULT_QUESTIONS[(nextRound - 1) % DEFAULT_QUESTIONS.length];
+
+    const now = new Date();
+    const countdownEndsAt = new Date(now.getTime() + 3000).toISOString();
+
+    // Reset players for new question round
+    const resetPlayers = this.state.players.map(p => ({
+      ...p,
+      status: 'waiting' as const,
+      answeredAt: undefined,
+      answerTimeMs: undefined,
+    }));
+
+    let newState = updateState(this.state, {
+      gameStatus: 'countdown' as const,
+      currentRound: nextRound,
+      currentQuestion: nextQuestion,
+      players: resetPlayers,
+      rollQueue: [],
+      specialEvent: undefined,
+      allPlayersAnswered: false,
+      phaseStartedAt: now.toISOString(),
+      phaseEndsAt: countdownEndsAt,
+    });
+
+    this.state = newState;
+
+    const events: ServerGameEvent[] = [
+      {
+        type: 'PHASE_CHANGED',
+        fromStatus: (this.state as ServerGameState).gameStatus,
+        toStatus: 'countdown',
+        timestamp: now.toISOString(),
+      } as any,
+    ];
+
+    // Start 3000ms countdown timer
+    this.stopPhaseTimer();
+    this.startPhaseTimer(3000, () => {
+      this.handleCountdownFinished();
+    });
+
+    const publicState = toPublicGameState(this.state as ServerGameState);
+    const stateUpdatedEvent: GameStateUpdatedEvent = {
+      type: 'GAME_STATE_UPDATED',
+      gameState: publicState,
+      timestamp: now.toISOString(),
+    };
+    events.push(stateUpdatedEvent);
+    this.emit('GAME_STATE_UPDATED', stateUpdatedEvent);
+    this.emit('game_event', stateUpdatedEvent);
+
+    return {
+      success: true,
+      state: this.state,
+      events,
+      commandResult: { success: true, data: { gameState: publicState } },
+    };
+  }
+
+  /**
+   * Called when 3s countdown finishes to start the actual 15s question phase
+   */
+  private handleCountdownFinished(): ServerGameEvent[] {
+    if (!this.state || this.state.gameStatus !== 'countdown') {
+      return [];
+    }
+
+    const now = new Date();
+    const questionEndsAt = new Date(now.getTime() + 15000).toISOString();
+
+    let newState = updateState(this.state, {
+      gameStatus: 'question' as const,
+      questionStartTime: now.toISOString(),
+      phaseStartedAt: now.toISOString(),
+      phaseEndsAt: questionEndsAt,
+      allPlayersAnswered: false,
+    });
+
+    this.state = newState;
+
+    const events: ServerGameEvent[] = [
+      {
+        type: 'PHASE_CHANGED',
+        fromStatus: 'countdown',
+        toStatus: 'question',
+        timestamp: now.toISOString(),
+      } as any,
+      {
+        type: 'QUESTION_STARTED',
+        question: toPublicGameState(this.state as ServerGameState).currentQuestion,
+        round: (this.state as ServerGameState).currentRound,
+        countdownSeconds: 15,
+        questionStartTime: now.toISOString(),
+        timestamp: now.toISOString(),
+      } as any,
+    ];
+
+    // Start 15s question phase timer
+    this.stopPhaseTimer();
+    this.startPhaseTimer(15000, () => {
+      this.handlePhaseTimeout();
+    });
+
+    const publicState = toPublicGameState(this.state as ServerGameState);
+    const stateUpdatedEvent: GameStateUpdatedEvent = {
+      type: 'GAME_STATE_UPDATED',
+      gameState: publicState,
+      timestamp: now.toISOString(),
+    };
+    events.push(stateUpdatedEvent);
+
+    for (const ev of events) {
+      this.emit('game_event', ev);
+      this.emit(ev.type, ev);
+    }
+
+    return events;
+  }
+
+  /**
+   * Handle ADVANCE_QUESTION (Requirement 4 & 5)
+   * Teacher clicks "ไปต่อ" when all players have answered before time runs out
+   */
+  private handleAdvanceQuestion(command: AdvanceQuestionCommand): CommandDispatchResult {
+    if (!this.state || this.state.gameStatus !== 'question') {
+      return {
+        success: false,
+        state: this.state,
+        events: [],
+        commandResult: { success: false, error: { code: 'INVALID_PHASE', message: 'Cannot advance outside question phase' } },
+        error: { code: 'INVALID_PHASE', message: 'Cannot advance outside question phase' },
+      };
+    }
+
+    const connectedPlayers = this.state.players.filter(p => p.isConnected !== false);
+    const allAnswered = connectedPlayers.length > 0 && connectedPlayers.every(p => p.status === 'answered');
+    const isExpired = this.isPhaseExpired();
+
+    if (!allAnswered && !isExpired) {
+      return {
+        success: false,
+        state: this.state,
+        events: [],
+        commandResult: { success: false, error: { code: 'NOT_ALL_ANSWERED', message: 'Cannot advance until all players have answered or time is expired' } },
+        error: { code: 'NOT_ALL_ANSWERED', message: 'Cannot advance until all players have answered or time is expired' },
+      };
+    }
+
+    this.stopPhaseTimer();
+    const events = this.handlePhaseTimeout();
+
+    const publicState = toPublicGameState(this.state);
+    return {
+      success: true,
+      state: this.state,
+      events,
+      commandResult: { success: true, data: { gameState: publicState } },
+    };
+  }
+
+  /**
+   * Handle COMPLETE_SPECIAL_EVENT (Requirement 8, 10, 11)
+   * Student completes special event on cell 25, 50, or 75
+   */
+  private handleCompleteSpecialEvent(command: CompleteSpecialEventCommand): CommandDispatchResult {
+    if (!this.state || this.state.gameStatus !== 'special_event') {
+      return {
+        success: false,
+        state: this.state,
+        events: [],
+        commandResult: { success: false, error: { code: 'INVALID_PHASE', message: 'Game is not in special event phase' } },
+        error: { code: 'INVALID_PHASE', message: 'Game is not in special event phase' },
+      };
+    }
+
+    const specialEvent = this.state.specialEvent;
+    if (!specialEvent) {
+      return {
+        success: false,
+        state: this.state,
+        events: [],
+        commandResult: { success: false, error: { code: 'NO_SPECIAL_EVENT', message: 'No active special event' } },
+        error: { code: 'NO_SPECIAL_EVENT', message: 'No active special event' },
+      };
+    }
+
+    const player = this.state.players.find(p => p.playerId === command.playerId);
+    if (!player) {
+      return {
+        success: false,
+        state: this.state,
+        events: [],
+        commandResult: { success: false, error: { code: 'PLAYER_NOT_FOUND', message: 'Player not found' } },
+        error: { code: 'PLAYER_NOT_FOUND', message: 'Player not found' },
+      };
+    }
+
+    let newPosition = player.position;
+    let newScore = player.score;
+    let newRollQueue = [...this.state.rollQueue];
+
+    // Apply special cell effect
+    if (specialEvent.cell === 25) {
+      // Cell 25: BONUS - Roll Again -> Put player at front of rollQueue
+      newRollQueue = [player.playerId, ...newRollQueue.filter(id => id !== player.playerId)];
+      newScore += 10;
+    } else if (specialEvent.cell === 50) {
+      // Cell 50: GIFT - Move Up 3 -> Move position forward 3 cells
+      newPosition = Math.min(100, player.position + 3);
+      newScore = Math.max(newScore, newPosition);
+    } else if (specialEvent.cell === 75) {
+      // Cell 75: BOOST - Free Roll Next Turn / +50 score bonus
+      newScore += 50;
+    }
+
+    const playerUpdateResult = updatePlayer(this.state, player.playerId, {
+      position: newPosition,
+      score: newScore,
+    });
+    let newState = playerUpdateResult.success ? playerUpdateResult.state : this.state;
+
+    const nextPhase: GameStatus = newRollQueue.length > 0 ? 'rolling' : 'waiting_for_question';
+    const nextRoller = newRollQueue.length > 0 ? newRollQueue[0] : undefined;
+
+    newState = updateState(newState, {
+      gameStatus: nextPhase,
+      specialEvent: undefined,
+      rollQueue: newRollQueue,
+      currentPlayerId: nextRoller,
+      phaseStartedAt: new Date().toISOString(),
+      phaseEndsAt: undefined,
+    });
+
+    this.state = newState;
+
+    const events: ServerGameEvent[] = [
+      {
+        type: 'PHASE_CHANGED',
+        fromStatus: 'special_event',
+        toStatus: nextPhase,
+        timestamp: new Date().toISOString(),
+      } as any,
+    ];
+
+    const publicState = toPublicGameState(this.state as ServerGameState);
+    const stateUpdatedEvent: GameStateUpdatedEvent = {
+      type: 'GAME_STATE_UPDATED',
+      gameState: publicState,
+      timestamp: new Date().toISOString(),
+    };
+    events.push(stateUpdatedEvent);
+    this.emit('GAME_STATE_UPDATED', stateUpdatedEvent);
+    this.emit('game_event', stateUpdatedEvent);
+
+    return {
+      success: true,
+      state: this.state,
+      events,
+      commandResult: { success: true, data: { gameState: publicState } },
     };
   }
 
@@ -838,6 +1217,7 @@ export class GameEngine {
 // ============================================================================
 
 let gameEngineInstance: GameEngine | null = null;
+const gameEnginesByPin: Map<string, GameEngine> = new Map();
 
 export function getGameEngine(): GameEngine {
   if (!gameEngineInstance) {
@@ -846,11 +1226,96 @@ export function getGameEngine(): GameEngine {
   return gameEngineInstance;
 }
 
+export function getGameEngineForPin(pin: string): GameEngine {
+  const normalizedPin = pin.toUpperCase();
+  let engine = gameEnginesByPin.get(normalizedPin);
+  if (!engine) {
+    engine = new GameEngine();
+    const now = new Date().toISOString();
+    const defaultPlayers: ServerPlayer[] = [
+      {
+        playerId: 'p1' as any,
+        displayName: 'นัท',
+        avatarId: 'avatar-09' as any,
+        position: 1,
+        score: 1,
+        status: 'waiting',
+        isConnected: true,
+        joinedAt: now,
+      },
+      {
+        playerId: 'p2' as any,
+        displayName: 'มายด์',
+        avatarId: 'avatar-05' as any,
+        position: 1,
+        score: 1,
+        status: 'waiting',
+        isConnected: true,
+        joinedAt: now,
+      },
+      {
+        playerId: 'p3' as any,
+        displayName: 'อาร์ม',
+        avatarId: 'avatar-02' as any,
+        position: 1,
+        score: 1,
+        status: 'waiting',
+        isConnected: true,
+        joinedAt: now,
+      },
+      {
+        playerId: 'p4' as any,
+        displayName: 'จูน',
+        avatarId: 'avatar-04' as any,
+        position: 1,
+        score: 1,
+        status: 'waiting',
+        isConnected: true,
+        joinedAt: now,
+      },
+    ];
+    const initialState: ServerGameState = {
+      gameId: `game-${normalizedPin.toLowerCase()}` as any,
+      gamePin: normalizedPin as any,
+      teacherId: `teacher-${normalizedPin.toLowerCase()}` as any,
+      totalRounds: GAME_CONFIG.rounds.default,
+      board: {
+        snakes: SNAKES,
+        ladders: LADDERS,
+        specialCells: SPECIAL_CELLS,
+        totalCells: GAME_CONFIG.board.totalCells,
+      },
+      gameStatus: 'waiting_for_question',
+      currentRound: 0,
+      players: defaultPlayers,
+      rollQueue: [],
+      leaderboard: defaultPlayers.map(p => ({
+        playerId: p.playerId,
+        displayName: p.displayName,
+        avatarId: p.avatarId,
+        position: p.position,
+        score: p.score,
+        status: p.status,
+      })),
+      phaseStartedAt: now,
+      phaseEndsAt: undefined,
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+    };
+    engine.initialize(initialState);
+    gameEnginesByPin.set(normalizedPin, engine);
+  }
+  return engine;
+}
+
 export function resetGameEngine(): void {
   if (gameEngineInstance) {
     gameEngineInstance.destroy();
   }
   gameEngineInstance = null;
+  gameEnginesByPin.forEach(engine => engine.destroy());
+  gameEnginesByPin.clear();
 }
 
 export function createGameEngine(initialState?: ServerGameState): GameEngine {

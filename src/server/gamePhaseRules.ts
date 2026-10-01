@@ -15,11 +15,14 @@ import type { GameStatus } from '@/domain/types';
  * Key = from phase, Value = array of valid next phases
  */
 const VALID_TRANSITIONS: Readonly<Record<GameStatus, readonly GameStatus[]>> = {
-  lobby: ['question'] as const,
-  question: ['rolling', 'round_complete'] as const,
-  rolling: ['moving', 'round_complete'] as const,
-  moving: ['round_complete'] as const,
-  round_complete: ['question', 'finished'] as const,
+  lobby: ['waiting_for_question', 'countdown', 'question'] as const,
+  waiting_for_question: ['countdown', 'finished'] as const,
+  countdown: ['question'] as const,
+  question: ['rolling', 'special_event', 'waiting_for_question', 'round_complete'] as const,
+  rolling: ['moving', 'special_event', 'waiting_for_question', 'round_complete'] as const,
+  moving: ['special_event', 'rolling', 'waiting_for_question', 'round_complete'] as const,
+  special_event: ['rolling', 'waiting_for_question', 'round_complete'] as const,
+  round_complete: ['waiting_for_question', 'countdown', 'question', 'finished'] as const,
   finished: [] as const,
 } as const;
 

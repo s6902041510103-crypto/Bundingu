@@ -98,6 +98,12 @@ export function validateCommand(command: ServerGameCommand): ValidationResult<Se
       return validateChangeAvatarCommand(command);
     case 'START_GAME':
       return validateStartGameCommand(command);
+    case 'START_QUESTION':
+      return validateStartQuestionCommand(command);
+    case 'ADVANCE_QUESTION':
+      return validateAdvanceQuestionCommand(command);
+    case 'COMPLETE_SPECIAL_EVENT':
+      return validateCompleteSpecialEventCommand(command);
     case 'NEXT_QUESTION':
       return validateNextQuestionCommand(command);
     case 'SKIP_QUESTION':
@@ -108,6 +114,33 @@ export function validateCommand(command: ServerGameCommand): ValidationResult<Se
       errors.push(createError('type', 'UNKNOWN_COMMAND', `Unknown command type: ${(command as any).type}`));
       return createFailure(errors);
   }
+}
+
+function validateStartQuestionCommand(command: any): ValidationResult<any> {
+  const errors: ValidationError[] = [];
+  if (!command.gamePin) {
+    errors.push(createError('gamePin', 'MISSING_GAME_PIN', 'Game PIN is required'));
+  }
+  return errors.length > 0 ? createFailure(errors) : createSuccess(command);
+}
+
+function validateAdvanceQuestionCommand(command: any): ValidationResult<any> {
+  const errors: ValidationError[] = [];
+  if (!command.gamePin) {
+    errors.push(createError('gamePin', 'MISSING_GAME_PIN', 'Game PIN is required'));
+  }
+  return errors.length > 0 ? createFailure(errors) : createSuccess(command);
+}
+
+function validateCompleteSpecialEventCommand(command: any): ValidationResult<any> {
+  const errors: ValidationError[] = [];
+  if (!command.gamePin) {
+    errors.push(createError('gamePin', 'MISSING_GAME_PIN', 'Game PIN is required'));
+  }
+  if (!command.playerId) {
+    errors.push(createError('playerId', 'MISSING_PLAYER_ID', 'Player ID is required'));
+  }
+  return errors.length > 0 ? createFailure(errors) : createSuccess(command);
 }
 
 /**

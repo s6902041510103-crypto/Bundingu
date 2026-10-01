@@ -8,11 +8,14 @@
  * Valid phase transitions map
  */
 const VALID_TRANSITIONS: Record<string, string[]> = {
-  lobby: ['question'],
-  question: ['rolling', 'round_complete'],
-  rolling: ['moving', 'round_complete'],
-  moving: ['round_complete'],
-  round_complete: ['question', 'finished'],
+  lobby: ['waiting_for_question', 'countdown', 'question'],
+  waiting_for_question: ['countdown', 'finished'],
+  countdown: ['question'],
+  question: ['rolling', 'special_event', 'waiting_for_question', 'round_complete'],
+  rolling: ['moving', 'special_event', 'waiting_for_question', 'round_complete'],
+  moving: ['special_event', 'rolling', 'waiting_for_question', 'round_complete'],
+  special_event: ['rolling', 'waiting_for_question', 'round_complete'],
+  round_complete: ['waiting_for_question', 'countdown', 'question', 'finished'],
   finished: [],
 };
 
