@@ -36,19 +36,22 @@ export default function JoinPage() {
     e.preventDefault();
     setError('');
 
-    if (!gamePin.trim()) {
+    const cleanPin = gamePin.trim().toUpperCase();
+    const cleanName = displayName.trim();
+
+    if (!cleanPin) {
       setError('กรุณากรอก Game PIN');
       return;
     }
-    if (gamePin.length !== 6) {
-      setError('Game PIN ต้องมี 6 ตัวอักษร');
+    if (!/^[A-Z0-9]{6}$/.test(cleanPin)) {
+      setError('Game PIN ต้องมี 6 ตัวอักษร (A-Z, 0-9)');
       return;
     }
-    if (!displayName.trim()) {
+    if (!cleanName) {
       setError('กรุณากรอกชื่อเล่น');
       return;
     }
-    if (displayName.length > 20) {
+    if (cleanName.length > 20) {
       setError('ชื่อเล่นต้องไม่เกิน 20 ตัวอักษร');
       return;
     }
@@ -58,22 +61,57 @@ export default function JoinPage() {
     }
 
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsLoading(false);
 
-    const cleanPin = gamePin.trim().toUpperCase();
-    const studentSession = {
-      playerId: `player-${Date.now()}`,
-      displayName: displayName.trim(),
-      avatarId: selectedAvatar,
-      gamePin: cleanPin,
-    };
+    try {
+      const sessionId = `player-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const response = await fetch(`/api/game/${cleanPin}/command`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'JOIN_GAME',
+          gamePin: cleanPin,
+          displayName: cleanName,
+          preferredAvatarId: selectedAvatar,
+          sessionId,
+        }),
+      });
 
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('student_session', JSON.stringify(studentSession));
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        if (result.error?.code === 'INVALID_GAME_PIN') {
+          setError('รหัส Game PIN ไม่ถูกต้อง หรือไม่พบห้องนี้ในระบบ');
+        } else if (result.error?.code === 'DUPLICATE_DISPLAY_NAME') {
+          setError(result.error.message || 'ชื่อนี้มีผู้ใช้ในห้องแล้ว กรุณาเลือกชื่ออื่น');
+        } else {
+          setError(result.error?.message || 'ไม่สามารถเข้าร่วมห้องเกมได้ กรุณาลองใหม่อีกครั้ง');
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      const assignedPlayerId = result.data?.playerId || sessionId;
+      const studentSession = {
+        playerId: assignedPlayerId,
+        displayName: cleanName,
+        avatarId: selectedAvatar,
+        gamePin: cleanPin,
+      };
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('student_session', JSON.stringify(studentSession));
+      }
+
+      // Navigate to student lobby page
+      window.location.href = `/game/${cleanPin}`;
+    } catch (err: any) {
+      console.error('Error joining game:', err);
+      setError('เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์ กรุณาลองใหม่');
+    } finally {
+      setIsLoading(false);
     }
-
-    window.location.href = `/game/${cleanPin}/play`;
   };
 
   const handleAvatarChange = (avatarId: string) => {

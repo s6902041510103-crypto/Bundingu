@@ -144,11 +144,25 @@ function getNextQuestion(state: ServerGameState): ServerQuestion | undefined {
 function applyJoinGame(state: ServerGameState, command: any): ApplyCommandResult {
   const events: ServerGameEvent[] = [];
 
-  // TODO: Check if game exists and is in lobby
-  // TODO: Check if player already in game
-  // TODO: Check max players limit (40)
+  // Check if player with same display name already exists
+  const isDuplicate = state.players.some(
+    p => p.displayName && p.displayName.trim().toLowerCase() === String(command.displayName).trim().toLowerCase()
+  );
+  if (isDuplicate) {
+    return {
+      newState: state,
+      events: [],
+      commandResult: {
+        success: false,
+        error: {
+          code: 'DUPLICATE_DISPLAY_NAME',
+          message: 'ชื่อนี้มีผู้ใช้ในห้องแล้ว กรุณาเลือกชื่ออื่น',
+        },
+      },
+    };
+  }
 
-  // Mock: create new player
+  // Create new player
   const newPlayer = {
     playerId: command.sessionId as any, // sessionId used as playerId for mock
     displayName: command.displayName,
