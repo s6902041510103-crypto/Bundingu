@@ -1,5 +1,5 @@
 /**
- * ProductionTransport - Production implementation of GameStateTransport (Task 4.4E-1)
+ * ProductionTransport - Production implementation of GameStateTransport (Task 4.4E-1 & 4.4E-3)
  *
  * Connects Game UI to Server Game Logic and Supabase Realtime.
  *
@@ -8,7 +8,7 @@
  *   ↓
  * ProductionTransport
  *   ↓
- * Server Game Logic (via HTTP/WebSocket)
+ * Server Game Logic (via HTTP POST /api/game/[pin]/command)
  *   ↓
  * GameEngine (Server-Authoritative)
  *   ↓
@@ -35,13 +35,17 @@ import type {
   PlayerId,
   TransportState,
 } from '@/domain/types';
+import { getSupabaseClient, SupabaseClient } from '@/lib/supabase/client';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
 /**
  * ProductionTransport handles:
  * 1. Connection lifecycle and state tracking
- * 2. Subscription to authoritative GameState updates
- * 3. Subscription to discrete GameEvents
- * 4. Dispatching client GameCommands to Server Game Logic
+ * 2. Subscription to authoritative GameState updates via Supabase Realtime (game:{pin}:state)
+ * 3. Subscription to discrete GameEvents via Supabase Realtime (game:{pin}:events)
+ * 4. Automatic reconnection with exponential backoff and state refresh
+ * 5. Clean unsubscribe on disconnect
+ * 6. Dispatching client GameCommands to Server Game Logic
  */
 export class ProductionTransport implements GameStateTransport {
   readonly type: TransportType = 'production';
@@ -55,6 +59,20 @@ export class ProductionTransport implements GameStateTransport {
   private playerId?: PlayerId;
   private sessionId?: string;
   private isConnected: boolean = false;
+  private isRealtimeConnected: boolean = false;
+
+  // Supabase Realtime client and channels
+  private supabase: SupabaseClient | null = null;
+  private stateChannel: RealtimeChannel | null = null;
+  private eventsChannel: RealtimeChannel | null = null;
+
+  // Browser-native BroadcastChannel fallback for multi-tab local dev sync
+  private localBroadcastChannel: any = null;
+
+  // Reconnection management
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts: number = 0;
+  private readonly maxReconnectAttempts: number = 10;
 
   // Cached latest authoritative public game state
   private currentGameState: GameState | null = null;
@@ -62,7 +80,7 @@ export class ProductionTransport implements GameStateTransport {
   // Subscriptions registries
   private stateSubscribers: Set<(state: GameState) => void> = new Set();
   private eventSubscribers: Set<(event: GameEvent) => void> = new Set();
-  private pollTimer: any = null;
+  private fallbackPollTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(config: TransportConfig) {
     this.supabaseUrl = config.supabaseUrl || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -94,43 +112,54 @@ export class ProductionTransport implements GameStateTransport {
 
   /**
    * Connect to game room session
-   * Task 4.4E-1: Initializes session state and prepares subscription channels
-   * Task 4.4E-2: Prepares session credentials for HTTP Command Dispatch and state sync
+   * Task 4.4E-3: Connects to Supabase Realtime channels for state and events
    */
   async connect(gamePin: GamePin, playerId?: PlayerId): Promise<void> {
     this.gamePin = gamePin;
     this.playerId = playerId;
     this.sessionId = playerId || `session-${gamePin}-${Date.now()}`;
     this.isConnected = true;
+    this.reconnectAttempts = 0;
 
-    // Fetch initial state immediately
+    // Fetch initial authoritative state immediately
     await this.fetchState();
 
-    // Start background sync poll (every 1s) to keep multi-tab / clients in sync
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer);
-    }
-    this.pollTimer = setInterval(() => {
-      if (this.isConnected) {
-        this.fetchState();
-      }
-    }, 1000);
+    // Establish Supabase Realtime subscriptions
+    await this.setupRealtimeSubscriptions();
 
-    // TODO (Task 4.4E-2 Realtime): Establish Supabase Realtime channel subscriptions:
-    // - Subscribe to stateChannelName (game:{pin}:state)
-    // - Subscribe to eventsChannelName (game:{pin}:events)
+    // Setup local BroadcastChannel for browser tabs sync if supported
+    this.setupLocalBroadcast();
   }
 
   /**
-   * Disconnect from game session and clean up subscriptions
+   * Disconnect from game session and cleanly unsubscribe from Realtime channels
    */
   async disconnect(): Promise<void> {
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
+    this.isConnected = false;
+    this.isRealtimeConnected = false;
+
+    // Clear reconnect timer
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
 
-    this.isConnected = false;
+    // Stop fallback poll timer
+    this.stopFallbackPoll();
+
+    // Clean up Supabase channels
+    await this.teardownRealtimeChannels();
+
+    // Clean up local BroadcastChannel
+    if (this.localBroadcastChannel) {
+      try {
+        this.localBroadcastChannel.close();
+      } catch {
+        // Ignore
+      }
+      this.localBroadcastChannel = null;
+    }
+
     this.gamePin = undefined;
     this.playerId = undefined;
     this.sessionId = undefined;
@@ -139,8 +168,196 @@ export class ProductionTransport implements GameStateTransport {
     // Clear active subscribers
     this.stateSubscribers.clear();
     this.eventSubscribers.clear();
+  }
 
-    // TODO (Task 4.4E-2 Realtime): Unsubscribe from Supabase Realtime channels
+  /**
+   * Setup Supabase Realtime channels for game state and discrete events
+   */
+  private async setupRealtimeSubscriptions(): Promise<void> {
+    if (!this.gamePin) return;
+
+    const normalizedPin = this.gamePin.toUpperCase();
+
+    // Lazily get or create Supabase client
+    if (!this.supabase) {
+      this.supabase = getSupabaseClient(this.supabaseUrl, this.supabaseAnonKey);
+    }
+
+    if (!this.supabase) {
+      // Supabase credentials not configured: fallback to heartbeat polling
+      this.startFallbackPoll();
+      return;
+    }
+
+    try {
+      // 1. Subscribe to State Channel: game:{pin}:state
+      const stateChName = `game:${normalizedPin}:state`;
+      this.stateChannel = this.supabase.channel(stateChName, {
+        config: { broadcast: { ack: false, self: true } },
+      });
+
+      this.stateChannel
+        .on('broadcast', { event: 'state_update' }, (payload: any) => {
+          const incoming = payload?.payload?.gameState || payload?.gameState;
+          if (incoming) {
+            this.handleIncomingStateUpdate(incoming);
+          }
+        })
+        .subscribe((status: string, err?: any) => {
+          this.handleChannelStatus('state', status, err);
+        });
+
+      // 2. Subscribe to Events Channel: game:{pin}:events
+      const eventsChName = `game:${normalizedPin}:events`;
+      this.eventsChannel = this.supabase.channel(eventsChName, {
+        config: { broadcast: { ack: false, self: true } },
+      });
+
+      this.eventsChannel
+        .on('broadcast', { event: 'game_event' }, (payload: any) => {
+          const event = payload?.payload?.event || payload?.event;
+          if (event) {
+            this.handleIncomingEvent(event);
+          }
+        })
+        .subscribe((status: string, err?: any) => {
+          this.handleChannelStatus('events', status, err);
+        });
+    } catch (err) {
+      console.warn('[ProductionTransport] Error establishing Realtime channels:', err);
+      this.startFallbackPoll();
+    }
+  }
+
+  /**
+   * Handle Supabase Realtime channel connection status changes
+   */
+  private handleChannelStatus(channel: 'state' | 'events', status: string, err?: any): void {
+    if (status === 'SUBSCRIBED') {
+      this.isRealtimeConnected = true;
+      this.reconnectAttempts = 0;
+      // Realtime is active -> Stop fallback polling
+      this.stopFallbackPoll();
+      // Refresh state to ensure no missed updates during handshake
+      this.fetchState().catch(() => {});
+    } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+      this.isRealtimeConnected = false;
+      if (err) {
+        console.warn(`[ProductionTransport] Realtime ${channel} channel status: ${status}`, err);
+      }
+      if (this.isConnected) {
+        this.scheduleReconnect();
+      }
+    }
+  }
+
+  /**
+   * Schedule automatic reconnection with exponential backoff
+   */
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer || !this.isConnected) return;
+
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.warn('[ProductionTransport] Reconnection attempts exhausted, using fallback polling');
+      this.startFallbackPoll();
+      return;
+    }
+
+    const delayMs = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 10000);
+    this.reconnectAttempts++;
+
+    // While reconnecting, run fallback poll to ensure state doesn't freeze
+    this.startFallbackPoll();
+
+    this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = null;
+      if (!this.isConnected) return;
+
+      await this.teardownRealtimeChannels();
+      await this.setupRealtimeSubscriptions();
+    }, delayMs);
+  }
+
+  /**
+   * Teardown Supabase Realtime channels
+   */
+  private async teardownRealtimeChannels(): Promise<void> {
+    if (this.supabase) {
+      if (this.stateChannel) {
+        try {
+          await this.supabase.removeChannel(this.stateChannel);
+        } catch {
+          // Ignore
+        }
+        this.stateChannel = null;
+      }
+      if (this.eventsChannel) {
+        try {
+          await this.supabase.removeChannel(this.eventsChannel);
+        } catch {
+          // Ignore
+        }
+        this.eventsChannel = null;
+      }
+    }
+  }
+
+  /**
+   * Setup browser-level BroadcastChannel for multi-tab sync when running in browser
+   */
+  private setupLocalBroadcast(): void {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window && this.gamePin) {
+      try {
+        this.localBroadcastChannel = new BroadcastChannel(`ks_sync_${this.gamePin.toUpperCase()}`);
+        this.localBroadcastChannel.onmessage = (event: MessageEvent) => {
+          if (event.data?.type === 'STATE_UPDATE' && event.data?.gameState) {
+            this.handleIncomingStateUpdate(event.data.gameState);
+          } else if (event.data?.type === 'GAME_EVENT' && event.data?.event) {
+            this.handleIncomingEvent(event.data.event);
+          }
+        };
+      } catch {
+        // BroadcastChannel unavailable
+      }
+    }
+  }
+
+  /**
+   * Broadcast state to sibling browser tabs
+   */
+  private broadcastLocalUpdate(state: GameState): void {
+    if (this.localBroadcastChannel) {
+      try {
+        this.localBroadcastChannel.postMessage({
+          type: 'STATE_UPDATE',
+          gameState: state,
+        });
+      } catch {
+        // Ignore
+      }
+    }
+  }
+
+  /**
+   * Start low-frequency fallback poll (runs only when Realtime is disconnected or unconfigured)
+   */
+  private startFallbackPoll(): void {
+    if (this.fallbackPollTimer || !this.isConnected) return;
+    this.fallbackPollTimer = setInterval(() => {
+      if (this.isConnected && !this.isRealtimeConnected) {
+        this.fetchState().catch(() => {});
+      }
+    }, 2000);
+  }
+
+  /**
+   * Stop fallback poll
+   */
+  private stopFallbackPoll(): void {
+    if (this.fallbackPollTimer) {
+      clearInterval(this.fallbackPollTimer);
+      this.fallbackPollTimer = null;
+    }
   }
 
   /**
@@ -204,7 +421,8 @@ export class ProductionTransport implements GameStateTransport {
 
   /**
    * Send game command to Server Game Logic via HTTP API Route
-   * Task 4.4E-2: Dispatches commands to /api/game/[pin]/command
+   * Task 4.4E-2 & Task 4.4E-3: Dispatches commands to /api/game/[pin]/command
+   * Server validates, mutates authoritative state, and broadcasts via Supabase Realtime.
    */
   async sendCommand<T = void>(command: GameCommand): Promise<CommandResult<T>> {
     // Pre-flight check: Must be connected
@@ -273,7 +491,9 @@ export class ProductionTransport implements GameStateTransport {
 
       // If state was returned in result, update local cache and notify subscribers
       if (result.success && result.data && (result.data as any).gameState) {
-        this.handleIncomingStateUpdate((result.data as any).gameState);
+        const state = (result.data as any).gameState;
+        this.handleIncomingStateUpdate(state);
+        this.broadcastLocalUpdate(state);
       }
 
       return result;
@@ -304,6 +524,13 @@ export class ProductionTransport implements GameStateTransport {
   }
 
   /**
+   * Check if Realtime connection is active
+   */
+  isRealtimeActive(): boolean {
+    return this.isRealtimeConnected;
+  }
+
+  /**
    * Synchronous access to latest known public game state
    */
   getCurrentGameState(): GameState | null {
@@ -311,7 +538,7 @@ export class ProductionTransport implements GameStateTransport {
   }
 
   // ==========================================================================
-  // Incoming Data Handlers (Hook points for Task 4.4E-2 Realtime integration)
+  // Incoming Data Handlers (Realtime Channel Ingestion)
   // ==========================================================================
 
   /**
@@ -350,16 +577,6 @@ export class ProductionTransport implements GameStateTransport {
  * Factory function to create ProductionTransport
  */
 export function createProductionTransport(config: TransportConfig): GameStateTransport {
-  const supabaseUrl = config.supabaseUrl || process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = config.supabaseAnonKey || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error(
-      'Supabase credentials not configured. ' +
-      'Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local'
-    );
-  }
-
   return new ProductionTransport(config);
 }
 

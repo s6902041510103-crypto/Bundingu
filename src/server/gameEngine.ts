@@ -42,6 +42,8 @@ import {
   updateState,
 } from './gameStateRules';
 
+import { realtimePublisher } from './realtimePublisher';
+
 import {
   validateCommand,
 } from './validation';
@@ -243,7 +245,13 @@ export class GameEngine {
    * Handle phase timeout (e.g. 15s question countdown expiration)
    */
   handlePhaseTimeout(): ServerGameEvent[] {
-    if (!this.state || this.state.gameStatus !== 'question') {
+    if (!this.state) {
+      return [];
+    }
+    if (this.state.gameStatus === 'countdown') {
+      return this.handleCountdownFinished();
+    }
+    if (this.state.gameStatus !== 'question') {
       return [];
     }
 
@@ -1304,6 +1312,7 @@ export function getGameEngineForPin(pin: string): GameEngine {
       version: 1,
     };
     engine.initialize(initialState);
+    realtimePublisher.attachEngine(normalizedPin, engine);
     gameEnginesByPin.set(normalizedPin, engine);
   }
   return engine;
@@ -1314,7 +1323,10 @@ export function resetGameEngine(): void {
     gameEngineInstance.destroy();
   }
   gameEngineInstance = null;
-  gameEnginesByPin.forEach(engine => engine.destroy());
+  gameEnginesByPin.forEach((engine, pin) => {
+    engine.destroy();
+    realtimePublisher.detachEngine(pin);
+  });
   gameEnginesByPin.clear();
 }
 

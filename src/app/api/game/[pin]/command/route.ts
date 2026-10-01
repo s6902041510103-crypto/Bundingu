@@ -4,6 +4,7 @@ import { validateCommand } from '@/server/validation';
 import { stripDiceSeed, toPublicGameState } from '@/server/gameState';
 import type { ServerGameCommand } from '@/server/gameState';
 import type { CommandResult } from '@/domain/types';
+import { realtimePublisher } from '@/server/realtimePublisher';
 
 /**
  * Sanitize CommandResult to guarantee no sensitive server data leaks to client.
@@ -136,6 +137,12 @@ export async function POST(
     // Forward command to Server-Authoritative GameEngine
     const engine = getGameEngineForPin(normalizedPin);
     const dispatchResult = engine.dispatch(commandPayload as ServerGameCommand);
+
+    // Broadcast updated public state and events to all connected clients via Supabase Realtime
+    if (dispatchResult.success && dispatchResult.state) {
+      await realtimePublisher.publishState(normalizedPin, dispatchResult.state);
+      await realtimePublisher.publishEvents(normalizedPin, dispatchResult.events);
+    }
 
     // Sanitize response to guarantee no sensitive data exposure
     const publicResult = sanitizeCommandResult(dispatchResult.commandResult);
