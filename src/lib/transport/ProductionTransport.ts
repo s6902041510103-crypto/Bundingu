@@ -368,7 +368,7 @@ export class ProductionTransport implements GameStateTransport {
       if (this.isConnected && !this.isRealtimeConnected) {
         this.fetchState().catch(() => {});
       }
-    }, 1000);
+    }, 800);
   }
 
   /**

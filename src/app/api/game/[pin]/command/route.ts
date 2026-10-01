@@ -5,6 +5,7 @@ import { stripDiceSeed, toPublicGameState } from '@/server/gameState';
 import type { ServerGameCommand } from '@/server/gameState';
 import type { CommandResult } from '@/domain/types';
 import { realtimePublisher } from '@/server/realtimePublisher';
+import { gameStorage } from '@/server/storage';
 
 /**
  * Sanitize CommandResult to guarantee no sensitive server data leaks to client.
@@ -136,10 +137,15 @@ export async function POST(
 
     // Forward command to Server-Authoritative GameEngine
     const engine = getGameEngineForPin(normalizedPin);
+    const storedState = await gameStorage.getGameState(normalizedPin);
+    if (storedState) {
+      engine.initialize(storedState);
+    }
     const dispatchResult = engine.dispatch(commandPayload as ServerGameCommand);
 
-    // Broadcast updated public state and events to all connected clients via Supabase Realtime
+    // Persist updated authoritative state to Vercel KV Database
     if (dispatchResult.success && dispatchResult.state) {
+      await gameStorage.saveGameState(normalizedPin, dispatchResult.state);
       await realtimePublisher.publishState(normalizedPin, dispatchResult.state);
       await realtimePublisher.publishEvents(normalizedPin, dispatchResult.events);
     }
@@ -183,8 +189,22 @@ export async function GET(
     }
 
     const normalizedPin = pin.trim().toUpperCase();
+    const storedState = await gameStorage.getGameState(normalizedPin);
     const engine = getGameEngineForPin(normalizedPin);
-    const state = engine.getState();
+    if (storedState && (!engine.getState() || (storedState.version || 0) > (engine.getState()?.version || 0))) {
+      engine.initialize(storedState);
+    }
+
+    // Serverless-friendly phase expiry check: advances countdown / question phase automatically
+    if (engine.isPhaseExpired()) {
+      engine.handlePhaseTimeout();
+      const updated = engine.getState();
+      if (updated) {
+        await gameStorage.saveGameState(normalizedPin, updated);
+      }
+    }
+
+    const state = engine.getState() || storedState;
     const publicState = state ? toPublicGameState(state) : null;
 
     return NextResponse.json({

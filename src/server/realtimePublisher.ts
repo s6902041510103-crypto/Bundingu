@@ -19,6 +19,7 @@ import type { GameEvent } from '@/domain/types';
 import type { GameEngine } from '@/server/gameEngine';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { EventEmitter } from 'events';
+import { gameStorage } from '@/server/storage';
 
 interface GameChannels {
   stateChannel: RealtimeChannel | null;
@@ -186,6 +187,10 @@ class RealtimePublisher {
     const unsubscribe = engine.on('game_event', (event: any) => {
       if (event?.type === 'GAME_STATE_UPDATED' && event?.gameState) {
         this.publishState(normalizedPin, event.gameState).catch(console.error);
+        const currentState = engine.getState();
+        if (currentState) {
+          gameStorage.saveGameState(normalizedPin, currentState).catch(console.error);
+        }
       }
       this.publishEvent(normalizedPin, event).catch(console.error);
     });
