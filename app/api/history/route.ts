@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { getGameHistoryByPinOrId, listGameHistory } from "@/lib/server/repository";
+import { cookies } from "next/headers";
+import {
+  getGameHistoryByPinOrId,
+  listGameHistory,
+  verifyTeacherSessionToken,
+} from "@/lib/server/repository";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -13,6 +18,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ record: item });
   }
 
-  const history = listGameHistory();
+  const cookieStore = await cookies();
+  const token = cookieStore.get("ks_teacher_token")?.value;
+  const session = verifyTeacherSessionToken(token);
+
+  if (!session) {
+    return NextResponse.json({ history: [] });
+  }
+
+  const history = listGameHistory(session.teacherId);
   return NextResponse.json({ history });
 }

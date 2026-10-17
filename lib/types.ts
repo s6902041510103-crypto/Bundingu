@@ -301,6 +301,7 @@ export interface PlayerReportRow {
 export interface GameHistoryRecord {
   id: string;
   pin: string;
+  teacherId?: string;
   title: string;
   subject: string;
   grade: string;

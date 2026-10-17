@@ -135,13 +135,33 @@ class FileStorageAdapter implements StorageAdapter {
   }
 }
 
+class InMemoryStorageAdapter implements StorageAdapter {
+  private data: StorageSchema = {
+    questions: QUESTIONS.map((q) => ({ ...q })),
+    history: buildInitialHistory(),
+    sessions: [],
+    teachers: buildInitialTeachers(),
+  };
+
+  read(): StorageSchema {
+    return this.data;
+  }
+
+  write(data: StorageSchema): void {
+    this.data = data;
+  }
+}
+
 const globalForRepo = globalThis as unknown as {
   __ksStorageAdapter?: StorageAdapter;
 };
 
 export function getStorageAdapter(): StorageAdapter {
   if (!globalForRepo.__ksStorageAdapter) {
-    globalForRepo.__ksStorageAdapter = new FileStorageAdapter();
+    globalForRepo.__ksStorageAdapter =
+      process.env.KS_TEST_MODE === "1"
+        ? new InMemoryStorageAdapter()
+        : new FileStorageAdapter();
   }
   return globalForRepo.__ksStorageAdapter;
 }
@@ -291,9 +311,12 @@ export function deleteQuestionRecord(id: string): { deleted: boolean; error?: st
  * History & Reports Repository
  * ------------------------------------------------------------------ */
 
-export function listGameHistory(): GameHistoryRecord[] {
+export function listGameHistory(teacherId?: string): GameHistoryRecord[] {
   const store = getStorageAdapter().read();
-  return [...store.history].sort((a, b) => b.createdAt - a.createdAt);
+  const list = teacherId
+    ? store.history.filter((h) => h.teacherId === teacherId)
+    : [...store.history];
+  return list.sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export function getGameHistoryByPinOrId(pinOrId: string): GameHistoryRecord | null {

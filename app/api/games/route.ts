@@ -12,9 +12,24 @@ import {
 } from "@/lib/server/repository";
 
 export async function GET() {
-  const activeRooms = listActiveServerRooms().map((r) => toPublicGameState(r));
-  const history = listGameHistory();
+  const cookieStore = await cookies();
+  const token = cookieStore.get("ks_teacher_token")?.value;
+  const session = verifyTeacherSessionToken(token);
+
   const questions = listQuestions();
+
+  if (!session) {
+    return NextResponse.json({
+      activeRooms: [],
+      history: [],
+      questionsCount: questions.length,
+    });
+  }
+
+  const activeRooms = listActiveServerRooms(session.teacherId).map((r) =>
+    toPublicGameState(r),
+  );
+  const history = listGameHistory(session.teacherId);
 
   return NextResponse.json({
     activeRooms,

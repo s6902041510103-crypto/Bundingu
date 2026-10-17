@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+process.env.KS_TEST_MODE = "1";
 
 registerHooks({
   resolve(specifier, context, nextResolve) {

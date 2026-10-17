@@ -129,6 +129,7 @@ function syncRoomToHistory(room: ServerRoom): void {
   const record: GameHistoryRecord = {
     id: state.game.id,
     pin: room.pin,
+    teacherId: room.teacherId,
     title: state.game.title,
     subject: state.game.subject,
     grade: state.game.grade,
@@ -193,8 +194,12 @@ export function getServerRoom(pin: string): ServerRoom | null {
   return null;
 }
 
-export function listActiveServerRooms(): ServerRoom[] {
-  return Array.from(getRoomMap().values());
+export function listActiveServerRooms(teacherId?: string): ServerRoom[] {
+  const rooms = Array.from(getRoomMap().values());
+  if (teacherId) {
+    return rooms.filter((r) => r.teacherId === teacherId);
+  }
+  return rooms;
 }
 
 export interface CreateGameInput {
