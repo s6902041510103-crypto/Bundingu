@@ -12,14 +12,39 @@ import {
 } from "./game-data";
 import type {
   ActiveQuestion,
+  GameAction,
   GameState,
+  LadderLink,
   LeaderboardEntry,
   Player,
   Question,
   SnakeLink,
-  LadderLink,
   SpecialCell,
+  SpecialEventState,
 } from "./types";
+
+export type { GameAction };
+
+/* ------------------------------------------------------------------ *
+ * Helpers for Set / Array enabledSpecials
+ * ------------------------------------------------------------------ */
+
+export function isSpecialEnabled(
+  enabledSpecials: Set<string> | string[] | undefined,
+  kind: string,
+): boolean {
+  if (!enabledSpecials) return false;
+  if (enabledSpecials instanceof Set) return enabledSpecials.has(kind);
+  if (Array.isArray(enabledSpecials)) return enabledSpecials.includes(kind);
+  return false;
+}
+
+export function normalizeSpecialsArray(enabledSpecials: Set<string> | string[] | undefined): string[] {
+  if (!enabledSpecials) return ["star", "gift", "boost"];
+  if (enabledSpecials instanceof Set) return Array.from(enabledSpecials);
+  if (Array.isArray(enabledSpecials)) return enabledSpecials;
+  return ["star", "gift", "boost"];
+}
 
 /* ------------------------------------------------------------------ *
  * Leaderboard
@@ -30,32 +55,50 @@ export function computeLeaderboard(players: Player[]): LeaderboardEntry[] {
     if (a.finishRank && b.finishRank) return a.finishRank - b.finishRank;
     if (a.finishRank) return -1;
     if (b.finishRank) return 1;
+    if (b.score !== a.score) return b.score - a.score;
     return b.position - a.position;
   });
 
-  return sorted.map((player, index) => ({
-    rank: index + 1,
-    playerId: player.id,
-    name: player.name,
-    avatarId: player.avatarId,
-    position: player.position,
-    score: player.score,
-    isFinished: Boolean(player.finishRank),
-  }));
+  return sorted.map((player, index) => {
+    const answered = player.answeredCount ?? 0;
+    const correct = player.correctCount ?? 0;
+    const accuracyPercent = answered > 0 ? Math.round((correct / answered) * 100) : null;
+
+    return {
+      rank: index + 1,
+      playerId: player.id,
+      name: player.name,
+      avatarId: player.avatarId,
+      position: player.position,
+      score: player.score,
+      isFinished: Boolean(player.finishRank),
+      laddersClimbed: player.laddersClimbed ?? 0,
+      snakesBitten: player.snakesBitten ?? 0,
+      correctCount: correct,
+      answeredCount: answered,
+      accuracyPercent,
+    };
+  });
 }
 
 /* ------------------------------------------------------------------ *
  * Question helpers
  * ------------------------------------------------------------------ */
 
-function toActiveQuestion(question: Question, number: number, total: number): ActiveQuestion {
+export function toActiveQuestion(
+  question: Question,
+  number: number,
+  total: number,
+  timeLimit: number = GAME_SETTINGS.questionTimeLimit,
+): ActiveQuestion {
   return {
     ...question,
     number,
     total,
-    timeLimit: GAME_SETTINGS.questionTimeLimit,
-    timeLeft: GAME_SETTINGS.questionTimeLimit,
+    timeLimit,
+    timeLeft: timeLimit,
     revealed: false,
+    startedAt: Date.now(),
   };
 }
 
@@ -64,6 +107,7 @@ export function resetQuestionStates(players: Player[]): Player[] {
     ...player,
     answerState: "idle",
     selectedOptionId: null,
+    answeredAt: null,
   }));
 }
 
@@ -71,21 +115,59 @@ export function resetQuestionStates(players: Player[]): Player[] {
  * Board effects resolution
  * ------------------------------------------------------------------ */
 
-function resolveBoardEffect(
+export function resolveBoardEffect(
   position: number,
-  snakes: SnakeLink[],
-  ladders: LadderLink[],
-  specialCells: SpecialCell[],
-  enabledSpecials: Set<string>,
-): { kind: "snake" | "ladder" | "special"; from: number; to: number; label: string } | null {
+  snakes: SnakeLink[] = SNAKES,
+  ladders: LadderLink[] = LADDERS,
+  specialCells: SpecialCell[] = SPECIAL_CELLS,
+  enabledSpecials: Set<string> | string[] = ["star", "gift", "boost"],
+): {
+  kind: "snake" | "ladder" | "special";
+  specialKind?: "star" | "gift" | "boost";
+  from: number;
+  to: number;
+  label: string;
+  description: string;
+} | null {
   const snake = snakes.find((s) => s.from === position);
-  if (snake) return { kind: "snake", from: snake.from, to: snake.to, label: `🐍 ${snake.from} → ${snake.to}` };
+  if (snake) {
+    return {
+      kind: "snake",
+      from: snake.from,
+      to: snake.to,
+      label: `🐍 ตกหัวเจ้างู! ไหลลง ${snake.from} → ${snake.to}`,
+      description: `โดนงูที่ช่อง ${snake.from} ไหลลงไปช่อง ${snake.to}`,
+    };
+  }
 
   const ladder = ladders.find((l) => l.from === position);
-  if (ladder) return { kind: "ladder", from: ladder.from, to: ladder.to, label: `🪜 ${ladder.from} → ${ladder.to}` };
+  if (ladder) {
+    return {
+      kind: "ladder",
+      from: ladder.from,
+      to: ladder.to,
+      label: `🪜 พบบันไดวิเศษ! ปีนขึ้น ${ladder.from} → ${ladder.to}`,
+      description: `ขึ้นบันไดจากช่อง ${ladder.from} ไปยังช่อง ${ladder.to}`,
+    };
+  }
 
-  const special = specialCells.find((s) => s.at === position && enabledSpecials.has(s.kind));
-  if (special) return { kind: "special", from: position, to: position, label: `${special.emoji} ${special.label}` };
+  const special = specialCells.find(
+    (s) =>
+      s.at === position &&
+      (s.kind === "star" || s.kind === "gift" || s.kind === "boost") &&
+      isSpecialEnabled(enabledSpecials, s.kind),
+  );
+  if (special && (special.kind === "star" || special.kind === "gift" || special.kind === "boost")) {
+    const to = special.kind === "gift" ? Math.min(FINISH_AT, position + 3) : position;
+    return {
+      kind: "special",
+      specialKind: special.kind,
+      from: position,
+      to,
+      label: `${special.emoji} ${special.label} (ช่อง ${position})`,
+      description: special.description,
+    };
+  }
 
   return null;
 }
@@ -95,13 +177,13 @@ function resolveBoardEffect(
  * ------------------------------------------------------------------ */
 
 export function createInitialGameState(overrides: Partial<GameState> = {}): GameState {
-  const players = MOCK_PLAYERS.map((p) => ({ ...p }));
-  const enabledSpecials = new Set<string>();
+  const players = (overrides.players ?? MOCK_PLAYERS).map((p) => ({ ...p }));
+  const enabledSpecials = overrides.enabledSpecials ?? new Set<string>(["star", "gift", "boost"]);
   return {
     game: MOCK_GAME,
     gameStatus: "lobby",
     round: 0,
-    totalRounds: QUESTIONS.length,
+    totalRounds: 5,
     question: null,
     players,
     currentPlayerId: null,
@@ -114,40 +196,14 @@ export function createInitialGameState(overrides: Partial<GameState> = {}): Game
     viewerPlayerId: VIEWER_PLAYER_ID,
     movingPlayerId: null,
     movement: null,
+    activeSpecialEvent: null,
     rollQueue: [],
     pacingMode: "auto",
-    lastEvent: "SYSTEM · สร้างห้องเกมแล้ว",
+    lastEvent: "SYSTEM · สร้างห้องเกมสำเร็จ พร้อมรอผู้เล่น",
     updatedAt: Date.now(),
     ...overrides,
   };
 }
-
-/* ------------------------------------------------------------------ *
- * Actions
- * ------------------------------------------------------------------ */
-
-export type GameAction =
-  | { type: "PLAYER_JOINED"; player: Player }
-  | { type: "PLAYER_READY"; playerId: string; ready: boolean }
-  | { type: "GAME_STARTED" }
-  | { type: "QUESTION_STARTED"; questionIndex: number }
-  | { type: "TIMER_TICK" }
-  | { type: "ANSWER_SELECTED"; playerId: string; optionId: string }
-  | { type: "ANSWERS_REVEALED" }
-  | { type: "DICE_ROLL_STARTED"; playerId: string }
-  | { type: "DICE_ROLLED"; playerId: string; value: number }
-  | { type: "MOVEMENT_STARTED"; playerId: string; steps: number }
-  | { type: "MOVEMENT_STEP" }
-  | { type: "MOVEMENT_FINISHED" }
-  | { type: "BOARD_EFFECT_TRIGGERED"; effect: ReturnType<typeof resolveBoardEffect> }
-  | { type: "NEXT_TURN" }
-  | { type: "GAME_FINISHED" }
-  | { type: "EVENT_LOGGED"; message: string }
-  | { type: "STATE_REPLACED"; state: GameState }
-  | { type: "TOGGLE_SPECIAL"; kind: string; enabled: boolean }
-  | { type: "SET_TOTAL_ROUNDS"; total: number }
-  | { type: "SET_PACING_MODE"; mode: "auto" | "manual" }
-  | { type: "SET_ROLL_QUEUE"; queue: string[] };
 
 const withLeaderboard = (state: GameState, players: Player[]): GameState => ({
   ...state,
@@ -158,7 +214,13 @@ const withLeaderboard = (state: GameState, players: Player[]): GameState => ({
 export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "PLAYER_JOINED": {
-      const players = [...state.players, action.player];
+      const existingIdx = state.players.findIndex(
+        (p) => p.id === action.player.id || p.name.toLowerCase() === action.player.name.toLowerCase(),
+      );
+      const players =
+        existingIdx >= 0
+          ? state.players.map((p, idx) => (idx === existingIdx ? { ...p, ...action.player, connected: true } : p))
+          : [...state.players, action.player];
       return withLeaderboard(
         { ...state, lastEvent: `SYSTEM · ${action.player.name} เข้าร่วมห้อง`, updatedAt: Date.now() },
         players,
@@ -179,31 +241,37 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         gameStatus: "question",
         round: 1,
         totalRounds: state.totalRounds,
-        question: toActiveQuestion(firstQuestion, 1, state.totalRounds),
+        question: toActiveQuestion(firstQuestion, 1, state.totalRounds, state.settings.questionTimeLimit),
         players: resetQuestionStates(state.players),
         currentPlayerId: state.players.find((p) => !p.isBot)?.id ?? state.players[0]?.id ?? null,
         dice: { value: null, rolling: false, rolledBy: null, lastReason: null },
+        activeSpecialEvent: null,
         rollQueue: [],
         pacingMode: "auto",
-        lastEvent: "HOST · เริ่มเกมแล้ว",
+        lastEvent: "HOST · เริ่มเกมรอบที่ 1",
         updatedAt: Date.now(),
       };
     }
 
     case "QUESTION_STARTED": {
+      // Do not allow starting a new question while a Special Event is still unresolved
+      if (state.activeSpecialEvent && !state.activeSpecialEvent.resolved) {
+        return state;
+      }
       const question = QUESTIONS[action.questionIndex % QUESTIONS.length];
-      const nextRound = state.round + 1;
+      const nextRound = Math.min(state.totalRounds, state.round + 1);
       return {
         ...state,
         gameStatus: "question",
-        round: nextRound > state.totalRounds ? state.totalRounds : nextRound,
-        question: toActiveQuestion(question, nextRound, state.totalRounds),
+        round: nextRound,
+        question: toActiveQuestion(question, nextRound, state.totalRounds, state.settings.questionTimeLimit),
         players: resetQuestionStates(state.players),
         dice: { value: null, rolling: false, rolledBy: null, lastReason: null },
         rollQueue: [],
         movingPlayerId: null,
         movement: null,
-        lastEvent: `SYSTEM · รอบ ${nextRound} — ${question.prompt.slice(0, 30)}…`,
+        activeSpecialEvent: null,
+        lastEvent: `SYSTEM · รอบที่ ${nextRound} — ${question.prompt.slice(0, 36)}`,
         updatedAt: Date.now(),
       };
     }
@@ -212,12 +280,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (!state.question || state.question.revealed) return state;
       const timeLeft = Math.max(0, state.question.timeLeft - 1);
       if (timeLeft === 0) {
-        // Auto-reveal when timer hits 0
+        const correctPlayers = state.players
+          .filter((p) => p.answerState === "correct" || p.bonusNextTurn)
+          .sort((a, b) => (a.answeredAt ?? Infinity) - (b.answeredAt ?? Infinity));
+        const queue = correctPlayers.map((p) => p.id);
         return {
           ...state,
-          gameStatus: "reveal",
+          gameStatus: queue.length > 0 ? "dice" : "reveal",
+          currentPlayerId: queue[0] ?? null,
           question: { ...state.question, timeLeft: 0, revealed: true },
-          lastEvent: "SYSTEM · หมดเวลา — เฉลยคำตอบ",
+          rollQueue: queue,
+          lastEvent: `SYSTEM · หมดเวลา — เฉลยคำตอบ (${correctPlayers.length} คนได้ทอยลูกเต๋า)`,
           updatedAt: Date.now(),
         };
       }
@@ -225,32 +298,38 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case "ANSWER_SELECTED": {
-      if (!state.question) return state;
-      const players = state.players.map((p) =>
-        p.id === action.playerId
-          ? {
-              ...p,
-              selectedOptionId: action.optionId,
-              answerState: action.optionId === state.question!.correctOptionId
-                ? ("correct" as const)
-                : ("wrong" as const),
-            }
-          : p,
-      );
+      if (!state.question || state.question.revealed) return state;
+      const isCorrect = action.optionId === state.question.correctOptionId;
+      const players = state.players.map((p) => {
+        if (p.id !== action.playerId) return p;
+        // Prevent double-answering
+        if (p.selectedOptionId !== null) return p;
+        return {
+          ...p,
+          selectedOptionId: action.optionId,
+          answeredAt: Date.now(),
+          answerState: isCorrect ? ("correct" as const) : ("wrong" as const),
+          answeredCount: (p.answeredCount ?? 0) + 1,
+          correctCount: (p.correctCount ?? 0) + (isCorrect ? 1 : 0),
+        };
+      });
       return withLeaderboard({ ...state, gameStatus: "answering", updatedAt: Date.now() }, players);
     }
 
     case "ANSWERS_REVEALED": {
       if (!state.question) return state;
       const correctPlayers = state.players
-        .filter((p) => p.answerState === "correct")
-        .sort((a, b) => (a.selectedOptionId === state.question!.correctOptionId ? -1 : 1));
+        .filter((p) => p.answerState === "correct" || p.bonusNextTurn)
+        .sort((a, b) => (a.answeredAt ?? Infinity) - (b.answeredAt ?? Infinity));
+      const queue = correctPlayers.map((p) => p.id);
       return {
         ...state,
-        gameStatus: "reveal",
-        question: { ...state.question, revealed: true },
-        rollQueue: correctPlayers.map((p) => p.id),
-        lastEvent: `SYSTEM · เฉลยแล้ว — ${correctPlayers.length} คนตอบถูก รอทอยลูกเต๋า`,
+        gameStatus: queue.length > 0 ? "dice" : "reveal",
+        currentPlayerId: queue[0] ?? null,
+        question: { ...state.question, revealed: true, timeLeft: 0 },
+        players: state.players.map((p) => ({ ...p, bonusNextTurn: false })),
+        rollQueue: queue,
+        lastEvent: `SYSTEM · เฉลยแล้ว — ${correctPlayers.length} คนได้รับสิทธิ์ทอยลูกเต๋า`,
         updatedAt: Date.now(),
       };
     }
@@ -261,7 +340,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         gameStatus: "dice",
         dice: { ...state.dice, rolling: true, rolledBy: action.playerId },
         currentPlayerId: action.playerId,
-        lastEvent: `${state.players.find((p) => p.id === action.playerId)?.name} · กำลังทอยลูกเต๋า`,
+        lastEvent: `${state.players.find((p) => p.id === action.playerId)?.name ?? "ผู้เล่น"} · กำลังทอยลูกเต๋า`,
         updatedAt: Date.now(),
       };
 
@@ -279,10 +358,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "MOVEMENT_STARTED": {
       const player = state.players.find((p) => p.id === action.playerId);
       if (!player) return state;
-      const path = walkPath(player.position, action.steps, FINISH_AT);
-      const finalPos = path.length ? path[path.length - 1] : player.position;
-      const bounced = finalPos > FINISH_AT ? FINISH_AT - (finalPos - FINISH_AT) : finalPos;
-      const actualPath = bounced !== finalPos ? [...path.slice(0, -1), bounced] : path;
+      const actualPath = walkPath(player.position, action.steps, FINISH_AT);
+      const targetPos = actualPath.length ? actualPath[actualPath.length - 1] : player.position;
       return {
         ...state,
         gameStatus: "moving",
@@ -291,11 +368,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           playerId: action.playerId,
           kind: "walk",
           from: player.position,
-          to: actualPath.length ? actualPath[actualPath.length - 1] : player.position,
+          to: targetPos,
           step: 0,
           path: actualPath,
         },
-        lastEvent: `${player.name} · เดิน ${actualPath.length} ช่อง`,
+        lastEvent: `${player.name} · เดิน ${action.steps} ช่อง (${player.position} → ${targetPos})`,
         updatedAt: Date.now(),
       };
     }
@@ -303,15 +380,19 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "MOVEMENT_STEP": {
       if (!state.movement) return state;
       const { path, step, playerId } = state.movement;
-      if (step + 1 >= path.length) return state;
+      if (step >= path.length) return state;
+      const position = path[step];
       const nextStep = step + 1;
-      const position = path[nextStep];
-      return {
-        ...state,
-        movement: { ...state.movement, step: nextStep },
-        players: state.players.map((p) => (p.id === playerId ? { ...p, position } : p)),
-        updatedAt: Date.now(),
-      };
+      return withLeaderboard(
+        {
+          ...state,
+          movement: { ...state.movement, step: nextStep },
+          updatedAt: Date.now(),
+        },
+        state.players.map((p) =>
+          p.id === playerId ? { ...p, position, score: position + (p.finishRank ? (GAME_SETTINGS.finishBonuses[p.finishRank - 1] ?? 0) : 0) } : p,
+        ),
+      );
     }
 
     case "MOVEMENT_FINISHED": {
@@ -319,8 +400,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const player = state.players.find((p) => p.id === state.movement!.playerId);
       if (!player) return { ...state, movement: null, movingPlayerId: null, updatedAt: Date.now() };
 
+      const landedPos = state.movement.to;
       const effect = resolveBoardEffect(
-        player.position,
+        landedPos,
         SNAKES,
         LADDERS,
         SPECIAL_CELLS,
@@ -328,42 +410,118 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       );
 
       if (effect) {
-        // Trigger board effect (snake/ladder/special)
-        return {
-          ...state,
-          movement: { ...state.movement, kind: effect.kind },
-          lastEvent: `${player.name} · ${effect.label}`,
-          updatedAt: Date.now(),
+        const finalPos = effect.to;
+        const updatedPlayers = state.players.map((p) => {
+          if (p.id !== player.id) return p;
+          return {
+            ...p,
+            position: finalPos,
+            score: finalPos + (p.finishRank ? (GAME_SETTINGS.finishBonuses[p.finishRank - 1] ?? 0) : 0),
+            snakesBitten: (p.snakesBitten ?? 0) + (effect.kind === "snake" ? 1 : 0),
+            laddersClimbed: (p.laddersClimbed ?? 0) + (effect.kind === "ladder" ? 1 : 0),
+            specialEventsTriggered: (p.specialEventsTriggered ?? 0) + (effect.kind === "special" ? 1 : 0),
+            bonusNextTurn: effect.specialKind === "boost" ? true : p.bonusNextTurn,
+          };
+        });
+
+        const specialEvent: SpecialEventState = {
+          id: `evt-${Date.now()}`,
+          playerId: player.id,
+          playerName: player.name,
+          avatarId: player.avatarId,
+          kind: effect.kind === "special" ? (effect.specialKind ?? "star") : effect.kind,
+          from: effect.from,
+          to: effect.to,
+          title: effect.label,
+          description: effect.description,
+          resolved: false,
+          bonusRollGranted: effect.specialKind === "star",
         };
+
+        // Keep player in queue if STAR bonus roll granted, otherwise remove after event resolves
+        const nextQueue =
+          effect.specialKind === "star"
+            ? state.rollQueue
+            : state.rollQueue.filter((id) => id !== player.id);
+
+        return withLeaderboard(
+          {
+            ...state,
+            gameStatus: "special_event",
+            movement: null,
+            movingPlayerId: null,
+            activeSpecialEvent: specialEvent,
+            rollQueue: nextQueue,
+            currentPlayerId: nextQueue[0] ?? null,
+            lastEvent: `${player.name} · ${effect.label}`,
+            updatedAt: Date.now(),
+          },
+          updatedPlayers,
+        );
       }
 
-      // Check finish
-      if (player.position >= FINISH_AT) {
-        const finishedCount = state.players.filter((p) => p.finishRank).length + 1;
+      // Check finish (exact landing on 100)
+      if (landedPos === FINISH_AT) {
+        const alreadyFinished = Boolean(player.finishRank);
+        const finishedCount = alreadyFinished
+          ? player.finishRank!
+          : state.players.filter((p) => p.finishRank).length + 1;
         const bonus = GAME_SETTINGS.finishBonuses[finishedCount - 1] ?? 0;
-        return {
-          ...state,
-          movement: null,
-          movingPlayerId: null,
-          players: state.players.map((p) =>
-            p.id === player.id
-              ? { ...p, position: FINISH_AT, finishRank: finishedCount, score: p.position + bonus }
-              : p,
-          ),
-          rollQueue: state.rollQueue.filter((id) => id !== player.id),
-          gameStatus: state.rollQueue.length > 1 ? "dice" : "reveal",
-          lastEvent: `${player.name} · 🏁 เข้าชัยอันดับ ${finishedCount}!`,
-          updatedAt: Date.now(),
-        };
+        const nextQueue = state.rollQueue.filter((id) => id !== player.id);
+        const updatedPlayers = state.players.map((p) =>
+          p.id === player.id
+            ? { ...p, position: FINISH_AT, finishRank: finishedCount, score: FINISH_AT + bonus }
+            : p,
+        );
+        return withLeaderboard(
+          {
+            ...state,
+            movement: null,
+            movingPlayerId: null,
+            rollQueue: nextQueue,
+            currentPlayerId: nextQueue[0] ?? null,
+            gameStatus: nextQueue.length > 0 ? "dice" : "reveal",
+            lastEvent: `${player.name} · 🏁 เข้าเส้นชัยอันดับที่ ${finishedCount}! (+${bonus} โบนัส)`,
+            updatedAt: Date.now(),
+          },
+          updatedPlayers,
+        );
       }
 
       // Normal end of movement
+      const nextQueue = state.rollQueue.filter((id) => id !== player.id);
+      const updatedPlayers = state.players.map((p) =>
+        p.id === player.id
+          ? {
+              ...p,
+              position: landedPos,
+              score: landedPos + (p.finishRank ? (GAME_SETTINGS.finishBonuses[p.finishRank - 1] ?? 0) : 0),
+            }
+          : p,
+      );
+      return withLeaderboard(
+        {
+          ...state,
+          movement: null,
+          movingPlayerId: null,
+          rollQueue: nextQueue,
+          currentPlayerId: nextQueue[0] ?? null,
+          gameStatus: nextQueue.length > 0 ? "dice" : "reveal",
+          updatedAt: Date.now(),
+        },
+        updatedPlayers,
+      );
+    }
+
+    case "RESOLVE_SPECIAL_EVENT": {
+      if (!state.activeSpecialEvent) return state;
+      const nextQueue = state.rollQueue;
       return {
         ...state,
-        movement: null,
-        movingPlayerId: null,
-        rollQueue: state.rollQueue.filter((id) => id !== player.id),
-        gameStatus: state.rollQueue.length > 1 ? "dice" : "reveal",
+        activeSpecialEvent: { ...state.activeSpecialEvent, resolved: true },
+        gameStatus: nextQueue.length > 0 ? "dice" : "reveal",
+        currentPlayerId: nextQueue[0] ?? null,
+        lastEvent: `SYSTEM · จบเหตุการณ์พิเศษของ ${state.activeSpecialEvent.playerName}`,
         updatedAt: Date.now(),
       };
     }
@@ -391,33 +549,43 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         };
       }
 
-      if (kind === "special") {
-        // Special effects are applied after the turn ends
-        return {
-          ...state,
-          lastEvent: `${player.name} · ${label}`,
-          updatedAt: Date.now(),
-        };
-      }
-
-      return state;
+      return {
+        ...state,
+        lastEvent: `${player.name} · ${label}`,
+        updatedAt: Date.now(),
+      };
     }
 
     case "NEXT_TURN": {
+      if (state.activeSpecialEvent && !state.activeSpecialEvent.resolved) {
+        return state;
+      }
       const nextPlayerId = state.rollQueue[0] ?? null;
       if (!nextPlayerId) {
-        // Round complete
         if (state.round >= state.totalRounds) {
-          return { ...state, gameStatus: "finished", lastEvent: "SYSTEM · จบเกม — ขอแสดงผลคะแนน", updatedAt: Date.now() };
+          return {
+            ...state,
+            gameStatus: "finished",
+            activeSpecialEvent: null,
+            lastEvent: "SYSTEM · จบการแข่งขัน — สรุปผลคะแนนและอันดับ",
+            updatedAt: Date.now(),
+          };
         }
+        const nextRound = state.round + 1;
         return {
           ...state,
           gameStatus: "question",
-          round: state.round + 1,
-          question: toActiveQuestion(QUESTIONS[state.round % QUESTIONS.length], state.round + 1, state.totalRounds),
+          round: nextRound,
+          question: toActiveQuestion(
+            QUESTIONS[(nextRound - 1) % QUESTIONS.length],
+            nextRound,
+            state.totalRounds,
+            state.settings.questionTimeLimit,
+          ),
           players: resetQuestionStates(state.players),
           dice: { value: null, rolling: false, rolledBy: null, lastReason: null },
           rollQueue: [],
+          activeSpecialEvent: null,
           currentPlayerId: state.players.find((p) => !p.isBot)?.id ?? state.players[0]?.id ?? null,
           updatedAt: Date.now(),
         };
@@ -427,6 +595,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         currentPlayerId: nextPlayerId,
         dice: { value: null, rolling: false, rolledBy: null, lastReason: null },
         gameStatus: "dice",
+        activeSpecialEvent: null,
         updatedAt: Date.now(),
       };
     }
@@ -435,7 +604,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return {
         ...state,
         gameStatus: "finished",
-        lastEvent: "SYSTEM · จบเกม ขอแสดงผลคะแนน",
+        activeSpecialEvent: null,
+        movement: null,
+        movingPlayerId: null,
+        lastEvent: "SYSTEM · จบเกม — แสดงผลคะแนนสุดท้าย",
         updatedAt: Date.now(),
       };
 
@@ -443,13 +615,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, lastEvent: action.message, updatedAt: Date.now() };
 
     case "STATE_REPLACED":
-      return { ...action.state, updatedAt: Date.now() };
+      return { ...action.state, updatedAt: action.state.updatedAt || Date.now() };
 
     case "TOGGLE_SPECIAL": {
-      const newEnabled = new Set(state.enabledSpecials);
-      if (action.enabled) newEnabled.add(action.kind);
-      else newEnabled.delete(action.kind);
-      return { ...state, enabledSpecials: newEnabled, updatedAt: Date.now() };
+      const currentArr = normalizeSpecialsArray(state.enabledSpecials);
+      const newSet = new Set(currentArr);
+      if (action.enabled) newSet.add(action.kind);
+      else newSet.delete(action.kind);
+      return { ...state, enabledSpecials: newSet, updatedAt: Date.now() };
     }
 
     case "SET_TOTAL_ROUNDS":

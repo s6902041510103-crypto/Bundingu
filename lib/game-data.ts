@@ -6,24 +6,25 @@ import type {
   LadderLink,
   Player,
   Question,
+  QuestionDifficulty,
   SnakeLink,
   SpecialCell,
 } from "./types";
 
 /* ------------------------------------------------------------------ *
- * Avatar roster — the single avatar set used everywhere
+ * Avatar roster — the single animal avatar set used everywhere
  * ------------------------------------------------------------------ */
 
 export const AVATARS: Avatar[] = [
   { id: "fox", emoji: "🦊", label: "Fox", labelTh: "สุนัขจิ้งจอก", primary: "#fb923c", secondary: "#fff7ed", accent: "#c2410c", ring: "#fb923c" },
-  { id: "panda", emoji: "🐼", label: "Panda", labelTh: "แพนด้า", primary: "#f1f5f9", secondary: "#1f2937", accent: "#111827", ring: "#94a3b8" },
+  { id: "panda", emoji: "🐼", label: "Panda", labelTh: "แพนด้า", primary: "#f1f5f9", secondary: "#334155", accent: "#0f172a", ring: "#94a3b8" },
   { id: "tiger", emoji: "🐯", label: "Tiger", labelTh: "เสือ", primary: "#f59e0b", secondary: "#fef3c7", accent: "#b45309", ring: "#f59e0b" },
   { id: "frog", emoji: "🐸", label: "Frog", labelTh: "กบ", primary: "#4ade80", secondary: "#dcfce7", accent: "#15803d", ring: "#4ade80" },
   { id: "cat", emoji: "🐱", label: "Cat", labelTh: "แมว", primary: "#a5b4fc", secondary: "#eef2ff", accent: "#4338ca", ring: "#a5b4fc" },
   { id: "bear", emoji: "🐻", label: "Bear", labelTh: "หมี", primary: "#d6a17a", secondary: "#fef3e2", accent: "#7c4a21", ring: "#d6a17a" },
   { id: "rabbit", emoji: "🐰", label: "Rabbit", labelTh: "กระต่าย", primary: "#fbcfe8", secondary: "#fdf2f8", accent: "#be185d", ring: "#fbcfe8" },
   { id: "penguin", emoji: "🐧", label: "Penguin", labelTh: "เพนกวิน", primary: "#38bdf8", secondary: "#f0f9ff", accent: "#075985", ring: "#38bdf8" },
-  { id: "lion", emoji: "🦁", label: "Lion", labelTh: "สิงห์", primary: "#fbbf24", secondary: "#fef3c7", accent: "#92400e", ring: "#fbbf24" },
+  { id: "lion", emoji: "🦁", label: "Lion", labelTh: "สิงโต", primary: "#fbbf24", secondary: "#fef3c7", accent: "#92400e", ring: "#fbbf24" },
   { id: "koala", emoji: "🐨", label: "Koala", labelTh: "โคอาลา", primary: "#cbd5e1", secondary: "#f1f5f9", accent: "#475569", ring: "#cbd5e1" },
   { id: "monkey", emoji: "🐵", label: "Monkey", labelTh: "ลิง", primary: "#fdba74", secondary: "#fef3c7", accent: "#9a3412", ring: "#fdba74" },
   { id: "dog", emoji: "🐶", label: "Dog", labelTh: "สุนัข", primary: "#fcd34d", secondary: "#fffbeb", accent: "#a16207", ring: "#fcd34d" },
@@ -38,7 +39,9 @@ export function getAvatar(id: string): Avatar {
 }
 
 /* ------------------------------------------------------------------ *
- * Board configuration — snakes send players DOWN, ladders send them UP
+ * Board configuration — exact 4 Snakes & 4 Ladders per specification
+ * Snakes: 98→62, 84→43, 65→31, 47→19
+ * Ladders: 7→28, 21→56, 43→78, 61→89
  * ------------------------------------------------------------------ */
 
 export const SNAKES: SnakeLink[] = [
@@ -46,8 +49,6 @@ export const SNAKES: SnakeLink[] = [
   { from: 84, to: 43 },
   { from: 65, to: 31 },
   { from: 47, to: 19 },
-  { from: 36, to: 16 },
-  { from: 77, to: 55 },
 ];
 
 export const LADDERS: LadderLink[] = [
@@ -55,16 +56,14 @@ export const LADDERS: LadderLink[] = [
   { from: 21, to: 56 },
   { from: 43, to: 78 },
   { from: 61, to: 89 },
-  { from: 14, to: 36 },
-  { from: 33, to: 54 },
 ];
 
 export const SPECIAL_CELLS: SpecialCell[] = [
   { at: 1, kind: "start", label: "START", emoji: "🚩", description: "จุดเริ่มต้นของทุกคน" },
-  { at: 25, kind: "star", label: "BONUS", emoji: "⭐", description: "ช่องดาว — ได้สิทธิ์ทอยโบนัส" },
-  { at: 50, kind: "gift", label: "GIFT", emoji: "🎁", description: "ช่องของขวัญ — โบนัสพิเศษ" },
-  { at: 75, kind: "boost", label: "BOOST", emoji: "✨", description: "ช่องเร่ง — เดินต่อได้อีกครั้ง" },
-  { at: BOARD_TOTAL, kind: "finish", label: "FINISH", emoji: "🏁", description: "เส้นชัย — คะแนนสูงสุด" },
+  { at: 25, kind: "star", label: "BONUS", emoji: "⭐", description: "ช่องดาว — ได้สิทธิ์ทอยลูกเต๋าโบนัสอีกครั้ง!" },
+  { at: 50, kind: "gift", label: "GIFT", emoji: "🎁", description: "ช่องของขวัญ — เดินหน้าเพิ่มทันที 3 ช่อง!" },
+  { at: 75, kind: "boost", label: "BOOST", emoji: "✨", description: "ช่องเร่งความเร็ว — ได้สิทธิ์ทอยในรอบถัดไปทันที!" },
+  { at: BOARD_TOTAL, kind: "finish", label: "FINISH", emoji: "🏁", description: "เส้นชัย — พิชิตช่องที่ 100 สำเร็จ!" },
 ];
 
 /* ------------------------------------------------------------------ *
@@ -73,7 +72,7 @@ export const SPECIAL_CELLS: SpecialCell[] = [
 
 export const GAME_SETTINGS: GameSettings = {
   maxPlayers: 40,
-  questionTimeLimit: 15,
+  questionTimeLimit: 20,
   diceMin: 1,
   diceMax: 6,
   finishBonuses: [3, 2, 1],
@@ -81,17 +80,37 @@ export const GAME_SETTINGS: GameSettings = {
 };
 
 export const MOCK_GAME: GameInfo = {
-  id: "game-482913",
-  pin: "482913",
-  title: "ผจญภัยนักเรียนแห่งวิทยาลัย",
-  subject: "วิทยาศาสตร์",
-  grade: "มัธยมศึกษาปีที่ 6",
-  hostName: "ครูณัฐวุฒิ (โก้)",
-  school: "โรงเรียนสาธิตเทคโนโลยี",
+  id: "game-123456",
+  pin: "123456",
+  title: "Math Challenge",
+  subject: "คณิตศาสตร์",
+  grade: "มัธยมศึกษาปีที่ 1",
+  hostName: "ครูสมชาย ใจดี",
+  school: "โรงเรียนสาธิตพิชิตความรู้",
+  createdAt: Date.now() - 1800000,
 };
 
+export const SUBJECTS = [
+  "คณิตศาสตร์",
+  "วิทยาศาสตร์",
+  "สังคมศึกษา",
+  "ประวัติศาสตร์",
+  "ภาษาอังกฤษ",
+  "เทคโนโลยี",
+] as const;
+
+export const QUESTION_SETS = [
+  { id: "set-all", label: "รวมทุกหมวดหมู่ (All Subjects)", subject: "ทั้งหมด" },
+  { id: "set-math", label: "คณิตศาสตร์ ม.1 (Math Challenge)", subject: "คณิตศาสตร์" },
+  { id: "set-science", label: "วิทยาศาสตร์พื้นฐาน (Science Quiz)", subject: "วิทยาศาสตร์" },
+  { id: "set-social", label: "สังคมศึกษาและอาเซียน (Social Studies)", subject: "สังคมศึกษา" },
+  { id: "set-history", label: "ประวัติศาสตร์ไทย (History Fun)", subject: "ประวัติศาสตร์" },
+  { id: "set-english", label: "ภาษาอังกฤษเพื่อการสื่อสาร (English Test)", subject: "ภาษาอังกฤษ" },
+  { id: "set-tech", label: "วิทยาการคำนวณและเทคโนโลยี (Tech Quiz)", subject: "เทคโนโลยี" },
+];
+
 /* ------------------------------------------------------------------ *
- * Questions
+ * Initial Question Bank
  * ------------------------------------------------------------------ */
 
 const q = (
@@ -101,146 +120,186 @@ const q = (
   options: string[],
   correctIndex: number,
   explanation: string,
+  difficulty: QuestionDifficulty = "medium",
   hint?: string,
 ): Question => ({
   id,
   subject,
   prompt,
   hint,
+  difficulty,
   options: options.map((text, index) => ({
     id: `${id}-${String.fromCharCode(65 + index)}`,
     text,
   })),
   correctOptionId: `${id}-${String.fromCharCode(65 + correctIndex)}`,
   explanation,
+  createdAt: 1760000000000,
 });
 
 export const QUESTIONS: Question[] = [
   q(
     "q1",
-    "พลังงาน",
-    "ข้อใดเป็นพลังงานทดแทน (พลังงานหมุนเวียน)?",
-    ["ถ่านหิน", "น้ำมัน", "พลังงานแสงอาทิตย์", "ก๊าซธรรมชาติ"],
-    2,
-    "แสงอาทิตย์เป็นพลังงานที่เกิดขึ้นใหม่ได้เรื่อย ๆ จึงถือเป็นพลังงานทดแทน ส่วนถ่านหิน น้ำมัน และก๊าซธรรมชาติเป็นพลังงานฟอสซิลที่ใช้ไม่หมดในระยะสั้น",
+    "สังคมศึกษา",
+    "ประเทศไทยมีอาณาเขตติดต่อกับประเทศใดบ้างทางทิศใต้?",
+    ["มาเลเซีย", "สิงคโปร์", "อินโดนีเซีย", "ฟิลิปปินส์"],
+    0,
+    "ทิศใต้ของประเทศไทยมีพรมแดนทางบกติดต่อกับประเทศมาเลเซีย",
+    "easy",
   ),
   q(
     "q2",
-    "ชีววิทยา",
-    "อวัยวะใดของมนุษย์ทำหน้าที่สูบฉีดเลือดไปทั่วร่างกาย?",
-    ["สมอง", "หัวใจ", "ปอด", "กระเพาะอาหาร"],
-    1,
-    "หัวใจทำงานเหมือนปั๊ม มีกล้ามเนื้อชั้นนอกหนาและกล้ามเนื้อชั้นในบาง ทำให้เลือดฉีดได้แรงตลอดทั้งร่างกาย",
+    "คณิตศาสตร์",
+    "ผลลัพธ์ของ 12 × 8 เท่ากับเท่าไร?",
+    ["86", "92", "96", "104"],
+    2,
+    "12 × 8 = (10 × 8) + (2 × 8) = 80 + 16 = 96",
+    "medium",
   ),
   q(
     "q3",
-    "เคมี",
-    "สารใดมีค่า pH ต่ำกว่า 7 และเรียกว่าสารกรด?",
-    ["น้ำบริสุทธิ์", "เลือด", "น้ำส้มสายชู", "น้ำเชื่อม"],
+    "วิทยาศาสตร์",
+    "ข้อใดไม่ใช่สมบัติของธาตุโลหะ?",
+    ["นำไฟฟ้าได้ดี", "นำความร้อนได้ดี", "เปราะและแตกหักง่าย", "มีความมันวาว"],
     2,
-    "pH ต่ำกว่า 7 เป็นกรด น้ำส้มสายชูมีค่า pH ประมาณ 2–3 จึงมีรสเปรี้ยวและทำปฏิกิริยากับโลหะได้",
+    "สมบัติที่เปราะและแตกหักง่ายเป็นสมบัติของอโลหะ ส่วนโลหะสามารถตีเป็นแผ่นหรือดึงเป็นเส้นได้",
+    "hard",
   ),
   q(
     "q4",
-    "ฟิสิกส์",
-    "กฎของนิวตันข้อใดเป็นคำตอบที่ถูกต้อง?",
+    "ประวัติศาสตร์",
+    "เหตุการณ์ใดเกิดขึ้นในปี พ.ศ. 2475?",
     [
-      "แรง = มวล × ความเร็ว",
-      "แรง = มวล × ความเร่ง",
-      "แรง = พลังงาน × เวลา",
-      "แรง = งาน ÷ ระยะทาง",
+      "การเลิกทาสในสมัยรัชกาลที่ 5",
+      "การเปลี่ยนแปลงการปกครองเป็นระบอบประชาธิปไตย",
+      "การสถาปนากรุงรัตนโกสินทร์",
+      "สงครามโลกครั้งที่ 1 สิ้นสุดลง",
     ],
     1,
-    "F = m·a คือแรงเท่ากับมวลคูณความเร่ง ถ้ามวลคงที่ แรงจะแปรผันตามความเร่งของวัตถุ",
+    "วันที่ 24 มิถุนายน พ.ศ. 2475 เป็นวันเปลี่ยนแปลงการปกครองของสยามเข้าสู่ระบอบประชาธิปไตย",
+    "medium",
   ),
   q(
     "q5",
-    "โลกศาสตร์",
-    "เขตวัฒนาแผ่นดินของไทยตั้งอยู่ในเขตใด?",
-    ["เขตร้อนชื้น", "เขตแห้ง", "เขตอบอุ่น", "เขตเย็นชื้น"],
-    1,
-    "ประเทศไทยตั้งอยู่ประมาณละติจูด 5°–20° เหนือ จึงอยู่ในเขตแห้ง มีฝนน้อยและฤดูแล้งยาวนาน",
-  ),
-  q(
-    "q6",
     "คณิตศาสตร์",
     "ถ้า 3x + 7 = 22 ค่า x เท่ากับเท่าใด?",
     ["3", "5", "7", "9"],
     1,
     "3x + 7 = 22 → 3x = 15 → x = 5",
+    "medium",
+  ),
+  q(
+    "q6",
+    "วิทยาศาสตร์",
+    "ข้อใดเป็นพลังงานทดแทน (พลังงานหมุนเวียน)?",
+    ["ถ่านหิน", "น้ำมันดิบ", "พลังงานแสงอาทิตย์", "ก๊าซธรรมชาติ"],
+    2,
+    "แสงอาทิตย์เป็นพลังงานหมุนเวียนที่เกิดขึ้นใหม่อย่างต่อเนื่อง ส่วนถ่านหิน น้ำมัน และก๊าซธรรมชาติเป็นเชื้อเพลิงฟอสซิล",
+    "easy",
   ),
   q(
     "q7",
-    "สุขศึกษา",
-    "การนอนที่พอเพียงของวัยรุ่นควรนานเท่าใด?",
-    ["4–5 ชั่วโมง", "6–7 ชั่วโมง", "8–10 ชั่วโมง", "11–12 ชั่วโมง"],
-    2,
-    "วัยรุ่นควรนอน 8–10 ชั่วโมงต่อวัน เพื่อให้สมองได้พักฟื้นและหลั่งโรงค์โทรโนนช่วงหลับ",
+    "วิทยาศาสตร์",
+    "อวัยวะใดของมนุษย์ทำหน้าที่สูบฉีดเลือดไปเลี้ยงทั่วร่างกาย?",
+    ["สมอง", "หัวใจ", "ปอด", "กระเพาะอาหาร"],
+    1,
+    "หัวใจทำหน้าที่สูบฉีดเลือดผ่านระบบไหลเวียนโลหิตไปทั่วร่างกาย",
+    "easy",
   ),
   q(
     "q8",
-    "เทคโนโลยี",
-    "ระบบใดทำหน้าที่จำแยกชื่อโดเมนของเว็บไซต์?",
-    ["Router", "DNS", "Modem", "Firewall"],
-    1,
-    "DNS (Domain Name System) ทำหน้าที่แปลงชื่อโดเมน เช่น kn-snake.game ให้เป็นหมายเลข IP",
+    "วิทยาศาสตร์",
+    "สารในข้อใดมีค่า pH ต่ำกว่า 7 และมีสมบัติเป็นกรด?",
+    ["น้ำบริสุทธิ์", "สบู่เหลว", "น้ำส้มสายชู", "ผงซักฟอก"],
+    2,
+    "สารละลายที่มีค่า pH ต่ำกว่า 7 มีสมบัติเป็นกรด น้ำส้มสายชูมีกรดอะซิติกจึงมีค่า pH ประมาณ 2.5–3",
+    "medium",
   ),
   q(
     "q9",
-    "ดาราศาสตร์",
-    "ดาวเคราะห์ดวงใดอยู่ใกล้โลกที่สุด?",
-    ["ดาวศุกร์", "ดาวอังคาร", "ดาวพุธ", "ดาวศิลป์"],
-    2,
-    "ดาวพุธอยู่ห่างจากโลกประมาณ 77 ล้านกิโลเมตรในช่วงที่ใกล้โลกที่สุด จึงเรียกว่าเป็นดาวเคราะห์เพื่อนบ้าน",
+    "เทคโนโลยี",
+    "ระบบใดทำหน้าที่แปลงชื่อโดเมนเว็บไซต์ให้เป็นหมายเลข IP Address?",
+    ["Router", "DNS", "Modem", "Firewall"],
+    1,
+    "DNS (Domain Name System) ทำหน้าที่แปลงชื่อโดเมน เช่น knowledge-snake.game ให้เป็นหมายเลข IP",
+    "medium",
   ),
   q(
     "q10",
-    "วิทยาศาสตร์",
-    "น้ำแข็งเปลี่ยนเป็นน้ำเรียกว่าการเปลี่ยนสถานะใด?",
-    ["การระเหย", "การหลอมเหลว", "การแข็งตัว", "การควบแน่นตัว"],
+    "ภาษาอังกฤษ",
+    "Choose the correct form: 'She ____ to school every morning.'",
+    ["go", "goes", "going", "gone"],
     1,
-    "ของแข็งเปลี่ยนเป็นของเหลวเรียกว่าการหลอมเหลว น้ำแข็งจึงหลอมเป็นน้ำในกระบวนการนี้",
+    "ประธานเอกพจน์บุรุษที่ 3 (She) ใน Present Simple Tense กริยาต้องเติม -es จึงใช้ goes",
+    "easy",
+  ),
+  q(
+    "q11",
+    "คณิตศาสตร์",
+    "รูปสามเหลี่ยมที่มีฐานยาว 10 ซม. และสูง 6 ซม. มีพื้นที่กี่ตารางเซนติเมตร?",
+    ["20 ตร.ซม.", "30 ตร.ซม.", "40 ตร.ซม.", "60 ตร.ซม."],
+    1,
+    "พื้นที่สามเหลี่ยม = 1/2 × ฐาน × สูง = 1/2 × 10 × 6 = 30 ตารางเซนติเมตร",
+    "easy",
+  ),
+  q(
+    "q12",
+    "สังคมศึกษา",
+    "ประชาคมอาเซียน (ASEAN) มีประเทศสมาชิกก่อตั้งในยุคแรกกี่ประเทศ?",
+    ["5 ประเทศ", "7 ประเทศ", "10 ประเทศ", "11 ประเทศ"],
+    0,
+    "อาเซียนก่อตั้งขึ้นในปี พ.ศ. 2510 โดย 5 ประเทศผู้ก่อตั้ง ได้แก่ ไทย มาเลเซีย สิงคโปร์ อินโดนีเซีย และฟิลิปปินส์",
+    "hard",
   ),
 ];
 
 /* ------------------------------------------------------------------ *
- * Mock players — 40 seats, deterministic so SSR and client match
+ * Initial Players for default room 123456
  * ------------------------------------------------------------------ */
 
-const NICKNAMES = [
-  "Mew", "Bank", "Ton", "Film", "Nam", "Gun", "Bow", "Oat", "Mint", "Fern",
-  "Bas", "Nan", "Peach", "Jay", "Top", "Ning", "Kao", "May", "Ploy", "Nam2",
-  "Ink", "Puen", "Torch", "Beam", "Star", "Wave", "Cool", "Best", "Mark", "Free",
-  "Ball", "Bank2", "Mook", "Nok", "Aom", "Pet", "Sang", "Fah", "Big", "Max",
+const INITIAL_ROOM_PLAYERS: Array<{
+  name: string;
+  avatarId: Avatar["id"];
+  position: number;
+  score: number;
+  laddersClimbed: number;
+  snakesBitten: number;
+  correctCount: number;
+  answeredCount: number;
+}> = [
+  { name: "Panda", avatarId: "panda", position: 68, score: 68, laddersClimbed: 2, snakesBitten: 0, correctCount: 4, answeredCount: 5 },
+  { name: "Tiger", avatarId: "tiger", position: 56, score: 56, laddersClimbed: 1, snakesBitten: 1, correctCount: 3, answeredCount: 5 },
+  { name: "Lion", avatarId: "lion", position: 48, score: 48, laddersClimbed: 1, snakesBitten: 0, correctCount: 3, answeredCount: 5 },
+  { name: "Cat", avatarId: "cat", position: 39, score: 39, laddersClimbed: 1, snakesBitten: 1, correctCount: 2, answeredCount: 5 },
+  { name: "Bear", avatarId: "bear", position: 28, score: 28, laddersClimbed: 1, snakesBitten: 1, correctCount: 2, answeredCount: 5 },
+  { name: "Rabbit", avatarId: "rabbit", position: 22, score: 22, laddersClimbed: 0, snakesBitten: 0, correctCount: 2, answeredCount: 5 },
+  { name: "Penguin", avatarId: "penguin", position: 15, score: 15, laddersClimbed: 0, snakesBitten: 1, correctCount: 1, answeredCount: 5 },
+  { name: "Fox", avatarId: "fox", position: 12, score: 12, laddersClimbed: 0, snakesBitten: 0, correctCount: 1, answeredCount: 5 },
 ];
 
-const AVATAR_CYCLE: Avatar["id"][] = [
-  "fox", "panda", "tiger", "frog", "cat", "bear", "rabbit", "penguin", "lion", "koala",
-  "monkey", "dog",
-];
+export const MOCK_PLAYERS: Player[] = INITIAL_ROOM_PLAYERS.map((item, index) => ({
+  id: `p-${String(index + 1).padStart(2, "0")}`,
+  name: item.name,
+  avatarId: item.avatarId,
+  position: item.position,
+  score: item.score,
+  isReady: true,
+  isHost: false,
+  isBot: false,
+  answerState: "idle",
+  selectedOptionId: null,
+  lastRoll: null,
+  finishRank: null,
+  correctCount: item.correctCount,
+  answeredCount: item.answeredCount,
+  laddersClimbed: item.laddersClimbed,
+  snakesBitten: item.snakesBitten,
+  specialEventsTriggered: 0,
+  connected: true,
+}));
 
-export const MOCK_PLAYERS: Player[] = NICKNAMES.map((name, index) => {
-  const avatarId = AVATAR_CYCLE[index % AVATAR_CYCLE.length];
-  const position = index === 0 ? 0 : (index * 7 + 3) % 96;
-  const isBot = index > 11;
-  return {
-    id: `p-${String(index + 1).padStart(2, "0")}`,
-    name: index < 4 ? ["Mew", "Bank", "Ton", "Film"][index] : name,
-    avatarId,
-    position,
-    score: position,
-    isReady: index < 12,
-    isHost: index === 0,
-    isBot,
-    answerState: "idle",
-    selectedOptionId: null,
-    lastRoll: null,
-    finishRank: null,
-  };
-});
-
-/* The student who is looking at the device right now */
-export const VIEWER_PLAYER_ID = "p-02";
+/* The student who is looking at the device right now (fallback) */
+export const VIEWER_PLAYER_ID = "p-01";
 
 export const BOARD_CONFIG = {
   size: 10,

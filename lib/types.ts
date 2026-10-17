@@ -1,9 +1,7 @@
 /**
  * Knowledge Snake — Core domain types
  * -----------------------------------
- * Phase 1 (mock)  : types are pure data, UI-only.
- * Phase 2 (realtime): the exact same shapes become the payload of the
- * realtime channel, so components never need to be rewritten.
+ * Shared between Client UI, Transport layer, and Server Game Engine.
  */
 
 export type GameStatus =
@@ -13,9 +11,12 @@ export type GameStatus =
   | "reveal"
   | "dice"
   | "moving"
+  | "special_event"
   | "finished";
 
 export type PlayerAnswerState = "idle" | "selected" | "correct" | "wrong";
+
+export type QuestionDifficulty = "easy" | "medium" | "hard";
 
 export type AvatarId =
   | "fox"
@@ -39,7 +40,7 @@ export interface Avatar {
   primary: string;
   secondary: string;
   accent: string;
-  /** tailwind ring color used for the player token */
+  /** ring color used for the player token */
   ring: string;
 }
 
@@ -54,8 +55,17 @@ export interface Player {
   isBot: boolean;
   answerState: PlayerAnswerState;
   selectedOptionId: string | null;
+  answeredAt?: number | null;
   lastRoll: number | null;
   finishRank: number | null;
+  /** Real gameplay telemetry for accurate reports */
+  correctCount?: number;
+  answeredCount?: number;
+  laddersClimbed?: number;
+  snakesBitten?: number;
+  specialEventsTriggered?: number;
+  connected?: boolean;
+  bonusNextTurn?: boolean;
 }
 
 export interface QuestionOption {
@@ -68,9 +78,12 @@ export interface Question {
   prompt: string;
   hint?: string;
   options: QuestionOption[];
+  /** Present on server and after reveal; omitted in public state before reveal */
   correctOptionId: string;
   explanation: string;
   subject: string;
+  difficulty?: QuestionDifficulty;
+  createdAt?: number;
 }
 
 export interface ActiveQuestion extends Question {
@@ -79,6 +92,7 @@ export interface ActiveQuestion extends Question {
   timeLimit: number;
   timeLeft: number;
   revealed: boolean;
+  startedAt?: number;
 }
 
 export interface SnakeLink {
@@ -135,6 +149,11 @@ export interface LeaderboardEntry {
   position: number;
   score: number;
   isFinished: boolean;
+  laddersClimbed?: number;
+  snakesBitten?: number;
+  correctCount?: number;
+  answeredCount?: number;
+  accuracyPercent?: number | null;
 }
 
 export interface GameSettings {
@@ -154,34 +173,21 @@ export interface GameInfo {
   grade: string;
   hostName: string;
   school: string;
+  createdAt?: number;
 }
 
-/**
- * The single source of truth of the game room.
- * Every component reads from this object — never from scattered mock data.
- */
-export interface GameState {
-  game: GameInfo;
-  gameStatus: GameStatus;
-  round: number;
-  totalRounds: number;
-  question: ActiveQuestion | null;
-  players: Player[];
-  currentPlayerId: string | null;
-  dice: DiceState;
-  board: BoardConfig;
-  specialCells: SpecialCell[];
-  enabledSpecials: Set<string>;
-  settings: GameSettings;
-  leaderboard: LeaderboardEntry[];
-  viewerPlayerId: string | null;
-  /** player currently animating on the board */
-  movingPlayerId: string | null;
-  movement: MovementState | null;
-  rollQueue: string[];
-  pacingMode: "auto" | "manual";
-  lastEvent: string | null;
-  updatedAt: number;
+export interface SpecialEventState {
+  id: string;
+  playerId: string;
+  playerName: string;
+  avatarId: AvatarId;
+  kind: "snake" | "ladder" | "star" | "gift" | "boost";
+  from: number;
+  to: number;
+  title: string;
+  description: string;
+  resolved: boolean;
+  bonusRollGranted?: boolean;
 }
 
 export interface MovementState {
@@ -194,8 +200,36 @@ export interface MovementState {
 }
 
 /**
+ * The single source of truth of the game room.
+ * In public state (sent to clients), secret server fields (teacherId, rngSeed, unrevealed correctOptionId) are stripped.
+ */
+export interface GameState {
+  game: GameInfo;
+  gameStatus: GameStatus;
+  round: number;
+  totalRounds: number;
+  question: ActiveQuestion | null;
+  players: Player[];
+  currentPlayerId: string | null;
+  dice: DiceState;
+  board: BoardConfig;
+  specialCells: SpecialCell[];
+  enabledSpecials: Set<string> | string[];
+  settings: GameSettings;
+  leaderboard: LeaderboardEntry[];
+  viewerPlayerId: string | null;
+  /** player currently animating on the board */
+  movingPlayerId: string | null;
+  movement: MovementState | null;
+  activeSpecialEvent?: SpecialEventState | null;
+  rollQueue: string[];
+  pacingMode: "auto" | "manual";
+  lastEvent: string | null;
+  updatedAt: number;
+}
+
+/**
  * GameAction represents all possible actions that can be dispatched to the game store.
- * In Phase 2, these become the message types sent over the realtime channel.
  */
 export type GameAction =
   | { type: "PLAYER_JOINED"; player: Player }
@@ -210,7 +244,16 @@ export type GameAction =
   | { type: "MOVEMENT_STARTED"; playerId: string; steps: number }
   | { type: "MOVEMENT_STEP" }
   | { type: "MOVEMENT_FINISHED" }
-  | { type: "BOARD_EFFECT_TRIGGERED"; effect: { kind: "snake" | "ladder" | "special"; from: number; to: number; label: string } | null }
+  | {
+      type: "BOARD_EFFECT_TRIGGERED";
+      effect: {
+        kind: "snake" | "ladder" | "special";
+        from: number;
+        to: number;
+        label: string;
+      } | null;
+    }
+  | { type: "RESOLVE_SPECIAL_EVENT" }
   | { type: "NEXT_TURN" }
   | { type: "GAME_FINISHED" }
   | { type: "EVENT_LOGGED"; message: string }
@@ -219,3 +262,59 @@ export type GameAction =
   | { type: "SET_TOTAL_ROUNDS"; total: number }
   | { type: "SET_PACING_MODE"; mode: "auto" | "manual" }
   | { type: "SET_ROLL_QUEUE"; queue: string[] };
+
+/**
+ * Server commands sent from Client UI to Server Game Engine
+ */
+export type ServerGameCommand =
+  | { type: "JOIN_GAME"; nickname: string; avatarId: AvatarId; playerId?: string }
+  | { type: "PLAYER_READY"; playerId: string; ready: boolean }
+  | { type: "START_GAME" }
+  | { type: "START_QUESTION"; questionIndex?: number }
+  | { type: "TIMER_TICK" }
+  | { type: "SUBMIT_ANSWER"; playerId: string; optionId: string }
+  | { type: "REVEAL_ANSWERS" }
+  | { type: "ROLL_DICE"; playerId: string }
+  | { type: "RESOLVE_SPECIAL_EVENT"; playerId?: string }
+  | { type: "ADVANCE_TURN" }
+  | { type: "END_GAME" }
+  | { type: "SET_PACING_MODE"; mode: "auto" | "manual" };
+
+export interface PlayerReportRow {
+  rank: number;
+  playerId: string;
+  name: string;
+  avatarId: AvatarId;
+  score: number;
+  position: number;
+  isFinished: boolean;
+  finishRank: number | null;
+  finishBonus: number;
+  laddersClimbed: number;
+  snakesBitten: number;
+  correctCount: number;
+  answeredCount: number;
+  /** Null when answeredCount === 0 so fake statistics are never fabricated */
+  accuracyPercent: number | null;
+}
+
+export interface GameHistoryRecord {
+  id: string;
+  pin: string;
+  title: string;
+  subject: string;
+  grade: string;
+  hostName: string;
+  createdAt: number;
+  finishedAt: number | null;
+  status: "lobby" | "playing" | "completed";
+  totalRounds: number;
+  roundsPlayed: number;
+  questionTimeLimit: number;
+  playersCount: number;
+  maxPlayers: number;
+  winnerName: string | null;
+  winnerAvatarId: AvatarId | null;
+  winnerScore: number | null;
+  playerResults: PlayerReportRow[];
+}

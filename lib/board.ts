@@ -5,15 +5,16 @@ export const BOARD_TOTAL = BOARD_SIZE * BOARD_SIZE;
 export const FINISH_AT = BOARD_TOTAL;
 
 /**
- * Standard Snake & Ladder numbering.
+ * Standard Snake & Ladder numbering (boustrophedon).
  *
  *        100  99 ... 91   (row 9, top)
  *         20  21 ... 30
  *          1   2 ... 10   (row 0, bottom)
  */
 export function numberToPosition(number: number) {
-  const rowFromBottom = Math.floor((number - 1) / BOARD_SIZE);
-  const offset = (number - 1) % BOARD_SIZE;
+  const clamped = Math.max(1, Math.min(BOARD_TOTAL, number));
+  const rowFromBottom = Math.floor((clamped - 1) / BOARD_SIZE);
+  const offset = (clamped - 1) % BOARD_SIZE;
   const col = rowFromBottom % 2 === 0 ? offset : BOARD_SIZE - 1 - offset;
   return { row: rowFromBottom, col };
 }
@@ -46,7 +47,7 @@ export function buildBoardCells(source: BoardSource): BoardCell[] {
 
   const cells: BoardCell[] = [];
 
-  // visual rows: top row first so the DOM order reads like the board
+  // visual rows: top row first so the DOM grid order reads like the board (row 9 down to row 0)
   for (let visualRow = BOARD_SIZE - 1; visualRow >= 0; visualRow -= 1) {
     for (let col = 0; col < BOARD_SIZE; col += 1) {
       const number = positionToNumber(visualRow, col);
@@ -58,7 +59,7 @@ export function buildBoardCells(source: BoardSource): BoardCell[] {
       let tone: BoardCell["tone"] = number % 2 === 0 ? "dark" : "light";
       if (special?.kind === "start") tone = "start";
       if (special?.kind === "finish") tone = "finish";
-      if (special && tone !== "finish") tone = "special";
+      if (special && tone !== "finish" && tone !== "start") tone = "special";
 
       cells.push({ number, row: visualRow, col, x, y, tone, special, snake, ladder });
     }
@@ -87,13 +88,37 @@ export function playerTokenPosition(
   };
 }
 
-/** build the ordered list of squares travelled when moving `steps` squares */
-export function walkPath(from: number, steps: number, max: number) {
+/**
+ * Build the ordered list of squares travelled when moving `steps` squares.
+ * Implements exact landing bounce-back at `max` (100):
+ * e.g., from 98 with roll 5 -> [99, 100, 99, 98, 97].
+ */
+export function walkPath(from: number, steps: number, max: number = FINISH_AT): number[] {
   const path: number[] = [];
-  let cursor = from;
+  if (steps === 0) return path;
+
+  if (steps < 0) {
+    let cursor = from;
+    const count = Math.abs(steps);
+    for (let i = 0; i < count; i += 1) {
+      cursor = Math.max(1, cursor - 1);
+      path.push(cursor);
+    }
+    return path;
+  }
+
+  let cursor = Math.max(1, from);
+  let direction = 1;
   for (let i = 0; i < steps; i += 1) {
-    if (cursor >= max) break;
-    cursor += 1;
+    cursor += direction;
+    if (cursor > max) {
+      cursor = max - 1;
+      direction = -1;
+    }
+    if (cursor < 1) {
+      cursor = 1;
+      direction = 1;
+    }
     path.push(cursor);
   }
   return path;
