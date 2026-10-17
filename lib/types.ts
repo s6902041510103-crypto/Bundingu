@@ -75,6 +75,7 @@ export interface QuestionOption {
 
 export interface Question {
   id: string;
+  teacherId?: string;
   prompt: string;
   hint?: string;
   options: QuestionOption[];
@@ -314,6 +315,8 @@ export interface GameHistoryRecord {
   questionTimeLimit: number;
   playersCount: number;
   maxPlayers: number;
+  questionIds?: string[];
+  enabledSpecials?: string[];
   winnerName: string | null;
   winnerAvatarId: AvatarId | null;
   winnerScore: number | null;

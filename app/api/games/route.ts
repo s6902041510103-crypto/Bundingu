@@ -16,16 +16,15 @@ export async function GET() {
   const token = cookieStore.get("ks_teacher_token")?.value;
   const session = verifyTeacherSessionToken(token);
 
-  const questions = listQuestions();
-
   if (!session) {
     return NextResponse.json({
       activeRooms: [],
       history: [],
-      questionsCount: questions.length,
+      questionsCount: 0,
     });
   }
 
+  const questions = listQuestions({ teacherId: session.teacherId });
   const activeRooms = listActiveServerRooms(session.teacherId).map((r) =>
     toPublicGameState(r),
   );

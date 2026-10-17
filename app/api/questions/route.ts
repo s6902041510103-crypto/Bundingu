@@ -7,12 +7,25 @@ import {
 } from "@/lib/server/repository";
 
 export async function GET(request: Request) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("ks_teacher_token")?.value;
+  const session = verifyTeacherSessionToken(token);
+
+  if (!session) {
+    return NextResponse.json({ questions: [] });
+  }
+
   const { searchParams } = new URL(request.url);
   const subject = searchParams.get("subject") || undefined;
   const difficulty = searchParams.get("difficulty") || undefined;
   const search = searchParams.get("search") || undefined;
 
-  const questions = listQuestions({ subject, difficulty, search });
+  const questions = listQuestions({
+    subject,
+    difficulty,
+    search,
+    teacherId: session.teacherId,
+  });
   return NextResponse.json({ questions });
 }
 
@@ -37,6 +50,7 @@ export async function POST(request: Request) {
       correctIndex: Number(body.correctIndex),
       explanation: body.explanation,
       hint: body.hint,
+      teacherId: session.teacherId,
     });
 
     if (result.error) {

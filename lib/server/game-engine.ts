@@ -147,6 +147,8 @@ function syncRoomToHistory(room: ServerRoom): void {
     questionTimeLimit: state.settings.questionTimeLimit,
     playersCount: state.players.length,
     maxPlayers: state.settings.maxPlayers,
+    questionIds: room.questionsPool.map((q) => q.id),
+    enabledSpecials: normalizeSpecialsArray(state.enabledSpecials),
     winnerName: winner?.name ?? null,
     winnerAvatarId: winner?.avatarId ?? null,
     winnerScore: winner?.score ?? null,
@@ -245,15 +247,27 @@ export function createRoomOnServer(input: CreateGameInput): {
   }
   if (!pin) pin = `KS${String(Date.now()).slice(-4)}`;
 
-  const allQuestions = listQuestions();
-  let selectedQuestions = allQuestions;
+  const teacherQuestions = listQuestions({ teacherId: input.teacherId });
+  const allStoreQuestions = listQuestions();
+  let selectedQuestions: Question[] = [];
+
   if (input.questionIds && input.questionIds.length > 0) {
-    const idSet = new Set(input.questionIds);
-    const filtered = allQuestions.filter((q) => idSet.has(q.id));
-    if (filtered.length > 0) selectedQuestions = filtered;
-  } else if (input.subject && input.subject !== "ทั้งหมด") {
-    const bySubject = allQuestions.filter((q) => q.subject === input.subject);
-    if (bySubject.length > 0) selectedQuestions = bySubject;
+    const questionById = new Map(allStoreQuestions.map((q) => [q.id, q]));
+    selectedQuestions = input.questionIds
+      .map((id) => questionById.get(id))
+      .filter((q): q is Question => Boolean(q));
+  } else {
+    selectedQuestions = teacherQuestions;
+    if (input.subject && input.subject !== "ทั้งหมด") {
+      const bySubject = teacherQuestions.filter((q) => q.subject === input.subject);
+      if (bySubject.length > 0) selectedQuestions = bySubject;
+    }
+  }
+
+  if (selectedQuestions.length === 0) {
+    return {
+      error: "กรุณาสร้างหรือเลือกคำถามอย่างน้อย 1 ข้อสำหรับใช้ในห้องเกมนี้",
+    };
   }
 
   const initialPlayers: Player[] = input.seedDemoPlayers
@@ -312,7 +326,7 @@ export function createRoomOnServer(input: CreateGameInput): {
     pin,
     teacherId: input.teacherId,
     rngSeed: crypto.randomInt(100000, 999999999),
-    questionsPool: selectedQuestions.length > 0 ? selectedQuestions : allQuestions,
+    questionsPool: selectedQuestions,
     state,
   };
 

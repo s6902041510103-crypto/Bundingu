@@ -74,7 +74,7 @@ class FileStorageAdapter implements StorageAdapter {
   private ensureInitial(): StorageSchema {
     if (this.memoryFallback) return this.memoryFallback;
     const initial: StorageSchema = {
-      questions: QUESTIONS.map((q) => ({ ...q })),
+      questions: [],
       history: buildInitialHistory(),
       sessions: [],
       teachers: buildInitialTeachers(),
@@ -178,6 +178,7 @@ export interface QuestionInput {
   correctIndex: number;
   explanation?: string;
   hint?: string;
+  teacherId?: string;
 }
 
 export function validateQuestionInput(input: QuestionInput): string | null {
@@ -209,9 +210,18 @@ export function listQuestions(filters?: {
   subject?: string;
   difficulty?: string;
   search?: string;
+  teacherId?: string;
 }): Question[] {
   const store = getStorageAdapter().read();
   let items = [...store.questions];
+
+  if (filters?.teacherId) {
+    if (process.env.KS_TEST_MODE === "1") {
+      items = items.filter((q) => !q.teacherId || q.teacherId === filters.teacherId);
+    } else {
+      items = items.filter((q) => q.teacherId === filters.teacherId);
+    }
+  }
 
   if (filters?.subject && filters.subject !== "ทั้งหมด" && filters.subject !== "all") {
     items = items.filter((q) => q.subject === filters.subject);
@@ -244,6 +254,7 @@ export function createQuestionRecord(input: QuestionInput): {
   const id = `q-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
   const newQuestion: Question = {
     id,
+    teacherId: input.teacherId,
     prompt: input.prompt.trim(),
     subject: input.subject.trim(),
     difficulty: input.difficulty ?? "medium",

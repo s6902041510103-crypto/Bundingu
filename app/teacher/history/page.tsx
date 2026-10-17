@@ -11,7 +11,7 @@ import { Loading } from "@/components/ui/Loading";
 import { Avatar } from "@/components/game/Avatar";
 import { SUBJECTS } from "@/lib/game-data";
 import type { GameHistoryRecord } from "@/lib/types";
-import { Search, FileBarChart, Play } from "lucide-react";
+import { Search, FileBarChart, Play, RotateCcw } from "lucide-react";
 
 export default function TeacherHistoryPage() {
   const { teacher, loading: authLoading } = useTeacherAuth(true);
@@ -190,7 +190,16 @@ export default function TeacherHistoryPage() {
                           )}
                         </td>
                         <td className="py-4 px-5 text-right">
-                          <div className="inline-flex items-center gap-2">
+                          <div className="inline-flex flex-wrap items-center justify-end gap-2">
+                            <Link href={`/teacher/games/new?templatePin=${item.pin}`}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                iconLeft={<RotateCcw className="w-3.5 h-3.5" />}
+                              >
+                                เปิดห้องใหม่ (เปลี่ยนห้องเรียน)
+                              </Button>
+                            </Link>
                             {isLive && (
                               <Link href={`/teacher/games/${item.pin}`}>
                                 <Button

@@ -7,6 +7,7 @@ import { useTeacherAuth } from "@/lib/hooks/useTeacherAuth";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { Modal } from "@/components/ui/Modal";
 import { Loading } from "@/components/ui/Loading";
 import { QRCodeSVG } from "@/components/ui/QRCode";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
@@ -23,6 +24,7 @@ import {
   StopCircle,
   FileBarChart,
   Gamepad2,
+  RotateCcw,
 } from "lucide-react";
 
 export default function TeacherDashboardPage() {
@@ -33,6 +35,11 @@ export default function TeacherDashboardPage() {
   const [history, setHistory] = useState<GameHistoryRecord[]>([]);
   const [questionsCount, setQuestionsCount] = useState<number>(0);
   const [loadingData, setLoadingData] = useState(true);
+
+  // Re-open room for a new class of students modal state
+  const [reopenTarget, setReopenTarget] = useState<GameHistoryRecord | null>(null);
+  const [reopenTitle, setReopenTitle] = useState<string>("");
+  const [isReopening, setIsReopening] = useState<boolean>(false);
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -82,6 +89,59 @@ export default function TeacherDashboardPage() {
         title: "เกิดข้อผิดพลาดในการเชื่อมต่อ",
         variant: "danger",
       });
+    }
+  };
+
+  const openReopenModal = (game: GameHistoryRecord) => {
+    setReopenTarget(game);
+    setReopenTitle(`${game.title} (ห้องใหม่)`);
+  };
+
+  const handleConfirmReopen = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reopenTarget || !reopenTitle.trim()) return;
+
+    setIsReopening(true);
+    try {
+      const res = await fetch("/api/games", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: reopenTitle.trim(),
+          subject: reopenTarget.subject,
+          totalRounds: reopenTarget.totalRounds,
+          questionTimeLimit: reopenTarget.questionTimeLimit,
+          maxPlayers: reopenTarget.maxPlayers || 40,
+          questionIds: reopenTarget.questionIds,
+          enabledSpecials: reopenTarget.enabledSpecials ?? ["star", "gift", "boost"],
+          seedDemoPlayers: false,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error || !data.pin) {
+        addToast({
+          title: "ไม่สามารถเปิดห้องใหม่ได้",
+          description: data.error || "กรุณาตรวจสอบว่าชุดเกมนี้มีคำถามในคลังอย่างน้อย 1 ข้อ",
+          variant: "danger",
+        });
+        setIsReopening(false);
+        return;
+      }
+
+      setReopenTarget(null);
+      await fetchDashboardData();
+      addToast({
+        title: `เปิดห้องใหม่สำเร็จ! คีย์ห้องคือ ${data.pin}`,
+        description: `ใช้ชุดคำถามเดิมสำหรับ "${reopenTitle.trim()}" เรียบร้อยแล้ว`,
+        variant: "success",
+      });
+    } catch {
+      addToast({
+        title: "เกิดข้อผิดพลาดในการเชื่อมต่อ",
+        variant: "danger",
+      });
+    } finally {
+      setIsReopening(false);
     }
   };
 
@@ -378,27 +438,38 @@ export default function TeacherDashboardPage() {
                         )}
                       </td>
                       <td className="py-3.5 px-5 text-right">
-                        {isLive ? (
-                          <Link href={`/teacher/games/${game.pin}`}>
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              iconLeft={<Play className="w-3.5 h-3.5" />}
-                            >
-                              ควบคุมเกม
-                            </Button>
-                          </Link>
-                        ) : (
-                          <Link href={`/teacher/reports?pin=${game.pin}`}>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              iconLeft={<FileBarChart className="w-3.5 h-3.5" />}
-                            >
-                              ดูรายงาน
-                            </Button>
-                          </Link>
-                        )}
+                        <div className="inline-flex flex-wrap items-center justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openReopenModal(game)}
+                            iconLeft={<RotateCcw className="w-3.5 h-3.5" />}
+                          >
+                            เปิดห้องใหม่ (เปลี่ยนห้องเรียน)
+                          </Button>
+                          {isLive ? (
+                            <Link href={`/teacher/games/${game.pin}`}>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                iconLeft={<Play className="w-3.5 h-3.5" />}
+                              >
+                                ควบคุมเกม
+                              </Button>
+                            </Link>
+                          ) : (
+                            <Link href={`/teacher/reports?pin=${game.pin}`}>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                iconLeft={<FileBarChart className="w-3.5 h-3.5" />}
+                              >
+                                ดูรายงาน
+                              </Button>
+                            </Link>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -409,6 +480,73 @@ export default function TeacherDashboardPage() {
           </div>
         </Card>
       </div>
+
+      {/* Modal: Open a New Room from a Saved Game for a New Classroom */}
+      <Modal
+        isOpen={Boolean(reopenTarget)}
+        onClose={() => setReopenTarget(null)}
+        title="เปิดห้องใหม่จากชุดเกมเดิม (สำหรับเมื่อเด็กเปลี่ยนห้อง)"
+        description="ใช้ชุดคำถาม รายวิชา จำนวนรอบ และเวลาตอบเดิมทั้งหมด แต่สร้างคีย์ห้องใหม่และ QR Code ใหม่ให้นักเรียนกลุ่มใหม่"
+        size="md"
+      >
+        {reopenTarget && (
+          <form onSubmit={handleConfirmReopen} className="space-y-4">
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1">
+              <p>
+                ต้นฉบับ: <strong className="text-slate-900">{reopenTarget.title}</strong> (คีย์เดิม:{" "}
+                <span className="font-mono font-bold text-blue-700">{reopenTarget.pin}</span>)
+              </p>
+              <p>
+                รายวิชา: <strong>{reopenTarget.subject}</strong> · จำนวนรอบ:{" "}
+                <strong>{reopenTarget.totalRounds} รอบ</strong> · เวลาตอบ:{" "}
+                <strong>{reopenTarget.questionTimeLimit} วินาที/ข้อ</strong>
+              </p>
+            </div>
+
+            <div>
+              <label className="block font-display text-sm font-bold text-slate-700 mb-1.5">
+                ตั้งชื่อห้องเรียนใหม่ <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={reopenTitle}
+                onChange={(e) => setReopenTitle(e.target.value)}
+                placeholder="เช่น คณิตศาสตร์ ม.1/2"
+                className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-200 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+              <Link
+                href={`/teacher/games/new?templatePin=${reopenTarget.pin}`}
+                className="text-xs font-display font-semibold text-blue-600 hover:underline"
+              >
+                แก้ไข/เพิ่มคำถามก่อนเปิดห้อง →
+              </Link>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setReopenTarget(null)}
+                >
+                  ยกเลิก
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="md"
+                  loading={isReopening}
+                  iconLeft={<RotateCcw className="w-4 h-4" />}
+                >
+                  สร้างห้องใหม่และรับคีย์ทันที
+                </Button>
+              </div>
+            </div>
+          </form>
+        )}
+      </Modal>
 
       <ToastContainer toasts={toasts} onClose={removeToast} />
     </TeacherLayoutShell>
