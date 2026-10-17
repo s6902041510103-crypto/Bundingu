@@ -68,23 +68,38 @@ function nextServerRandomInt(room: ServerRoom, min: number, max: number): number
 export function toPublicGameState(room: ServerRoom, viewerPlayerId?: string | null): GameState {
   const { state } = room;
   const isRevealed = Boolean(state.question?.revealed);
+  const viewerPlayer = viewerPlayerId
+    ? state.players.find((p) => p.id === viewerPlayerId)
+    : null;
+  const hasViewerAnswered = Boolean(
+    viewerPlayer && viewerPlayer.selectedOptionId !== null,
+  );
 
   const sanitizedQuestion = state.question
     ? {
         ...state.question,
-        correctOptionId: isRevealed ? state.question.correctOptionId : "",
-        explanation: isRevealed ? state.question.explanation : "",
+        correctOptionId:
+          isRevealed || hasViewerAnswered ? state.question.correctOptionId : "",
+        explanation:
+          isRevealed || hasViewerAnswered ? state.question.explanation : "",
       }
     : null;
 
   const sanitizedPlayers: Player[] = state.players.map((p) => {
-    if (isRevealed) return { ...p };
-    // Before reveal, never expose whether an answer is "correct" or "wrong"
+    if (isRevealed || (viewerPlayerId && p.id === viewerPlayerId && p.selectedOptionId !== null)) {
+      return { ...p };
+    }
+    // Before reveal, never expose to OTHER players whether someone's answer is "correct" or "wrong"
     const maskedAnswerState = p.answerState === "idle" ? "idle" : "selected";
     return {
       ...p,
       answerState: maskedAnswerState,
-      selectedOptionId: viewerPlayerId && p.id === viewerPlayerId ? p.selectedOptionId : (p.selectedOptionId ? "selected" : null),
+      selectedOptionId:
+        viewerPlayerId && p.id === viewerPlayerId
+          ? p.selectedOptionId
+          : p.selectedOptionId
+          ? "selected"
+          : null,
     };
   });
 
@@ -665,16 +680,26 @@ export function executeServerGameCommand(
       const answeredHumans = humanPlayers.filter((p) => p.selectedOptionId !== null).length;
       const answeredTotal = updatedPlayers.filter((p) => p.selectedOptionId !== null).length;
 
+      // Immediately grant roll rights to a student as soon as they answer correctly!
+      const updatedRollQueue =
+        isCorrect && !state.rollQueue.includes(command.playerId)
+          ? [...state.rollQueue, command.playerId]
+          : state.rollQueue;
+
       room.state = {
         ...state,
         gameStatus: "answering",
         players: updatedPlayers,
+        rollQueue: updatedRollQueue,
+        currentPlayerId: updatedRollQueue[0] ?? state.currentPlayerId,
         leaderboard: computeLeaderboard(updatedPlayers),
-        lastEvent: `PLAYER · ${player.name} ส่งคำตอบแล้ว (${answeredTotal}/${updatedPlayers.length} คน)`,
+        lastEvent: isCorrect
+          ? `PLAYER · ${player.name} ตอบถูก! ได้รับสิทธิ์ทอยลูกเต๋าทันที`
+          : `PLAYER · ${player.name} ส่งคำตอบแล้ว (${answeredTotal}/${updatedPlayers.length} คน)`,
         updatedAt: Date.now(),
       };
 
-      // If all real players in the room have answered, automatically reveal and queue dice rolls immediately!
+      // If all real players in the room have answered, automatically reveal answers for everyone!
       if (humanPlayers.length > 0 && answeredHumans >= humanPlayers.length) {
         const revealed = revealAnswersOnServer(room);
         return {
@@ -714,22 +739,22 @@ export function executeServerGameCommand(
       if (state.activeSpecialEvent && !state.activeSpecialEvent.resolved) {
         return { error: "กรุณาปิดเหตุการณ์พิเศษก่อนทอยลูกเต๋า" };
       }
-      if (state.gameStatus !== "dice" && state.gameStatus !== "reveal") {
-        return { error: "ไม่อยู่ในช่วงทอยลูกเต๋า" };
-      }
       if (state.rollQueue.length === 0) {
-        return { error: "ไม่มีคิวทอยลูกเต๋าในรอบนี้" };
+        return { error: "ไม่มีสิทธิ์ทอยลูกเต๋าในรอบนี้" };
       }
 
-      const activeRollerId = state.rollQueue[0];
-      if (command.playerId !== activeRollerId && !options.isTeacherAuthenticated) {
-        const activeRoller = state.players.find((p) => p.id === activeRollerId);
+      const isPlayerInQueue = state.rollQueue.includes(command.playerId);
+      if (!isPlayerInQueue && !options.isTeacherAuthenticated) {
         return {
-          error: `ยังไม่ถึงคิวของคุณ (ขณะนี้เป็นคิวของ ${activeRoller?.name ?? "ผู้เล่นก่อนหน้า"})`,
+          error: "คุณยังไม่มีสิทธิ์ทอยลูกเต๋าในรอบนี้ (ต้องตอบคำถามให้ถูกต้องก่อน)",
         };
       }
 
-      return performServerDiceRollAndMove(room, activeRollerId);
+      const targetRollerId = isPlayerInQueue
+        ? command.playerId
+        : state.rollQueue[0];
+
+      return performServerDiceRollAndMove(room, targetRollerId);
     }
 
     case "RESOLVE_SPECIAL_EVENT": {
@@ -840,7 +865,7 @@ function revealAnswersOnServer(room: ServerRoom): {
   }
 
   const correctPlayers = state.players
-    .filter((p) => p.answerState === "correct" || p.bonusNextTurn)
+    .filter((p) => (p.answerState === "correct" || p.bonusNextTurn) && p.lastRoll === null)
     .sort((a, b) => (a.answeredAt ?? Infinity) - (b.answeredAt ?? Infinity));
 
   const queue = correctPlayers.map((p) => p.id);
@@ -860,7 +885,7 @@ function revealAnswersOnServer(room: ServerRoom): {
     lastEvent:
       queue.length > 0
         ? `SYSTEM · เฉลยคำตอบ! มีผู้เล่นตอบถูก ${queue.length} คน ได้สิทธิ์ทอยลูกเต๋า`
-        : "SYSTEM · เฉลยคำตอบ! ไม่มีผู้เล่นตอบถูกในรอบนี้",
+        : "SYSTEM · เฉลยคำตอบแล้ว",
     updatedAt: Date.now(),
   };
 
@@ -946,8 +971,11 @@ function performServerDiceRollAndMove(
   const fullPath =
     effect && effect.to !== landedPos ? [...path, effect.to] : path;
 
+  const isQuestionStillOpen = Boolean(state.question && !state.question.revealed);
   const nextStatus = specialEvent
     ? "special_event"
+    : isQuestionStillOpen
+    ? "answering"
     : nextQueue.length > 0
     ? "dice"
     : "reveal";

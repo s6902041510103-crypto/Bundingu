@@ -13,7 +13,7 @@ import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { Avatar } from "@/components/game/Avatar";
 import { GameBoardWrapper } from "@/components/game/GameBoard";
 import { QuestionCard } from "@/components/game/QuestionCard";
-import { Dice } from "@/components/game/Dice";
+import { Dice, DiceRollOverlayModal } from "@/components/game/Dice";
 import { Leaderboard } from "@/components/game/Leaderboard";
 import type { GameState } from "@/lib/types";
 import {
@@ -33,6 +33,11 @@ export default function StudentGameplayPage() {
 
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [rollingAnim, setRollingAnim] = useState(false);
+  const [diceOverlayOpen, setDiceOverlayOpen] = useState(false);
+  const [rolledResultValue, setRolledResultValue] = useState<number | null>(null);
+  const [rollFromPos, setRollFromPos] = useState<number | null>(null);
+  const [rollToPos, setRollToPos] = useState<number | null>(null);
+  const [rollSummaryText, setRollSummaryText] = useState<string | null>(null);
   const [showLeaderboardModal, setShowLeaderboardModal] = useState(false);
 
   const [state, setState] = useState<GameState>(() =>
@@ -91,8 +96,7 @@ export default function StudentGameplayPage() {
   const activeViewerId = viewerPlayer?.id ?? null;
   const isMyTurnToRoll =
     Boolean(activeViewerId) &&
-    state.rollQueue[0] === activeViewerId &&
-    (state.gameStatus === "dice" || state.gameStatus === "reveal") &&
+    state.rollQueue.includes(activeViewerId!) &&
     !(state.activeSpecialEvent && !state.activeSpecialEvent.resolved);
 
   const myQueuePosition = activeViewerId
@@ -163,17 +167,32 @@ export default function StudentGameplayPage() {
         variant: "warning",
       });
     } else {
-      addToast({
-        title: "ส่งคำตอบสำเร็จ!",
-        description: "ระบบบันทึกคำตอบของคุณเรียบร้อยแล้ว",
-        variant: "success",
-      });
+      const myUpdated = res.state?.players.find((p) => p.id === activeViewerId);
+      if (myUpdated?.answerState === "correct") {
+        addToast({
+          title: "🎉 ตอบถูกต้อง! ได้รับสิทธิ์ทอยลูกเต๋าทันที",
+          description: "กดปุ่มทอยลูกเต๋าเพื่อลุ้นแต้มและเดินบนกระดานได้เลย!",
+          variant: "success",
+        });
+      } else {
+        addToast({
+          title: "ส่งคำตอบเรียบร้อยแล้ว",
+          variant: "info",
+        });
+      }
     }
   };
 
   const handleRollDice = async () => {
     if (!activeViewerId || !transportRef.current?.sendCommand || rollingAnim) return;
+    const prevPos = viewerPlayer?.position ?? 1;
+    setRollFromPos(prevPos);
+    setRollToPos(null);
+    setRolledResultValue(null);
+    setRollSummaryText(null);
+    setDiceOverlayOpen(true);
     setRollingAnim(true);
+
     setTimeout(async () => {
       const res = await transportRef.current?.sendCommand?.({
         type: "ROLL_DICE",
@@ -181,13 +200,20 @@ export default function StudentGameplayPage() {
       });
       setRollingAnim(false);
       if (res && !res.ok && res.error) {
+        setDiceOverlayOpen(false);
         addToast({
           title: "ทอยลูกเต๋าไม่สำเร็จ",
           description: res.error,
           variant: "warning",
         });
+      } else if (res?.state) {
+        const rolledVal = res.state.dice.value ?? 1;
+        const updatedMe = res.state.players.find((p) => p.id === activeViewerId);
+        setRolledResultValue(rolledVal);
+        setRollToPos(updatedMe?.position ?? res.state.movement?.to ?? null);
+        setRollSummaryText(res.state.dice.lastReason ?? null);
       }
-    }, 650);
+    }, 900);
   };
 
   const handleResolveSpecialEvent = async () => {
@@ -420,10 +446,27 @@ export default function StudentGameplayPage() {
         </div>
       </main>
 
+      {/* Full-Screen 3D Dice Roll & Result Summary Overlay (Matches Reference Image) */}
+      <DiceRollOverlayModal
+        isOpen={diceOverlayOpen}
+        rolling={rollingAnim}
+        value={rolledResultValue ?? state.dice.value}
+        round={state.round}
+        totalRounds={state.totalRounds}
+        playerName={viewerPlayer?.name || "ผู้เล่น"}
+        avatarId={viewerPlayer?.avatarId || "panda"}
+        summaryText={rollSummaryText}
+        fromPos={rollFromPos}
+        toPos={rollToPos}
+        onClose={() => setDiceOverlayOpen(false)}
+      />
+
       {/* Special Event Modal (Snake / Ladder / Star / Gift / Boost) */}
       <Modal
         isOpen={Boolean(
-          state.activeSpecialEvent && !state.activeSpecialEvent.resolved,
+          !diceOverlayOpen &&
+            state.activeSpecialEvent &&
+            !state.activeSpecialEvent.resolved,
         )}
         onClose={handleResolveSpecialEvent}
         title="เหตุการณ์พิเศษบนกระดาน!"

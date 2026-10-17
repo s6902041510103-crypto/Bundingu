@@ -140,7 +140,8 @@ export function QuestionCard({
   }
 
   const isSubmitted = viewerAnswerState !== "idle" || Boolean(viewerSelectedOptionId);
-  const isRevealed = Boolean(question.revealed);
+  const isRevealed =
+    Boolean(question.revealed) || Boolean(isSubmitted && question.correctOptionId);
   const disabled = readOnly || isSubmitted || isRevealed;
 
   const activeChoice = isSubmitted ? viewerSelectedOptionId : draftOptionId;
@@ -248,7 +249,7 @@ export function QuestionCard({
             )
           ) : (
             <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-center text-blue-800 text-sm font-display font-semibold">
-              ✓ ส่งคำตอบเรียบร้อยแล้ว! รอผู้เล่นครบหรือรอครูเฉลยคำตอบ...
+              ✓ ส่งคำตอบเรียบร้อยแล้ว!
             </div>
           )}
         </div>
@@ -269,7 +270,7 @@ export function QuestionCard({
               )}
             >
               {viewerAnswerState === "correct"
-                ? "🎉 ตอบถูกต้อง! คุณได้รับสิทธิ์เข้าคิวทอยลูกเต๋า"
+                ? "🎉 ตอบถูกต้อง! กดปุ่มทอยลูกเต๋าด้านล่างได้เลยทันที!"
                 : viewerAnswerState === "wrong"
                 ? "❌ ตอบไม่ถูกต้อง รอแก้มือในข้อถัดไปนะ!"
                 : "⏰ หมดเวลาตอบสำหรับข้อนี้"}
