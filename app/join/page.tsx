@@ -173,25 +173,13 @@ function JoinFormContent() {
         {/* Alphanumeric Room Key Input + QR Code Box */}
         <div className="p-4 rounded-2xl bg-blue-50/60 border border-blue-200/80 flex flex-col sm:flex-row items-center gap-4">
           <div className="flex-1 w-full">
-            <div className="flex items-center justify-between mb-1.5">
-              <label
-                htmlFor="pin-input"
-                className="inline-flex items-center gap-1.5 font-display text-sm font-bold text-slate-800"
-              >
-                <KeyRound className="w-4 h-4 text-blue-600" />
-                <span>คีย์ห้องเกม (6 หลัก A-Z, 0-9)</span>
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setPin("KS4829");
-                  if (error) setError("");
-                }}
-                className="text-xs font-display font-bold text-blue-600 hover:text-blue-800 underline cursor-pointer"
-              >
-                ใช้คีย์ตัวอย่าง KS4829
-              </button>
-            </div>
+            <label
+              htmlFor="pin-input"
+              className="inline-flex items-center gap-1.5 font-display text-sm font-bold text-slate-800 mb-1.5"
+            >
+              <KeyRound className="w-4 h-4 text-blue-600" />
+              <span>คีย์ห้องเกม (6 หลัก A-Z, 0-9 จากครูผู้สอน)</span>
+            </label>
             <input
               id="pin-input"
               type="text"
@@ -201,24 +189,26 @@ function JoinFormContent() {
                 if (error) setError("");
               }}
               maxLength={6}
-              placeholder="KS4829"
+              placeholder="กรอกคีย์ 6 หลัก"
               disabled={isJoining}
               autoComplete="off"
               className={cn(
                 "w-full px-4 py-3 text-center text-2xl font-display font-black tracking-[0.22em] uppercase rounded-xl border-2 bg-white text-[#0f2547] transition-all",
-                "placeholder:text-slate-300 focus:outline-none focus:border-blue-600",
+                "placeholder:text-slate-300 placeholder:text-lg placeholder:tracking-normal focus:outline-none focus:border-blue-600",
                 error ? "border-red-300" : "border-blue-200",
               )}
             />
           </div>
 
-          <div className="flex flex-col items-center shrink-0">
-            <QRCodeSVG
-              value={`${originUrl}/join?pin=${activeQrPin}`}
-              size={84}
-              label={`QR: ${activeQrPin}`}
-            />
-          </div>
+          {ROOM_KEY_PATTERN.test(pin) && (
+            <div className="flex flex-col items-center shrink-0 animate-fade-in">
+              <QRCodeSVG
+                value={`${originUrl}/join?pin=${pin}`}
+                size={84}
+                label={`KEY: ${pin}`}
+              />
+            </div>
+          )}
         </div>
 
         {/* Nickname Input */}

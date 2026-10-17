@@ -47,47 +47,7 @@ const globalForRooms = globalThis as unknown as {
 
 function getRoomMap(): Map<string, ServerRoom> {
   if (!globalForRooms.__ksServerRooms) {
-    const map = new Map<string, ServerRoom>();
-    // Seed default active room KS4829 so Teacher Dashboard & Student Join work out of the box
-    const questions = listQuestions();
-    const initialPlayers = MOCK_PLAYERS.map((p) => ({ ...p }));
-    const initialState: GameState = {
-      game: {
-        ...MOCK_GAME,
-        pin: "KS4829",
-        title: "Math Challenge",
-        subject: "คณิตศาสตร์",
-        grade: "มัธยมศึกษาปีที่ 1",
-      },
-      gameStatus: "lobby",
-      round: 0,
-      totalRounds: 5,
-      question: null,
-      players: initialPlayers,
-      currentPlayerId: null,
-      dice: { value: null, rolling: false, rolledBy: null, lastReason: null },
-      board: BOARD_CONFIG,
-      specialCells: SPECIAL_CELLS,
-      enabledSpecials: ["star", "gift", "boost"],
-      settings: { ...GAME_SETTINGS, questionTimeLimit: 25 },
-      leaderboard: computeLeaderboard(initialPlayers),
-      viewerPlayerId: null,
-      movingPlayerId: null,
-      movement: null,
-      activeSpecialEvent: null,
-      rollQueue: [],
-      pacingMode: "auto",
-      lastEvent: "SYSTEM · ห้องคีย์ KS4829 พร้อมให้เข้าร่วม",
-      updatedAt: Date.now(),
-    };
-    map.set("KS4829", {
-      pin: "KS4829",
-      teacherId: "teacher-default",
-      rngSeed: 987654321,
-      questionsPool: questions.length > 0 ? questions : [],
-      state: initialState,
-    });
-    globalForRooms.__ksServerRooms = map;
+    globalForRooms.__ksServerRooms = new Map<string, ServerRoom>();
   }
   return globalForRooms.__ksServerRooms;
 }
@@ -682,15 +642,28 @@ export function executeServerGameCommand(
         };
       });
 
+      const humanPlayers = updatedPlayers.filter((p) => !p.isBot);
+      const answeredHumans = humanPlayers.filter((p) => p.selectedOptionId !== null).length;
       const answeredTotal = updatedPlayers.filter((p) => p.selectedOptionId !== null).length;
+
       room.state = {
         ...state,
         gameStatus: "answering",
         players: updatedPlayers,
         leaderboard: computeLeaderboard(updatedPlayers),
-        lastEvent: `PLAYER · ส่งคำตอบแล้ว (${answeredTotal}/${updatedPlayers.length} คน)`,
+        lastEvent: `PLAYER · ${player.name} ส่งคำตอบแล้ว (${answeredTotal}/${updatedPlayers.length} คน)`,
         updatedAt: Date.now(),
       };
+
+      // If all real players in the room have answered, automatically reveal and queue dice rolls immediately!
+      if (humanPlayers.length > 0 && answeredHumans >= humanPlayers.length) {
+        const revealed = revealAnswersOnServer(room);
+        return {
+          room: revealed.room,
+          publicState: toPublicGameState(revealed.room, command.playerId),
+        };
+      }
+
       syncRoomToHistory(room);
       return { room, publicState: toPublicGameState(room, command.playerId) };
     }

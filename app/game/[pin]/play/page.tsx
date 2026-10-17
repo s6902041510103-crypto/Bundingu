@@ -82,8 +82,11 @@ export default function StudentGameplayPage() {
     };
   }, [pin]);
 
+  const [quickJoinName, setQuickJoinName] = useState("");
+  const [quickJoining, setQuickJoining] = useState(false);
+
   const viewerPlayer =
-    state.players.find((p) => p.id === viewerId) ?? state.players[0] ?? null;
+    (viewerId ? state.players.find((p) => p.id === viewerId) : null) ?? null;
 
   const activeViewerId = viewerPlayer?.id ?? null;
   const isMyTurnToRoll =
@@ -96,8 +99,58 @@ export default function StudentGameplayPage() {
     ? state.rollQueue.indexOf(activeViewerId) + 1
     : 0;
 
+  const handleQuickJoin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = quickJoinName.trim();
+    if (!cleanName || !transportRef.current?.sendCommand) return;
+    setQuickJoining(true);
+    try {
+      const res = await fetch(`/api/games/${encodeURIComponent(pin)}/command`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "JOIN_GAME",
+          nickname: cleanName,
+          avatarId: "panda",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.joinedPlayer) {
+        const record = {
+          pin,
+          nickname: data.joinedPlayer.name,
+          avatarId: data.joinedPlayer.avatarId,
+          playerId: data.joinedPlayer.id,
+          joinedAt: Date.now(),
+        };
+        sessionStorage.setItem("ks-player", JSON.stringify(record));
+        sessionStorage.setItem(`ks-room-${pin}`, JSON.stringify(record));
+        setViewerId(data.joinedPlayer.id);
+        if (data.state) setState(data.state);
+        addToast({
+          title: `เข้าร่วมห้องในชื่อ "${data.joinedPlayer.name}" สำเร็จ!`,
+          variant: "success",
+        });
+      } else {
+        addToast({
+          title: "ไม่สามารถเข้าร่วมได้",
+          description: data.error || "ไม่พบห้องเกมนี้",
+          variant: "warning",
+        });
+      }
+    } finally {
+      setQuickJoining(false);
+    }
+  };
+
   const handleSubmitAnswer = async (optionId: string) => {
-    if (!activeViewerId || !transportRef.current?.sendCommand) return;
+    if (!activeViewerId || !transportRef.current?.sendCommand) {
+      addToast({
+        title: "กรุณากรอกชื่อเข้าร่วมห้องก่อนตอบคำถาม",
+        variant: "warning",
+      });
+      return;
+    }
     const res = await transportRef.current.sendCommand({
       type: "SUBMIT_ANSWER",
       playerId: activeViewerId,
@@ -112,7 +165,7 @@ export default function StudentGameplayPage() {
     } else {
       addToast({
         title: "ส่งคำตอบสำเร็จ!",
-        description: "รอผลเฉลยเมื่อหมดเวลาหรือเมื่อครูเฉลย",
+        description: "ระบบบันทึกคำตอบของคุณเรียบร้อยแล้ว",
         variant: "success",
       });
     }
@@ -157,8 +210,14 @@ export default function StudentGameplayPage() {
           <div className="flex items-center gap-2 sm:gap-4">
             <KnowledgeSnakeLogo size="sm" theme="dark" />
             <span className="text-xs sm:text-sm font-mono font-bold text-blue-200 bg-blue-950/80 border border-blue-400/25 px-2.5 py-1 rounded-full">
-              PIN: {pin}
+              KEY: {pin}
             </span>
+            {viewerPlayer && (
+              <div className="hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-xs font-display font-bold text-emerald-200">
+                <Avatar avatarId={viewerPlayer.avatarId} size="xs" />
+                <span>คุณ: {viewerPlayer.name} (ช่อง {viewerPlayer.position})</span>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
@@ -207,29 +266,35 @@ export default function StudentGameplayPage() {
             {/* Bottom Player Avatar Strip (Matches Reference Student Screen #3) */}
             <div className="bg-[#0b1d3d]/90 border border-blue-400/25 rounded-2xl p-2.5 sm:p-3 flex items-center justify-between gap-2 overflow-x-auto">
               <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                {state.leaderboard.slice(0, 6).map((entry) => {
-                  const isViewer = entry.playerId === activeViewerId;
-                  return (
-                    <div
-                      key={entry.playerId}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border shrink-0 ${
-                        isViewer
-                          ? "bg-emerald-500/20 border-emerald-400/60"
-                          : "bg-slate-900/70 border-white/10"
-                      }`}
-                    >
-                      <Avatar avatarId={entry.avatarId} size="xs" ring={isViewer} />
-                      <div className="text-xs leading-tight">
-                        <span className="font-display font-bold text-white block truncate max-w-[68px]">
-                          {entry.name}
-                        </span>
-                        <span className="font-mono text-[11px] text-amber-300">
-                          ช่อง {entry.position}
-                        </span>
+                {state.leaderboard.length === 0 ? (
+                  <span className="text-xs text-blue-200 px-2">
+                    ยังไม่มีผู้เล่นในห้องนี้
+                  </span>
+                ) : (
+                  state.leaderboard.slice(0, 6).map((entry) => {
+                    const isViewer = entry.playerId === activeViewerId;
+                    return (
+                      <div
+                        key={entry.playerId}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border shrink-0 ${
+                          isViewer
+                            ? "bg-emerald-500/20 border-emerald-400/60"
+                            : "bg-slate-900/70 border-white/10"
+                        }`}
+                      >
+                        <Avatar avatarId={entry.avatarId} size="xs" ring={isViewer} />
+                        <div className="text-xs leading-tight">
+                          <span className="font-display font-bold text-white block truncate max-w-[68px]">
+                            {entry.name}
+                          </span>
+                          <span className="font-mono text-[11px] text-amber-300">
+                            ช่อง {entry.position}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
 
               <button
@@ -245,13 +310,43 @@ export default function StudentGameplayPage() {
 
           {/* BELOW BOARD on Mobile / RIGHT on Desktop: Question Card + Dice Roll Panel */}
           <div className="lg:col-span-5 flex flex-col gap-4 w-full">
-            {/* Active Question Card */}
+            {/* If student hasn't joined yet, show instant Quick-Join box */}
+            {!viewerPlayer && (
+              <form
+                onSubmit={handleQuickJoin}
+                className="p-4 rounded-2xl bg-amber-400 text-slate-950 shadow-xl space-y-2.5"
+              >
+                <div className="font-display font-extrabold text-sm sm:text-base">
+                  👋 กรอกชื่อเล่นเพื่อเข้าร่วมห้อง {pin} และตอบคำถาม
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={quickJoinName}
+                    onChange={(e) => setQuickJoinName(e.target.value.slice(0, 20))}
+                    placeholder="ใส่ชื่อเล่นของคุณ เช่น น้องมิน"
+                    required
+                    className="flex-1 px-3.5 py-2 rounded-xl bg-white text-slate-900 text-sm font-medium border border-amber-500 focus:outline-none"
+                  />
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="sm"
+                    loading={quickJoining}
+                  >
+                    เข้าร่วมเลย
+                  </Button>
+                </div>
+              </form>
+            )}
+
+            {/* Active Question Card (1-click answer!) */}
             <QuestionCard
               question={state.question}
               onAnswer={handleSubmitAnswer}
               viewerAnswerState={viewerPlayer?.answerState ?? "idle"}
               viewerSelectedOptionId={viewerPlayer?.selectedOptionId}
-              requireConfirmButton={true}
+              requireConfirmButton={false}
             />
 
             {/* Dice & Movement Panel (Matches Reference Student Screen #3 bottom-right) */}

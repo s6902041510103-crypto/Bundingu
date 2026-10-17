@@ -177,7 +177,7 @@ export function resolveBoardEffect(
  * ------------------------------------------------------------------ */
 
 export function createInitialGameState(overrides: Partial<GameState> = {}): GameState {
-  const players = (overrides.players ?? MOCK_PLAYERS).map((p) => ({ ...p }));
+  const players = (overrides.players ?? []).map((p) => ({ ...p }));
   const enabledSpecials = overrides.enabledSpecials ?? new Set<string>(["star", "gift", "boost"]);
   return {
     game: MOCK_GAME,
@@ -193,7 +193,7 @@ export function createInitialGameState(overrides: Partial<GameState> = {}): Game
     enabledSpecials,
     settings: GAME_SETTINGS,
     leaderboard: computeLeaderboard(players),
-    viewerPlayerId: VIEWER_PLAYER_ID,
+    viewerPlayerId: null,
     movingPlayerId: null,
     movement: null,
     activeSpecialEvent: null,

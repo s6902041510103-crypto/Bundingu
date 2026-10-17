@@ -108,7 +108,7 @@ export function QuestionCard({
   viewerAnswerState = "idle",
   viewerSelectedOptionId,
   readOnly = false,
-  requireConfirmButton = true,
+  requireConfirmButton = false,
   className,
 }: QuestionCardProps) {
   const [draftOptionId, setDraftOptionId] = useState<string | null>(null);
@@ -121,12 +121,20 @@ export function QuestionCard({
     return (
       <div
         className={cn(
-          "p-6 rounded-2xl bg-white border border-slate-200 text-center shadow-md",
+          "p-6 rounded-2xl bg-white border-2 border-blue-200 text-center shadow-lg space-y-2",
           className,
         )}
       >
-        <p className="font-display font-semibold text-slate-700">รอครูเริ่มคำถามข้อถัดไป...</p>
-        <p className="text-xs text-slate-500 mt-1">เตรียมตัวให้พร้อมบนกระดาน!</p>
+        <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center mx-auto text-2xl">
+          ⏳
+        </div>
+        <p className="font-display font-extrabold text-lg text-[#0f2547]">
+          รอครูผู้สอนกดปุ่ม &ldquo;เริ่มคำถาม&rdquo;
+        </p>
+        <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+          เมื่อครูกดปุ่ม <strong>เริ่มคำถามข้อแรก / ข้อถัดไป</strong> บนหน้าจอควบคุมของครู
+          โจทย์และตัวเลือก A, B, C, D จะปรากฏขึ้นตรงนี้ทันที!
+        </p>
       </div>
     );
   }
@@ -139,9 +147,8 @@ export function QuestionCard({
 
   const handleOptionClick = (optId: string) => {
     if (disabled) return;
-    if (requireConfirmButton) {
-      setDraftOptionId(optId);
-    } else {
+    setDraftOptionId(optId);
+    if (!requireConfirmButton) {
       onAnswer?.(optId);
     }
   };
@@ -198,6 +205,11 @@ export function QuestionCard({
       </div>
 
       {/* 4 Options */}
+      {!readOnly && !isRevealed && !isSubmitted && (
+        <div className="px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-xs font-display font-bold text-blue-800 text-center">
+          👇 คลิกเลือกคำตอบที่ถูกต้องด้านล่าง (A, B, C หรือ D)
+        </div>
+      )}
       <div className="space-y-2" role="group" aria-label="ตัวเลือกคำตอบ 4 ข้อ">
         {question.options.map((option, index) => (
           <AnswerOption
@@ -236,7 +248,7 @@ export function QuestionCard({
             )
           ) : (
             <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-center text-blue-800 text-sm font-display font-semibold">
-              ✓ ส่งคำตอบเรียบร้อยแล้ว รอครูเฉลยคำตอบ...
+              ✓ ส่งคำตอบเรียบร้อยแล้ว! รอผู้เล่นครบหรือรอครูเฉลยคำตอบ...
             </div>
           )}
         </div>

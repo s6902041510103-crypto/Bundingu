@@ -315,15 +315,26 @@ export default function TeacherDashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {history.slice(0, 6).map((game) => {
-                  const isLive =
-                    game.status === "lobby" || game.status === "playing";
-                  const dateStr = new Date(game.createdAt).toLocaleDateString(
-                    "th-TH",
-                    { day: "2-digit", month: "2-digit", year: "numeric" },
-                  );
+                {history.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-10 px-6 text-center text-slate-500">
+                      ยังไม่มีประวัติการสร้างห้องเกม — กดปุ่ม{" "}
+                      <Link href="/teacher/games/new" className="text-blue-600 font-bold underline">
+                        สร้างเกมใหม่
+                      </Link>{" "}
+                      เพื่อเริ่มห้องเรียนแรกของคุณ
+                    </td>
+                  </tr>
+                ) : (
+                  history.slice(0, 6).map((game) => {
+                    const isLive =
+                      game.status === "lobby" || game.status === "playing";
+                    const dateStr = new Date(game.createdAt).toLocaleDateString(
+                      "th-TH",
+                      { day: "2-digit", month: "2-digit", year: "numeric" },
+                    );
 
-                  return (
+                    return (
                     <tr
                       key={game.id}
                       className="hover:bg-slate-50/80 transition-colors"
@@ -391,7 +402,8 @@ export default function TeacherDashboardPage() {
                       </td>
                     </tr>
                   );
-                })}
+                })
+                )}
               </tbody>
             </table>
           </div>
