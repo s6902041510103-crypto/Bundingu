@@ -166,54 +166,8 @@ export function GameBoard({
 
         {/* Snake SVG Overlay */}
         <SnakeOverlay snakes={SNAKES} cells={cells} />
-
-        {/* Active Movement Path Indicator */}
-        {mode === "game" && movementPath && movementPath.length > 1 && (
-          <MovementPathIndicator path={movementPath} cells={cells} />
-        )}
       </div>
     </div>
-  );
-}
-
-function MovementPathIndicator({
-  path,
-  cells,
-}: {
-  path: number[];
-  cells: BoardCell[];
-}) {
-  const cellMap = new Map(cells.map((c) => [c.number, c]));
-  const points = path
-    .map((num) => cellMap.get(num))
-    .filter((c): c is BoardCell => Boolean(c));
-
-  if (points.length < 2) return null;
-
-  const pathData = points
-    .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
-    .join(" ");
-
-  const last = points[points.length - 1];
-
-  return (
-    <svg
-      className="absolute inset-0 w-full h-full pointer-events-none z-20"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <path
-        d={pathData}
-        stroke="#2563eb"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-        strokeDasharray="2 1.5"
-      />
-      <circle cx={last.x} cy={last.y} r="2" fill="#2563eb" />
-    </svg>
   );
 }
 

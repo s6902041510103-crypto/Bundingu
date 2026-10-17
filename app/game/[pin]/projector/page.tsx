@@ -100,7 +100,6 @@ export default function ProjectorViewPage() {
               players={state.players}
               currentPlayerId={state.currentPlayerId}
               movingPlayerId={state.movingPlayerId}
-              movementPath={state.movement?.path}
               mode="game"
             />
 

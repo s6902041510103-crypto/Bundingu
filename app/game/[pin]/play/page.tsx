@@ -33,7 +33,6 @@ export default function StudentGameplayPage() {
 
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [rollingAnim, setRollingAnim] = useState(false);
-  const [remoteDiceSpin, setRemoteDiceSpin] = useState(false);
   const [diceOverlayOpen, setDiceOverlayOpen] = useState(false);
   const [rolledResultValue, setRolledResultValue] = useState<number | null>(null);
   const [rollFromPos, setRollFromPos] = useState<number | null>(null);
@@ -119,7 +118,7 @@ export default function StudentGameplayPage() {
     ? state.rollQueue.indexOf(activeViewerId) + 1
     : 0;
 
-  // 3. Watch for server-side dice rolls (e.g., if Teacher clicked "ทอยให้" or another player rolled)
+  // 3. Watch for server-side dice rolls for THIS viewer (e.g., if Teacher clicked "ทอยให้")
   useEffect(() => {
     if (!state.movement || !state.dice.rolledBy || state.dice.value === null) {
       return;
@@ -130,8 +129,6 @@ export default function StudentGameplayPage() {
     }
     lastProcessedMoveKeyRef.current = moveKey;
 
-    // If this roll was for the current viewer and wasn't initiated locally by handleRollDice (e.g. Teacher clicked "ทอยให้"),
-    // play the full-screen 3D Dice Roll Overlay animation for this student!
     if (
       activeViewerId &&
       state.dice.rolledBy === activeViewerId &&
@@ -154,14 +151,6 @@ export default function StudentGameplayPage() {
         setRollingAnim(false);
         setRolledResultValue(rolledVal);
       }, 850);
-      return;
-    }
-
-    // If another player rolled, spin the panel 3D dice briefly so everyone sees the roll action
-    if (state.dice.rolledBy !== activeViewerId) {
-      setRemoteDiceSpin(true);
-      const t = window.setTimeout(() => setRemoteDiceSpin(false), 700);
-      return () => window.clearTimeout(t);
     }
   }, [
     state.round,
@@ -520,7 +509,7 @@ export default function StudentGameplayPage() {
                   </div>
                 </div>
 
-                {/* 3D-styled Animated Dice (Clickable when it's your turn!) */}
+                {/* 3D-styled Dice on Panel (stays still on the face rolled; spins only inside the full-screen modal when clicked) */}
                 <button
                   type="button"
                   disabled={!isMyTurnToRoll || rollingAnim}
@@ -529,8 +518,8 @@ export default function StudentGameplayPage() {
                   title={isMyTurnToRoll ? "กดเพื่อทอยลูกเต๋า" : "ลูกเต๋า 3 มิติ"}
                 >
                   <Dice
-                    value={viewerPlayer?.lastRoll ?? state.dice.value}
-                    rolling={rollingAnim || remoteDiceSpin || state.dice.rolling}
+                    value={viewerPlayer?.lastRoll ?? rolledResultValue ?? state.dice.value ?? 5}
+                    rolling={false}
                     size="md"
                     className={
                       isMyTurnToRoll && !rollingAnim

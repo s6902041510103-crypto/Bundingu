@@ -107,6 +107,8 @@ export function Dice({
   "aria-label": ariaLabel,
 }: DiceProps) {
   const [spinTick, setSpinTick] = useState(0);
+  const [justLanded, setJustLanded] = useState(false);
+  const wasRollingRef = React.useRef(false);
 
   // Cube dimensions in px so translateZ is exact
   const cubePx = {
@@ -141,22 +143,29 @@ export function Dice({
 
   useEffect(() => {
     if (!rolling) {
+      if (wasRollingRef.current) {
+        wasRollingRef.current = false;
+        setJustLanded(true);
+      }
       if (value !== null) {
         onRollComplete?.(value);
       }
       return;
     }
+    wasRollingRef.current = true;
+    setJustLanded(false);
     const interval = window.setInterval(() => {
       setSpinTick((t) => t + 1);
     }, 110);
     return () => window.clearInterval(interval);
   }, [rolling, value, onRollComplete]);
 
-  // Guaranteed: when not rolling, the front face ALWAYS matches `value`!
-  const effectiveFrontValue =
-    !rolling && value !== null && value >= 1 && value <= 6
+  // Guaranteed: when not rolling, the front face ALWAYS stays still on `value` (or 5 if not rolled yet)
+  const effectiveFrontValue = !rolling
+    ? value !== null && value >= 1 && value <= 6
       ? value
-      : ((spinTick % 6) + 1);
+      : 5
+    : (spinTick % 6) + 1;
 
   const faces = getCubeFaceNumbers(effectiveFrontValue);
 
@@ -191,10 +200,13 @@ export function Dice({
 
       {/* True 6-Sided 3D Cube Container */}
       <div
-        key={rolling ? "rolling-cube" : `landed-cube-${effectiveFrontValue}`}
         className={cn(
           "relative w-full h-full",
-          rolling ? "animate-dice-3d-tumble" : "animate-dice-3d-land",
+          rolling
+            ? "animate-dice-3d-tumble"
+            : justLanded
+            ? "animate-dice-3d-land"
+            : undefined,
         )}
         style={{
           transformStyle: "preserve-3d",

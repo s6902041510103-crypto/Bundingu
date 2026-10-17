@@ -429,7 +429,6 @@ export default function TeacherLiveControllerPage() {
                 players={state.players}
                 currentPlayerId={state.currentPlayerId}
                 movingPlayerId={state.movingPlayerId}
-                movementPath={state.movement?.path}
                 mode="game"
               />
             </div>
