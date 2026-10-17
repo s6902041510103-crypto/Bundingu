@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import {
   deleteQuestionRecord,
   updateQuestionRecord,
-  verifyTeacherSessionToken,
+  resolveTeacherSession,
 } from "@/lib/server/repository";
 
 export async function PUT(
@@ -12,7 +12,22 @@ export async function PUT(
 ) {
   const cookieStore = await cookies();
   const token = cookieStore.get("ks_teacher_token")?.value;
-  const session = verifyTeacherSessionToken(token);
+  const teacherIdHeader = request.headers.get("x-teacher-id");
+  const teacherEmailHeader = request.headers.get("x-teacher-email");
+
+  let body: any = {};
+  try {
+    body = await request.json();
+  } catch {
+    body = {};
+  }
+
+  const session = resolveTeacherSession({
+    token,
+    teacherId: teacherIdHeader || body?.teacherId,
+    email: teacherEmailHeader || body?.teacherEmail,
+  });
+
   if (!session) {
     return NextResponse.json(
       { error: "กรุณาเข้าสู่ระบบครูผู้สอนก่อนแก้ไขคำถาม" },
@@ -22,7 +37,6 @@ export async function PUT(
 
   try {
     const { id } = await context.params;
-    const body = await request.json();
     const result = updateQuestionRecord(id, {
       prompt: body.prompt,
       subject: body.subject,
@@ -37,7 +51,14 @@ export async function PUT(
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    return NextResponse.json({ ok: true, question: result.question });
+    const response = NextResponse.json({ ok: true, question: result.question });
+    response.cookies.set("ks_teacher_token", session.token, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+    return response;
   } catch {
     return NextResponse.json(
       { error: "ไม่สามารถบันทึกการแก้ไขคำถามได้" },
@@ -47,12 +68,20 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   const cookieStore = await cookies();
   const token = cookieStore.get("ks_teacher_token")?.value;
-  const session = verifyTeacherSessionToken(token);
+  const teacherIdHeader = request.headers.get("x-teacher-id");
+  const teacherEmailHeader = request.headers.get("x-teacher-email");
+
+  const session = resolveTeacherSession({
+    token,
+    teacherId: teacherIdHeader,
+    email: teacherEmailHeader,
+  });
+
   if (!session) {
     return NextResponse.json(
       { error: "กรุณาเข้าสู่ระบบครูผู้สอนก่อนลบคำถาม" },

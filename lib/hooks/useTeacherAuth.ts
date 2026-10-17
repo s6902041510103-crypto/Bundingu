@@ -12,8 +12,37 @@ export function useTeacherAuth(redirectOnUnauth = true) {
   useEffect(() => {
     let active = true;
     const checkAuth = async () => {
+      let cachedTeacher: TeacherProfile | null = null;
+      if (typeof window !== "undefined") {
+        try {
+          const raw =
+            sessionStorage.getItem("ks-teacher") ||
+            localStorage.getItem("ks-teacher-remember");
+          if (raw) {
+            cachedTeacher = JSON.parse(raw);
+            if (cachedTeacher && active) {
+              setTeacher(cachedTeacher);
+            }
+          }
+        } catch {
+          // ignore storage parse error
+        }
+      }
+
       try {
-        const res = await fetch("/api/auth/session", { cache: "no-store" });
+        const headers: Record<string, string> = {};
+        if (cachedTeacher?.teacherId) {
+          headers["x-teacher-id"] = cachedTeacher.teacherId;
+        }
+        if (cachedTeacher?.email) {
+          headers["x-teacher-email"] = cachedTeacher.email;
+        }
+
+        const res = await fetch("/api/auth/session", {
+          cache: "no-store",
+          headers,
+        });
+
         if (res.ok) {
           const data = await res.json();
           if (data?.authenticated && data?.teacher) {
@@ -30,6 +59,11 @@ export function useTeacherAuth(redirectOnUnauth = true) {
       }
 
       if (active) {
+        if (cachedTeacher) {
+          setTeacher(cachedTeacher);
+          setLoading(false);
+          return;
+        }
         setLoading(false);
         if (redirectOnUnauth) {
           router.replace("/teacher/login");

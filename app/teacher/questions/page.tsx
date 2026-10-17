@@ -55,8 +55,14 @@ export default function QuestionBankPage() {
       if (difficultyFilter !== "ทั้งหมด") params.set("difficulty", difficultyFilter);
       if (search.trim()) params.set("search", search.trim());
 
+      const headers: Record<string, string> = {};
+      if (teacher?.teacherId) headers["x-teacher-id"] = teacher.teacherId;
+      if (teacher?.email) headers["x-teacher-email"] = teacher.email;
+
       const res = await fetch(`/api/questions?${params.toString()}`, {
         cache: "no-store",
+        credentials: "include",
+        headers,
       });
       if (!res.ok) return;
       const data = await res.json();
@@ -66,7 +72,7 @@ export default function QuestionBankPage() {
     } finally {
       setLoading(false);
     }
-  }, [subjectFilter, difficultyFilter, search]);
+  }, [subjectFilter, difficultyFilter, search, teacher?.teacherId, teacher?.email]);
 
   useEffect(() => {
     fetchQuestions();
@@ -125,9 +131,14 @@ export default function QuestionBankPage() {
     try {
       const url = editingId ? `/api/questions/${encodeURIComponent(editingId)}` : "/api/questions";
       const method = editingId ? "PUT" : "POST";
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (teacher?.teacherId) headers["x-teacher-id"] = teacher.teacherId;
+      if (teacher?.email) headers["x-teacher-email"] = teacher.email;
+
       const res = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers,
+        credentials: "include",
         body: JSON.stringify({
           prompt: prompt.trim(),
           subject,
@@ -162,8 +173,14 @@ export default function QuestionBankPage() {
 
   const handleDeleteQuestion = async (q: Question) => {
     try {
+      const headers: Record<string, string> = {};
+      if (teacher?.teacherId) headers["x-teacher-id"] = teacher.teacherId;
+      if (teacher?.email) headers["x-teacher-email"] = teacher.email;
+
       const res = await fetch(`/api/questions/${encodeURIComponent(q.id)}`, {
         method: "DELETE",
+        headers,
+        credentials: "include",
       });
       const data = await res.json();
       if (!res.ok || data.error) {

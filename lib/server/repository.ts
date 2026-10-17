@@ -514,6 +514,65 @@ export function authenticateTeacherAccount(
 export function verifyTeacherSessionToken(token?: string | null): TeacherSession | null {
   if (!token) return null;
   const store = getStorageAdapter().read();
-  const found = store.sessions.find((s) => s.token === token && s.expiresAt > Date.now());
+  const sessions = Array.isArray(store.sessions) ? store.sessions : [];
+  const found = sessions.find((s) => s.token === token && s.expiresAt > Date.now());
   return found ?? null;
+}
+
+export function resolveTeacherSession(options: {
+  token?: string | null;
+  teacherId?: string | null;
+  email?: string | null;
+}): TeacherSession | null {
+  const store = getStorageAdapter().read();
+  const now = Date.now();
+  const sessions = Array.isArray(store.sessions) ? store.sessions : [];
+
+  // 1. Primary check: by session token
+  if (options.token) {
+    const byToken = sessions.find((s) => s.token === options.token && s.expiresAt > now);
+    if (byToken) return byToken;
+  }
+
+  // 2. By teacherId
+  if (options.teacherId) {
+    const byId = sessions.find((s) => s.teacherId === options.teacherId && s.expiresAt > now);
+    if (byId) return byId;
+
+    const matchedAccount = (store.teachers ?? []).find((t) => t.teacherId === options.teacherId);
+    if (matchedAccount) {
+      return createTeacherSession(
+        matchedAccount.email,
+        matchedAccount.name,
+        matchedAccount.school,
+        matchedAccount.teacherId,
+      );
+    }
+  }
+
+  // 3. By email
+  if (options.email) {
+    const cleanEmail = options.email.trim().toLowerCase();
+    const byEmail = sessions.find((s) => s.email.toLowerCase() === cleanEmail && s.expiresAt > now);
+    if (byEmail) return byEmail;
+
+    const matchedAccount = (store.teachers ?? []).find((t) => t.email.toLowerCase() === cleanEmail);
+    if (matchedAccount) {
+      return createTeacherSession(
+        matchedAccount.email,
+        matchedAccount.name,
+        matchedAccount.school,
+        matchedAccount.teacherId,
+      );
+    }
+    return createTeacherSession(cleanEmail);
+  }
+
+  // 4. Fallback: if there's any active teacher session in the store, use the latest one
+  const latest = sessions.find((s) => s.expiresAt > now);
+  if (latest) {
+    return latest;
+  }
+
+  return null;
 }

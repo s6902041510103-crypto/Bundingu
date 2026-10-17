@@ -138,9 +138,13 @@ function CreateGameContent() {
   useEffect(() => {
     const loadInitialData = async () => {
       try {
+        const headers: Record<string, string> = {};
+        if (teacher?.teacherId) headers["x-teacher-id"] = teacher.teacherId;
+        if (teacher?.email) headers["x-teacher-email"] = teacher.email;
+
         const [qRes, gRes] = await Promise.all([
-          fetch("/api/questions", { cache: "no-store" }),
-          fetch("/api/games", { cache: "no-store" }),
+          fetch("/api/questions", { cache: "no-store", headers, credentials: "include" }),
+          fetch("/api/games", { cache: "no-store", headers, credentials: "include" }),
         ]);
 
         let loadedQuestions: Question[] = [];
@@ -186,7 +190,7 @@ function CreateGameContent() {
       }
     };
     loadInitialData();
-  }, [templatePinParam]);
+  }, [templatePinParam, teacher?.teacherId, teacher?.email]);
 
   const filteredQuestions = useMemo(() => {
     if (subject === "ทั้งหมด") return allQuestions;
@@ -214,9 +218,14 @@ function CreateGameContent() {
     setIsSavingQuestion(true);
     try {
       const targetSubject = subject === "ทั้งหมด" ? "คณิตศาสตร์" : subject;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (teacher?.teacherId) headers["x-teacher-id"] = teacher.teacherId;
+      if (teacher?.email) headers["x-teacher-email"] = teacher.email;
+
       const res = await fetch("/api/questions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers,
         body: JSON.stringify({
           prompt: newPrompt.trim(),
           subject: targetSubject,
@@ -224,6 +233,8 @@ function CreateGameContent() {
           options: newOptions,
           correctIndex: newCorrectIndex,
           explanation: newExplanation.trim(),
+          teacherId: teacher?.teacherId,
+          teacherEmail: teacher?.email,
         }),
       });
       const data = await res.json();
@@ -260,8 +271,14 @@ function CreateGameContent() {
 
   const handleDeleteQuestion = async (id: string) => {
     try {
+      const headers: Record<string, string> = {};
+      if (teacher?.teacherId) headers["x-teacher-id"] = teacher.teacherId;
+      if (teacher?.email) headers["x-teacher-email"] = teacher.email;
+
       const res = await fetch(`/api/questions/${encodeURIComponent(id)}`, {
         method: "DELETE",
+        credentials: "include",
+        headers,
       });
       if (!res.ok) return;
       setAllQuestions((prev) => prev.filter((q) => q.id !== id));
@@ -325,9 +342,14 @@ function CreateGameContent() {
     setError("");
     setIsCreating(true);
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (teacher?.teacherId) headers["x-teacher-id"] = teacher.teacherId;
+      if (teacher?.email) headers["x-teacher-email"] = teacher.email;
+
       const res = await fetch("/api/games", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers,
         body: JSON.stringify({
           title: title.trim(),
           subject,
@@ -337,6 +359,8 @@ function CreateGameContent() {
           questionIds: selectedQuestionIds,
           enabledSpecials: enableSpecials ? ["star", "gift", "boost"] : [],
           seedDemoPlayers: false,
+          teacherId: teacher?.teacherId,
+          teacherEmail: teacher?.email,
         }),
       });
       const data = await res.json();

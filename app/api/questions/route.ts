@@ -3,17 +3,20 @@ import { cookies } from "next/headers";
 import {
   createQuestionRecord,
   listQuestions,
-  verifyTeacherSessionToken,
+  resolveTeacherSession,
 } from "@/lib/server/repository";
 
 export async function GET(request: Request) {
   const cookieStore = await cookies();
   const token = cookieStore.get("ks_teacher_token")?.value;
-  const session = verifyTeacherSessionToken(token);
+  const teacherIdHeader = request.headers.get("x-teacher-id");
+  const teacherEmailHeader = request.headers.get("x-teacher-email");
 
-  if (!session) {
-    return NextResponse.json({ questions: [] });
-  }
+  const session = resolveTeacherSession({
+    token,
+    teacherId: teacherIdHeader,
+    email: teacherEmailHeader,
+  });
 
   const { searchParams } = new URL(request.url);
   const subject = searchParams.get("subject") || undefined;
@@ -24,15 +27,40 @@ export async function GET(request: Request) {
     subject,
     difficulty,
     search,
-    teacherId: session.teacherId,
+    teacherId: session?.teacherId,
   });
-  return NextResponse.json({ questions });
+
+  const response = NextResponse.json({ questions });
+  if (session) {
+    response.cookies.set("ks_teacher_token", session.token, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+  }
+  return response;
 }
 
 export async function POST(request: Request) {
   const cookieStore = await cookies();
   const token = cookieStore.get("ks_teacher_token")?.value;
-  const session = verifyTeacherSessionToken(token);
+  const teacherIdHeader = request.headers.get("x-teacher-id");
+  const teacherEmailHeader = request.headers.get("x-teacher-email");
+
+  let body: any = {};
+  try {
+    body = await request.json();
+  } catch {
+    body = {};
+  }
+
+  const session = resolveTeacherSession({
+    token,
+    teacherId: teacherIdHeader || body?.teacherId,
+    email: teacherEmailHeader || body?.teacherEmail,
+  });
+
   if (!session) {
     return NextResponse.json(
       { error: "กรุณาเข้าสู่ระบบครูผู้สอนก่อนเพิ่มคำถาม" },
@@ -41,7 +69,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json();
     const result = createQuestionRecord({
       prompt: body.prompt,
       subject: body.subject,
@@ -57,7 +84,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    return NextResponse.json({ ok: true, question: result.question }, { status: 201 });
+    const response = NextResponse.json(
+      { ok: true, question: result.question },
+      { status: 201 },
+    );
+    response.cookies.set("ks_teacher_token", session.token, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+    return response;
   } catch {
     return NextResponse.json(
       { error: "ข้อมูลคำถามไม่ถูกต้อง" },
