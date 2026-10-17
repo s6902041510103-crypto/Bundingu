@@ -107,9 +107,12 @@ export default function HomePage() {
             <div className="grid lg:grid-cols-12 gap-10 lg:gap-8 items-center">
               {/* Left Column: Headline & Primary CTAs */}
               <div className="lg:col-span-6 text-center lg:text-left space-y-6">
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/85 border border-blue-200 shadow-xs text-blue-800 text-xs sm:text-sm font-display font-semibold">
-                  <Sparkles className="w-4 h-4 text-amber-500" />
-                  <span>Educational Fantasy Adventure · Kahoot × Snake & Ladder</span>
+                <div className="flex flex-col items-center lg:items-start gap-4">
+                  <KnowledgeSnakeLogo variant="badge" size="lg" className="drop-shadow-2xl" />
+                  <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/85 border border-blue-200 shadow-xs text-blue-800 text-xs sm:text-sm font-display font-semibold">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    <span>Educational Fantasy Adventure · Kahoot × Snake & Ladder</span>
+                  </div>
                 </div>
 
                 <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-[#0f2547] leading-[1.15] drop-shadow-xs">

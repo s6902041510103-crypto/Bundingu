@@ -158,7 +158,8 @@ function JoinFormContent() {
 
   return (
     <Card variant="elevated" padding="lg" className="w-full max-w-lg rounded-3xl border-white shadow-2xl">
-      <div className="text-center mb-5">
+      <div className="text-center mb-5 flex flex-col items-center">
+        <KnowledgeSnakeLogo variant="badge" size="md" className="mb-2" />
         <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-[#0f2547]">
           เข้าร่วมเกม
         </h1>

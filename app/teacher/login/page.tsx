@@ -96,7 +96,8 @@ export default function TeacherLoginPage() {
       <main className="flex-1 flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-md">
           <Card variant="elevated" padding="lg" className="rounded-3xl border-white shadow-2xl">
-            <div className="text-center mb-6">
+            <div className="text-center mb-6 flex flex-col items-center">
+              <KnowledgeSnakeLogo variant="badge" size="md" className="mb-2" />
               <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-[#0f2547]">
                 เข้าสู่ระบบครู
               </h1>
