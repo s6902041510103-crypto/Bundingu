@@ -1,20 +1,91 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { KnowledgeSnakeLogo } from "@/components/ui/Logo";
 import { Avatar } from "@/components/game/Avatar";
 import type { AvatarId } from "@/lib/types";
 
-const DICE_FACES = [
-  [5], // 1
-  [1, 9], // 2
-  [1, 5, 9], // 3
-  [1, 3, 7, 9], // 4
-  [1, 3, 5, 7, 9], // 5
-  [1, 2, 3, 7, 8, 9], // 6
-];
+/**
+ * Standard 3x3 pip positions for dice values 1..6:
+ *  1  2  3
+ *  4  5  6
+ *  7  8  9
+ */
+const DICE_FACES: Record<number, number[]> = {
+  1: [5],
+  2: [1, 9],
+  3: [1, 5, 9],
+  4: [1, 3, 7, 9],
+  5: [1, 3, 5, 7, 9],
+  6: [1, 3, 4, 6, 7, 9],
+};
+
+/**
+ * Adjacent faces for a standard die (opposite faces sum to 7)
+ * when `front` is the rolled value.
+ */
+function getCubeFaceNumbers(frontValue: number): {
+  front: number;
+  back: number;
+  right: number;
+  left: number;
+  top: number;
+  bottom: number;
+} {
+  const v = Math.min(6, Math.max(1, frontValue || 5));
+  const map: Record<
+    number,
+    { front: number; back: number; top: number; bottom: number; right: number; left: number }
+  > = {
+    1: { front: 1, back: 6, top: 2, bottom: 5, right: 3, left: 4 },
+    2: { front: 2, back: 5, top: 6, bottom: 1, right: 3, left: 4 },
+    3: { front: 3, back: 4, top: 2, bottom: 5, right: 6, left: 1 },
+    4: { front: 4, back: 3, top: 2, bottom: 5, right: 1, left: 6 },
+    5: { front: 5, back: 2, top: 1, bottom: 6, right: 3, left: 4 },
+    6: { front: 6, back: 1, top: 5, bottom: 2, right: 3, left: 4 },
+  };
+  return map[v];
+}
+
+function CubeFacePips({
+  faceValue,
+  pipSizeClass,
+  paddingClass,
+}: {
+  faceValue: number;
+  pipSizeClass: string;
+  paddingClass: string;
+}) {
+  const activePositions = DICE_FACES[faceValue] ?? DICE_FACES[5];
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-3 grid-rows-3 w-full h-full",
+        paddingClass,
+      )}
+    >
+      {Array.from({ length: 9 }, (_, i) => i + 1).map((pos) => {
+        const hasPip = activePositions.includes(pos);
+        return (
+          <div key={pos} className="flex items-center justify-center">
+            {hasPip && (
+              <span
+                className={cn(
+                  "rounded-full bg-gradient-to-b from-[#0b2350] via-[#133574] to-[#1e4a9a]",
+                  pipSizeClass,
+                  "shadow-[inset_0_2px_4px_rgba(0,0,0,0.75),0_1px_2px_rgba(255,255,255,0.85)]",
+                )}
+                aria-hidden="true"
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 interface DiceProps {
   value: number | null;
@@ -35,151 +106,235 @@ export function Dice({
   className,
   "aria-label": ariaLabel,
 }: DiceProps) {
-  const [displayValue, setDisplayValue] = useState(value ?? 5);
-  const [isRolling, setIsRolling] = useState(false);
-  const rollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [spinTick, setSpinTick] = useState(0);
 
-  const sizeClasses = {
-    sm: "w-14 h-14",
-    md: "w-20 h-20",
-    lg: "w-28 h-28",
-    xl: "w-44 h-44 sm:w-52 sm:h-52",
-  };
+  // Cube dimensions in px so translateZ is exact
+  const cubePx = {
+    sm: 48,
+    md: 68,
+    lg: 96,
+    xl: 164,
+  }[size];
 
-  const dotSizes = {
+  const halfPx = cubePx / 2;
+
+  const pipSizeClass = {
     sm: "w-2 h-2",
     md: "w-3 h-3",
     lg: "w-4 h-4",
-    xl: "w-6 h-6 sm:w-7 sm:h-7",
-  };
+    xl: "w-6 h-6",
+  }[size];
+
+  const paddingClass = {
+    sm: "p-1.5 gap-0.5",
+    md: "p-2.5 gap-1",
+    lg: "p-3.5 gap-1.5",
+    xl: "p-5 gap-2",
+  }[size];
+
+  const faceRadiusClass = {
+    sm: "rounded-xl",
+    md: "rounded-2xl",
+    lg: "rounded-2xl",
+    xl: "rounded-[28px]",
+  }[size];
 
   useEffect(() => {
-    if (rolling && !isRolling) {
-      startRolling();
-    }
-  }, [rolling]);
-
-  const startRolling = () => {
-    setIsRolling(true);
-    let rolls = 0;
-    const maxRolls = 14;
-    const baseInterval = 45;
-
-    const roll = () => {
-      const randomValue = Math.floor(Math.random() * 6) + 1;
-      setDisplayValue(randomValue);
-      rolls++;
-
-      if (rolls < maxRolls) {
-        const delay = baseInterval + rolls * 10;
-        rollTimeoutRef.current = setTimeout(roll, delay);
-      } else {
-        const finalValue = value ?? Math.floor(Math.random() * 6) + 1;
-        setDisplayValue(finalValue);
-        setIsRolling(false);
-        onRollComplete?.(finalValue);
+    if (!rolling) {
+      if (value !== null) {
+        onRollComplete?.(value);
       }
-    };
-
-    roll();
-  };
-
-  useEffect(() => {
-    if (!rolling && value !== null) {
-      setDisplayValue(value);
-      setIsRolling(false);
+      return;
     }
-  }, [value, rolling]);
+    const interval = window.setInterval(() => {
+      setSpinTick((t) => t + 1);
+    }, 110);
+    return () => window.clearInterval(interval);
+  }, [rolling, value, onRollComplete]);
 
-  useEffect(() => {
-    return () => {
-      if (rollTimeoutRef.current) clearTimeout(rollTimeoutRef.current);
-    };
-  }, []);
+  // Guaranteed: when not rolling, the front face ALWAYS matches `value`!
+  const effectiveFrontValue =
+    !rolling && value !== null && value >= 1 && value <= 6
+      ? value
+      : ((spinTick % 6) + 1);
 
-  const faces = DICE_FACES[(displayValue || 5) - 1] ?? DICE_FACES[4];
+  const faces = getCubeFaceNumbers(effectiveFrontValue);
+
+  // When rolling, spin rapidly across all 3 axes; when stopped, rest in an isometric 3D showcase pose
+  // where Front face (`effectiveFrontValue`), Top face, and Right face are all clearly visible in 3D!
+  const cubeTransform = rolling
+    ? `rotateX(${spinTick * 145 + 35}deg) rotateY(${spinTick * 195 - 45}deg) rotateZ(${spinTick * 65}deg)`
+    : "rotateX(-18deg) rotateY(-25deg) rotateZ(3deg)";
 
   return (
     <div
       className={cn(
         "relative inline-flex items-center justify-center select-none",
-        sizeClasses[size],
         className,
       )}
+      style={{
+        width: `${cubePx}px`,
+        height: `${cubePx}px`,
+        perspective: `${cubePx * 4.5}px`,
+      }}
       role="img"
       aria-label={
         ariaLabel ||
-        (rolling ? "กำลังทอยลูกเต๋า" : `ลูกเต๋าแสดง ${displayValue}`)
+        (rolling
+          ? "กำลังทอยลูกเต๋า"
+          : `ลูกเต๋าออกแต้ม ${value ?? effectiveFrontValue}`)
       }
       aria-live={rolling ? "polite" : "off"}
-      style={{ perspective: "700px" }}
     >
-      {/* 3D Perspective Glossy White-Blue Cube (Matches Reference Image) */}
+      {/* Soft 3D Floor Drop Shadow */}
       <div
-        className={cn(
-          "relative w-full h-full rounded-[26%] transition-transform duration-300",
-          "bg-gradient-to-br from-[#ffffff] via-[#eef4ff] to-[#bfd4ff]",
-          "border-2 border-white/90",
-          "shadow-[10px_-8px_0_0_#d8e6ff,14px_12px_0_0_#8fb2f0,0_22px_45px_rgba(4,15,45,0.65),inset_0_4px_10px_rgba(255,255,255,0.95),inset_0_-8px_16px_rgba(116,155,230,0.55)]",
-          (rolling || isRolling) && "animate-spin",
-        )}
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-4 w-[85%] h-6 rounded-full bg-[#040d26]/65 blur-md"
+      />
+
+      {/* True 6-Sided 3D Cube Container */}
+      <div
+        className="relative w-full h-full transition-transform duration-150 ease-out"
         style={{
-          transform:
-            rolling || isRolling
-              ? undefined
-              : "rotateX(12deg) rotateY(-16deg) rotateZ(-4deg)",
+          transformStyle: "preserve-3d",
+          transform: cubeTransform,
         }}
       >
-        {/* Top/Right 3D Bevel Pip Accents (matching reference 3D cube edges) */}
-        <span
+        {/* Inner solid core blocks to fill rounded corner seams in 3D */}
+        <div
           aria-hidden="true"
           className={cn(
-            "absolute -top-1 right-1/3 rounded-full bg-[#153670]/85",
-            size === "xl" ? "w-5 h-2.5" : "w-2 h-1",
+            "absolute inset-1 bg-[#bfd4ff]",
+            faceRadiusClass,
           )}
+          style={{ transform: "translateZ(0px)" }}
         />
-        <span
+        <div
           aria-hidden="true"
           className={cn(
-            "absolute top-1/4 -right-2 rounded-full bg-[#153670]/80",
-            size === "xl" ? "w-2.5 h-5" : "w-1 h-2",
+            "absolute inset-1 bg-[#c9dcff]",
+            faceRadiusClass,
           )}
+          style={{ transform: "rotateY(90deg)" }}
+        />
+        <div
+          aria-hidden="true"
+          className={cn(
+            "absolute inset-1 bg-[#e3eeff]",
+            faceRadiusClass,
+          )}
+          style={{ transform: "rotateX(90deg)" }}
         />
 
-        {/* Glossy Top-Left Highlight */}
-        <div
-          className="absolute inset-1.5 rounded-[22%] bg-gradient-to-br from-white/90 via-transparent to-blue-200/30 pointer-events-none"
-          aria-hidden="true"
-        />
-
-        {/* Front 3x3 Pip Grid */}
+        {/* FRONT FACE (Shows exact rolled value!) */}
         <div
           className={cn(
-            "relative z-10 grid grid-cols-3 grid-rows-3 w-full h-full",
-            size === "xl" ? "p-6 sm:p-7 gap-2" : "p-2.5 gap-1",
+            "absolute inset-0 border-2 border-white/95 bg-gradient-to-br from-[#ffffff] via-[#f2f7ff] to-[#d4e4ff]",
+            "shadow-[inset_0_3px_8px_rgba(255,255,255,0.95),inset_0_-6px_14px_rgba(125,162,235,0.45)]",
+            faceRadiusClass,
           )}
+          style={{
+            transform: `translateZ(${halfPx}px)`,
+            backfaceVisibility: "hidden",
+          }}
         >
-          {Array.from({ length: 9 }, (_, i) => i + 1).map((pos) => {
-            const active = faces.includes(pos);
-            return (
-              <div
-                key={pos}
-                className={cn(
-                  "flex items-center justify-center transition-all duration-150",
-                  active ? "opacity-100 scale-100" : "opacity-0 scale-50",
-                )}
-              >
-                <span
-                  className={cn(
-                    "rounded-full bg-gradient-to-b from-[#0d2758] to-[#1e468a]",
-                    dotSizes[size],
-                    "shadow-[inset_0_2px_4px_rgba(0,0,0,0.65),0_1px_2px_rgba(255,255,255,0.8)]",
-                  )}
-                  aria-hidden="true"
-                />
-              </div>
-            );
-          })}
+          <CubeFacePips
+            faceValue={faces.front}
+            pipSizeClass={pipSizeClass}
+            paddingClass={paddingClass}
+          />
+        </div>
+
+        {/* TOP FACE (Brightest top lighting) */}
+        <div
+          className={cn(
+            "absolute inset-0 border-2 border-white bg-gradient-to-br from-[#ffffff] via-[#f8fbff] to-[#dfecff]",
+            "shadow-[inset_0_2px_8px_rgba(255,255,255,1)]",
+            faceRadiusClass,
+          )}
+          style={{
+            transform: `rotateX(90deg) translateZ(${halfPx}px)`,
+            backfaceVisibility: "hidden",
+          }}
+        >
+          <CubeFacePips
+            faceValue={faces.top}
+            pipSizeClass={pipSizeClass}
+            paddingClass={paddingClass}
+          />
+        </div>
+
+        {/* RIGHT FACE (Shaded 3D side lighting) */}
+        <div
+          className={cn(
+            "absolute inset-0 border-2 border-[#d8e7ff] bg-gradient-to-br from-[#dce9ff] via-[#bdd3fa] to-[#94b6f0]",
+            "shadow-[inset_0_-6px_14px_rgba(52,96,184,0.35)]",
+            faceRadiusClass,
+          )}
+          style={{
+            transform: `rotateY(90deg) translateZ(${halfPx}px)`,
+            backfaceVisibility: "hidden",
+          }}
+        >
+          <CubeFacePips
+            faceValue={faces.right}
+            pipSizeClass={pipSizeClass}
+            paddingClass={paddingClass}
+          />
+        </div>
+
+        {/* LEFT FACE */}
+        <div
+          className={cn(
+            "absolute inset-0 border-2 border-[#d8e7ff] bg-gradient-to-br from-[#e3eeff] to-[#a8c5f5]",
+            faceRadiusClass,
+          )}
+          style={{
+            transform: `rotateY(-90deg) translateZ(${halfPx}px)`,
+            backfaceVisibility: "hidden",
+          }}
+        >
+          <CubeFacePips
+            faceValue={faces.left}
+            pipSizeClass={pipSizeClass}
+            paddingClass={paddingClass}
+          />
+        </div>
+
+        {/* BOTTOM FACE */}
+        <div
+          className={cn(
+            "absolute inset-0 border-2 border-[#b8cff7] bg-gradient-to-br from-[#b8cff7] to-[#84a8e8]",
+            faceRadiusClass,
+          )}
+          style={{
+            transform: `rotateX(-90deg) translateZ(${halfPx}px)`,
+            backfaceVisibility: "hidden",
+          }}
+        >
+          <CubeFacePips
+            faceValue={faces.bottom}
+            pipSizeClass={pipSizeClass}
+            paddingClass={paddingClass}
+          />
+        </div>
+
+        {/* BACK FACE */}
+        <div
+          className={cn(
+            "absolute inset-0 border-2 border-[#d8e7ff] bg-gradient-to-br from-[#e8f1ff] to-[#b5cef7]",
+            faceRadiusClass,
+          )}
+          style={{
+            transform: `rotateY(180deg) translateZ(${halfPx}px)`,
+            backfaceVisibility: "hidden",
+          }}
+        >
+          <CubeFacePips
+            faceValue={faces.back}
+            pipSizeClass={pipSizeClass}
+            paddingClass={paddingClass}
+          />
         </div>
       </div>
 
@@ -194,7 +349,8 @@ export function Dice({
 
 /**
  * Full-Screen Dramatic 3D Dice Roll & Result Summary Overlay
- * (Matches the uploaded reference image with spinning 3D cube -> "ทอยลูกเต๋าแล้ว!" + Huge Number + Move Summary)
+ * Front face of the 3D cube is strictly bound to `value` so the pips on the dice
+ * and the summary number below ALWAYS match 100%!
  */
 export interface DiceRollOverlayModalProps {
   isOpen: boolean;
@@ -225,6 +381,8 @@ export function DiceRollOverlayModal({
 }: DiceRollOverlayModalProps) {
   if (!isOpen) return null;
 
+  const isFinishedRolling = !rolling && value !== null;
+
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col justify-between overflow-hidden select-none animate-fade-in"
@@ -236,13 +394,13 @@ export function DiceRollOverlayModal({
       aria-modal="true"
       aria-label="ผลการทอยลูกเต๋า"
       onClick={() => {
-        if (!rolling && value !== null) onClose();
+        if (isFinishedRolling) onClose();
       }}
     >
       {/* Decorative Sparkles & Radial Aura matching the reference image */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute left-1/2 top-[42%] -translate-x-1/2 -translate-y-1/2 w-[360px] h-[360px] sm:w-[460px] sm:h-[460px] rounded-full bg-sky-400/20 blur-3xl" />
-        <div className="absolute left-1/2 top-[42%] -translate-x-1/2 -translate-y-1/2 w-[260px] h-[260px] sm:w-[320px] sm:h-[320px] rounded-full border border-sky-300/20" />
+        <div className="absolute left-1/2 top-[40%] -translate-x-1/2 -translate-y-1/2 w-[360px] h-[360px] sm:w-[460px] sm:h-[460px] rounded-full bg-sky-400/20 blur-3xl" />
+        <div className="absolute left-1/2 top-[40%] -translate-x-1/2 -translate-y-1/2 w-[260px] h-[260px] sm:w-[330px] sm:h-[330px] rounded-full border border-sky-300/20" />
         <span className="absolute top-[22%] left-[18%] text-sky-300/60 text-xl animate-pulse">
           ✦
         </span>
@@ -273,16 +431,16 @@ export function DiceRollOverlayModal({
         </div>
       </div>
 
-      {/* Center Stage: 3D Cube Dice + "ทอยลูกเต๋าแล้ว!" + Huge Number + Summary */}
+      {/* Center Stage: True 3D Cube Dice + "ทอยลูกเต๋าแล้ว!" + Exact Matching Number */}
       <div
         className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 text-center"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-8 sm:mb-10">
-          <Dice value={value} rolling={rolling} size="xl" />
+        <div className="mb-10 sm:mb-12">
+          <Dice value={value} rolling={!isFinishedRolling} size="xl" />
         </div>
 
-        {rolling || value === null ? (
+        {!isFinishedRolling ? (
           <div className="space-y-2 animate-pulse">
             <p className="font-display text-2xl sm:text-3xl font-extrabold text-white drop-shadow">
               กำลังทอยลูกเต๋า...
@@ -337,7 +495,8 @@ export function DiceRollOverlayModal({
 
       {/* Bottom hint */}
       <div className="relative z-10 pb-5 text-center text-xs text-blue-200/70">
-        {!rolling && value !== null && "แตะที่หน้าจอหรือกดปุ่มเพื่อกลับไปดูตัวละครเดินบนกระดาน"}
+        {isFinishedRolling &&
+          "แตะที่หน้าจอหรือกดปุ่มเพื่อกลับไปดูตัวละครเดินบนกระดาน"}
       </div>
     </div>
   );

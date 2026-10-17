@@ -449,8 +449,8 @@ export default function StudentGameplayPage() {
       {/* Full-Screen 3D Dice Roll & Result Summary Overlay (Matches Reference Image) */}
       <DiceRollOverlayModal
         isOpen={diceOverlayOpen}
-        rolling={rollingAnim}
-        value={rolledResultValue ?? state.dice.value}
+        rolling={rollingAnim || rolledResultValue === null}
+        value={rolledResultValue}
         round={state.round}
         totalRounds={state.totalRounds}
         playerName={viewerPlayer?.name || "ผู้เล่น"}
