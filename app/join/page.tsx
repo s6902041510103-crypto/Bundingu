@@ -10,31 +10,42 @@ import { KnowledgeSnakeLogo } from "@/components/ui/Logo";
 import { AvatarPicker } from "@/components/game/Avatar";
 import { AVATARS } from "@/lib/game-data";
 import type { AvatarId } from "@/lib/types";
+import { QRCodeSVG } from "@/components/ui/QRCode";
 import {
   Shuffle,
   AlertCircle,
   ArrowLeft,
   ShieldCheck,
   Play,
+  QrCode,
+  KeyRound,
 } from "lucide-react";
 
-const PIN_PATTERN = /^\d{6}$/;
+const ROOM_KEY_PATTERN = /^[A-Z0-9]{6}$/;
+
+function sanitizeRoomKey(raw: string): string {
+  return raw.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 6);
+}
 
 function JoinFormContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialPin = searchParams.get("pin") || "";
 
-  const [pin, setPin] = useState(initialPin.replace(/\D/g, "").slice(0, 6));
+  const [pin, setPin] = useState(sanitizeRoomKey(initialPin));
   const [nickname, setNickname] = useState("");
   const [avatarId, setAvatarId] = useState<AvatarId>("panda");
   const [error, setError] = useState("");
   const [isJoining, setIsJoining] = useState(false);
+  const [originUrl, setOriginUrl] = useState("http://localhost:3000");
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      setOriginUrl(window.location.origin);
+    }
     const queryPin = searchParams.get("pin");
     if (queryPin) {
-      setPin(queryPin.replace(/\D/g, "").slice(0, 6));
+      setPin(sanitizeRoomKey(queryPin));
     }
     // Restore previous player profile for easy reconnect
     try {
@@ -59,11 +70,11 @@ function JoinFormContent() {
     e.preventDefault();
     setError("");
 
-    const cleanPin = pin.trim();
+    const cleanPin = sanitizeRoomKey(pin);
     const cleanName = nickname.trim();
 
-    if (!PIN_PATTERN.test(cleanPin)) {
-      setError("กรุณากรอกรหัส Game PIN เป็นตัวเลข 6 หลัก (เช่น 123456)");
+    if (!ROOM_KEY_PATTERN.test(cleanPin)) {
+      setError("กรุณากรอกคีย์ห้องเกม (Room Key) 6 หลัก ตัวอักษรผสมตัวเลข (เช่น KS4829)");
       return;
     }
     if (!cleanName) {
@@ -102,7 +113,7 @@ function JoinFormContent() {
 
       const data = await res.json();
       if (!res.ok || data.error) {
-        setError(data.error || `ไม่พบห้องเกมรหัส PIN ${cleanPin}`);
+        setError(data.error || `ไม่พบห้องเกมคีย์ ${cleanPin}`);
         setIsJoining(false);
         return;
       }
@@ -135,6 +146,8 @@ function JoinFormContent() {
     }
   };
 
+  const activeQrPin = ROOM_KEY_PATTERN.test(pin) ? pin : "KS4829";
+
   return (
     <Card variant="elevated" padding="lg" className="w-full max-w-lg rounded-3xl border-white shadow-2xl">
       <div className="text-center mb-5">
@@ -142,7 +155,7 @@ function JoinFormContent() {
           เข้าร่วมเกม
         </h1>
         <p className="text-slate-500 text-sm mt-1">
-          กรุณากรอก Game PIN และเลือกตัวละครของคุณ
+          กรอกคีย์ห้องเกม (ตัวอักษรผสมตัวเลข) หรือสแกน QR Code เพื่อเข้าห้อง
         </p>
       </div>
 
@@ -157,33 +170,55 @@ function JoinFormContent() {
       )}
 
       <form onSubmit={handleJoin} className="space-y-4" noValidate>
-        {/* Game PIN Input */}
-        <div>
-          <label
-            htmlFor="pin-input"
-            className="block font-display text-sm font-bold text-slate-700 mb-1.5"
-          >
-            Game PIN (6 หลัก)
-          </label>
-          <input
-            id="pin-input"
-            type="text"
-            inputMode="numeric"
-            value={pin}
-            onChange={(e) => {
-              setPin(e.target.value.replace(/\D/g, "").slice(0, 6));
-              if (error) setError("");
-            }}
-            maxLength={6}
-            placeholder="123456"
-            disabled={isJoining}
-            autoComplete="off"
-            className={cn(
-              "w-full px-4 py-3 text-center text-2xl font-display font-black tracking-widest rounded-xl border-2 bg-slate-50/70 text-[#0f2547] transition-all",
-              "placeholder:text-slate-300 focus:bg-white focus:outline-none focus:border-blue-600",
-              error ? "border-red-300" : "border-slate-200",
-            )}
-          />
+        {/* Alphanumeric Room Key Input + QR Code Box */}
+        <div className="p-4 rounded-2xl bg-blue-50/60 border border-blue-200/80 flex flex-col sm:flex-row items-center gap-4">
+          <div className="flex-1 w-full">
+            <div className="flex items-center justify-between mb-1.5">
+              <label
+                htmlFor="pin-input"
+                className="inline-flex items-center gap-1.5 font-display text-sm font-bold text-slate-800"
+              >
+                <KeyRound className="w-4 h-4 text-blue-600" />
+                <span>คีย์ห้องเกม (6 หลัก A-Z, 0-9)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setPin("KS4829");
+                  if (error) setError("");
+                }}
+                className="text-xs font-display font-bold text-blue-600 hover:text-blue-800 underline cursor-pointer"
+              >
+                ใช้คีย์ตัวอย่าง KS4829
+              </button>
+            </div>
+            <input
+              id="pin-input"
+              type="text"
+              value={pin}
+              onChange={(e) => {
+                setPin(sanitizeRoomKey(e.target.value));
+                if (error) setError("");
+              }}
+              maxLength={6}
+              placeholder="KS4829"
+              disabled={isJoining}
+              autoComplete="off"
+              className={cn(
+                "w-full px-4 py-3 text-center text-2xl font-display font-black tracking-[0.22em] uppercase rounded-xl border-2 bg-white text-[#0f2547] transition-all",
+                "placeholder:text-slate-300 focus:outline-none focus:border-blue-600",
+                error ? "border-red-300" : "border-blue-200",
+              )}
+            />
+          </div>
+
+          <div className="flex flex-col items-center shrink-0">
+            <QRCodeSVG
+              value={`${originUrl}/join?pin=${activeQrPin}`}
+              size={84}
+              label={`QR: ${activeQrPin}`}
+            />
+          </div>
         </div>
 
         {/* Nickname Input */}

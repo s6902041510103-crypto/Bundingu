@@ -28,7 +28,7 @@ import {
 
 export default function StudentGameplayPage() {
   const params = useParams<{ pin: string }>();
-  const pin = String(params?.pin || "123456");
+  const pin = String(params?.pin || "KS4829").toUpperCase();
   const { toasts, addToast, removeToast } = useToast();
 
   const [viewerId, setViewerId] = useState<string | null>(null);

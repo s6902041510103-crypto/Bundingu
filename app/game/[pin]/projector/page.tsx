@@ -6,6 +6,7 @@ import { createInitialGameState } from "@/lib/game-state";
 import { createProductionTransport } from "@/lib/transport";
 import { Badge } from "@/components/ui/Badge";
 import { KnowledgeSnakeLogo } from "@/components/ui/Logo";
+import { QRCodeSVG } from "@/components/ui/QRCode";
 import { Avatar } from "@/components/game/Avatar";
 import { GameBoardWrapper } from "@/components/game/GameBoard";
 import { Leaderboard } from "@/components/game/Leaderboard";
@@ -19,7 +20,14 @@ import { Clock, Monitor, CheckCircle, Trophy, Sparkles } from "lucide-react";
  */
 export default function ProjectorViewPage() {
   const params = useParams<{ pin: string }>();
-  const pin = String(params?.pin || "123456");
+  const pin = String(params?.pin || "KS4829").toUpperCase();
+  const [originUrl, setOriginUrl] = useState("http://localhost:3000");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setOriginUrl(window.location.origin);
+    }
+  }, []);
 
   const [state, setState] = useState<GameState>(() =>
     createInitialGameState({
@@ -61,8 +69,8 @@ export default function ProjectorViewPage() {
         <div className="mx-auto max-w-[1600px] flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <KnowledgeSnakeLogo size="md" theme="dark" />
-            <div className="px-4 py-1.5 rounded-full bg-blue-950/90 border border-blue-400/30 font-mono font-black text-lg text-amber-300">
-              PIN: {pin}
+            <div className="px-4 py-1.5 rounded-full bg-blue-950/90 border border-blue-400/30 font-mono font-black text-lg text-amber-300 tracking-wider">
+              KEY: {pin}
             </div>
             <Badge variant="info" size="md">
               <Monitor className="w-3.5 h-3.5 mr-1" />
@@ -195,9 +203,24 @@ export default function ProjectorViewPage() {
                   </div>
                 </>
               ) : (
-                <div className="py-6 text-center text-slate-500 font-display">
-                  เข้าร่วมห้องด้วยรหัส <strong>PIN: {pin}</strong> ที่หน้า{" "}
-                  <span className="text-blue-600 font-bold">/join</span>
+                <div className="py-4 flex flex-col sm:flex-row items-center justify-center gap-6 text-center sm:text-left">
+                  <div className="space-y-2">
+                    <span className="text-xs font-display font-bold uppercase tracking-wider text-blue-600 block">
+                      คีย์ห้องเกม (Room Key)
+                    </span>
+                    <div className="font-display text-4xl font-black text-[#0f2547] tracking-[0.2em]">
+                      {pin}
+                    </div>
+                    <p className="text-sm text-slate-600 font-display">
+                      สแกน QR Code หรือกรอกคีย์ที่หน้า{" "}
+                      <span className="text-blue-600 font-bold">/join</span>
+                    </p>
+                  </div>
+                  <QRCodeSVG
+                    value={`${originUrl}/join?pin=${pin}`}
+                    size={120}
+                    label={`KEY: ${pin}`}
+                  />
                 </div>
               )}
             </div>

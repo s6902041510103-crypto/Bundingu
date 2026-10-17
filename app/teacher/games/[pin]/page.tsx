@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Loading } from "@/components/ui/Loading";
 import { KnowledgeSnakeLogo } from "@/components/ui/Logo";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
+import { QRCodeSVG } from "@/components/ui/QRCode";
 import { Avatar } from "@/components/game/Avatar";
 import { Leaderboard } from "@/components/game/Leaderboard";
 import type { GameState, ServerGameCommand } from "@/lib/types";
@@ -30,13 +31,21 @@ import {
   CheckCircle2,
   AlertTriangle,
   FileBarChart,
+  QrCode,
 } from "lucide-react";
 
 export default function TeacherLiveControllerPage() {
   const params = useParams<{ pin: string }>();
-  const pin = String(params?.pin || "123456");
+  const pin = String(params?.pin || "KS4829").toUpperCase();
   const { loading: authLoading } = useTeacherAuth(true);
   const { toasts, addToast, removeToast } = useToast();
+  const [originUrl, setOriginUrl] = useState("http://localhost:3000");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setOriginUrl(window.location.origin);
+    }
+  }, []);
 
   const [state, setState] = useState<GameState>(() =>
     createInitialGameState({
@@ -473,8 +482,47 @@ export default function TeacherLiveControllerPage() {
             </Card>
           </div>
 
-          {/* Right Column: Roll Queue & Live Leaderboard (Matches Reference Screen #6) */}
+          {/* Right Column: Room Key + QR Code, Roll Queue & Live Leaderboard */}
           <div className="lg:col-span-5 space-y-6">
+            {/* Room Key & QR Code Card */}
+            <Card
+              variant="default"
+              padding="md"
+              className="bg-gradient-to-br from-blue-50/90 to-white border-blue-200"
+            >
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="space-y-2 text-center sm:text-left">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-display font-bold text-blue-700 uppercase">
+                    <QrCode className="w-4 h-4" />
+                    <span>คีย์ห้องเกม & QR Code เข้าร่วม</span>
+                  </div>
+                  <div className="font-display text-3xl sm:text-4xl font-black text-[#0f2547] tracking-[0.18em]">
+                    {pin}
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    ให้นักเรียนกรอกคีย์ <strong>{pin}</strong> หรือสแกน QR Code
+                  </p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleCopyPin}
+                    iconLeft={<Copy className="w-3.5 h-3.5" />}
+                  >
+                    คัดลอกคีย์ {pin}
+                  </Button>
+                </div>
+
+                <div className="shrink-0">
+                  <QRCodeSVG
+                    value={`${originUrl}/join?pin=${pin}`}
+                    size={112}
+                    label={`KEY: ${pin}`}
+                  />
+                </div>
+              </div>
+            </Card>
+
             {/* Roll Queue Card */}
             <Card variant="default" padding="md" className="space-y-4">
               <div className="flex items-center justify-between">

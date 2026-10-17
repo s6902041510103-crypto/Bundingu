@@ -48,13 +48,13 @@ const globalForRooms = globalThis as unknown as {
 function getRoomMap(): Map<string, ServerRoom> {
   if (!globalForRooms.__ksServerRooms) {
     const map = new Map<string, ServerRoom>();
-    // Seed default active room 123456 so Teacher Dashboard & Student Join work out of the box
+    // Seed default active room KS4829 so Teacher Dashboard & Student Join work out of the box
     const questions = listQuestions();
     const initialPlayers = MOCK_PLAYERS.map((p) => ({ ...p }));
     const initialState: GameState = {
       game: {
         ...MOCK_GAME,
-        pin: "123456",
+        pin: "KS4829",
         title: "Math Challenge",
         subject: "คณิตศาสตร์",
         grade: "มัธยมศึกษาปีที่ 1",
@@ -77,11 +77,11 @@ function getRoomMap(): Map<string, ServerRoom> {
       activeSpecialEvent: null,
       rollQueue: [],
       pacingMode: "auto",
-      lastEvent: "SYSTEM · ห้อง 123456 พร้อมให้เข้าร่วม",
+      lastEvent: "SYSTEM · ห้องคีย์ KS4829 พร้อมให้เข้าร่วม",
       updatedAt: Date.now(),
     };
-    map.set("123456", {
-      pin: "123456",
+    map.set("KS4829", {
+      pin: "KS4829",
       teacherId: "teacher-default",
       rngSeed: 987654321,
       questionsPool: questions.length > 0 ? questions : [],
@@ -195,9 +195,42 @@ function syncRoomToHistory(room: ServerRoom): void {
   upsertGameHistory(record);
 }
 
+const KEY_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+const KEY_DIGITS = "23456789";
+
+/**
+ * Generate a 6-character uppercase alphanumeric Room Key guaranteed to mix letters and numbers
+ * (e.g. KS7M4X, A8F3K2)
+ */
+export function generateRoomKey(): string {
+  const chars = [
+    KEY_LETTERS[crypto.randomInt(0, KEY_LETTERS.length)],
+    KEY_LETTERS[crypto.randomInt(0, KEY_LETTERS.length)],
+    KEY_DIGITS[crypto.randomInt(0, KEY_DIGITS.length)],
+    KEY_LETTERS[crypto.randomInt(0, KEY_LETTERS.length)],
+    KEY_DIGITS[crypto.randomInt(0, KEY_DIGITS.length)],
+    KEY_DIGITS[crypto.randomInt(0, KEY_DIGITS.length)],
+  ];
+  // Fisher-Yates shuffle so letters and numbers are mixed naturally
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(0, i + 1);
+    const tmp = chars[i];
+    chars[i] = chars[j];
+    chars[j] = tmp;
+  }
+  return chars.join("");
+}
+
 export function getServerRoom(pin: string): ServerRoom | null {
   const map = getRoomMap();
-  return map.get(pin) ?? null;
+  const normalized = String(pin ?? "").trim().toUpperCase();
+  if (map.has(normalized)) {
+    return map.get(normalized) ?? null;
+  }
+  if (normalized === "123456" || normalized === "482915") {
+    return map.get("KS4829") ?? null;
+  }
+  return null;
 }
 
 export function listActiveServerRooms(): ServerRoom[] {
@@ -236,16 +269,16 @@ export function createRoomOnServer(input: CreateGameInput): {
   }
 
   const map = getRoomMap();
-  // Generate unique 6-digit PIN
+  // Generate unique 6-character alphanumeric Room Key (letters + numbers mixed)
   let pin = "";
-  for (let i = 0; i < 20; i++) {
-    const candidate = String(crypto.randomInt(100000, 999999));
+  for (let i = 0; i < 30; i++) {
+    const candidate = generateRoomKey();
     if (!map.has(candidate)) {
       pin = candidate;
       break;
     }
   }
-  if (!pin) pin = String(Date.now()).slice(-6);
+  if (!pin) pin = `KS${String(Date.now()).slice(-4)}`;
 
   const allQuestions = listQuestions();
   let selectedQuestions = allQuestions;

@@ -70,12 +70,21 @@ export default function HomePage() {
               <Link href="/teacher/games/new" className="hover:text-amber-300 transition-colors">
                 สร้างเกม
               </Link>
-              <Link href="/game/123456/projector" className="hover:text-amber-300 transition-colors">
+              <Link href="/game/KS4829/projector" className="hover:text-amber-300 transition-colors">
                 Projector View
               </Link>
             </nav>
 
             <div className="flex items-center gap-2.5">
+              <Link href="/teacher/register" className="hidden sm:block">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-white hover:bg-white/15 rounded-full px-3.5 py-2 text-xs sm:text-sm"
+                >
+                  สมัครบัญชีครู
+                </Button>
+              </Link>
               <Link href="/teacher/login">
                 <Button
                   variant="primary"
@@ -115,7 +124,7 @@ export default function HomePage() {
 
                 <p className="text-slate-700 text-sm sm:text-base max-w-xl mx-auto lg:mx-0 leading-relaxed">
                   เปลี่ยนห้องเรียนให้เป็นการผจญภัยบนกระดาน 100 ช่อง! ครูสร้างห้องและควบคุมจังหวะคำถามแบบสด
-                  นักเรียนเข้าห้องด้วย PIN ตอบคำถามเพื่อรับสิทธิ์ทอยลูกเต๋า ปีนบันได หลบงู และสะสมคะแนนสู่เส้นชัย
+                  นักเรียนเข้าห้องด้วยคีย์ห้องหรือ QR Code ตอบคำถามเพื่อรับสิทธิ์ทอยลูกเต๋า ปีนบันได หลบงู และสะสมคะแนนสู่เส้นชัย
                 </p>
 
                 {/* Primary Hero Buttons matching Reference Image #1 */}
@@ -173,7 +182,7 @@ export default function HomePage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="success" dot>
-                        PIN: 123456
+                        KEY: KS4829
                       </Badge>
                       <Dice value={6} size="sm" className="w-10 h-10" />
                     </div>

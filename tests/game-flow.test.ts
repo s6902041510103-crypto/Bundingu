@@ -71,7 +71,9 @@ describe("Knowledge Snake — End-to-End Game Engine, Security & Board Tests", (
 
     assert.ok(created.room, "Room should be created");
     const pin = created.room!.pin;
-    assert.match(pin, /^\d{6}$/, "PIN must be 6 digits");
+    assert.match(pin, /^[A-Z0-9]{6}$/, "Room Key must be 6 uppercase alphanumeric chars");
+    assert.match(pin, /[A-Z]/, "Room Key must contain letters");
+    assert.match(pin, /[0-9]/, "Room Key must contain digits");
 
     // Student 1 joins
     const join1 = executeServerGameCommand(pin, {

@@ -224,10 +224,24 @@ export default function TeacherLoginPage() {
               </Button>
             </form>
 
-            {/* Security Notice (No hardcoded production demo credentials displayed) */}
-            <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-center gap-2 text-xs text-slate-500">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>ระบบตรวจสอบสิทธิ์ฝั่ง Server ก่อนอนุญาตให้สร้างและควบคุมเกม</span>
+            {/* Register Link & Security Notice */}
+            <div className="mt-6 pt-4 border-t border-slate-100 text-center space-y-3">
+              <div className="p-3 rounded-2xl bg-blue-50/70 border border-blue-100 flex items-center justify-between gap-2">
+                <span className="text-xs sm:text-sm text-slate-700 font-medium">
+                  ยังไม่มีบัญชีครูผู้สอน?
+                </span>
+                <Link
+                  href="/teacher/register"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-display text-xs sm:text-sm font-bold shadow-xs transition-colors"
+                >
+                  สร้างบัญชีครูใหม่
+                </Link>
+              </div>
+
+              <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>ระบบตรวจสอบสิทธิ์ฝั่ง Server ก่อนอนุญาตให้สร้างและควบคุมเกม</span>
+              </div>
             </div>
           </Card>
         </div>

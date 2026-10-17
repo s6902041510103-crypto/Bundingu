@@ -80,8 +80,8 @@ export const GAME_SETTINGS: GameSettings = {
 };
 
 export const MOCK_GAME: GameInfo = {
-  id: "game-123456",
-  pin: "123456",
+  id: "game-KS4829",
+  pin: "KS4829",
   title: "Math Challenge",
   subject: "คณิตศาสตร์",
   grade: "มัธยมศึกษาปีที่ 1",

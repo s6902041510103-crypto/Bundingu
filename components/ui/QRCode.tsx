@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 interface QRCodeSVGProps {
   value: string;
   size?: number;
+  label?: string;
   className?: string;
 }
 
@@ -13,7 +14,7 @@ interface QRCodeSVGProps {
  * Renders a crisp, deterministic QR-style matrix SVG from real room data (PIN / URL).
  * Never renders if `value` is empty.
  */
-export function QRCodeSVG({ value, size = 128, className }: QRCodeSVGProps) {
+export function QRCodeSVG({ value, size = 128, label, className }: QRCodeSVGProps) {
   const grid = useMemo(() => {
     if (!value) return null;
     const dim = 21; // Version 1 QR 21x21 modules
@@ -72,7 +73,7 @@ export function QRCodeSVG({ value, size = 128, className }: QRCodeSVGProps) {
   return (
     <div
       className={cn(
-        "inline-flex items-center justify-center p-2.5 bg-white rounded-2xl border border-slate-200 shadow-xs",
+        "inline-flex flex-col items-center justify-center p-2.5 bg-white rounded-2xl border border-slate-200 shadow-xs",
         className,
       )}
       title={`QR Code: ${value}`}
@@ -101,6 +102,11 @@ export function QRCodeSVG({ value, size = 128, className }: QRCodeSVGProps) {
           ),
         )}
       </svg>
+      {label && (
+        <span className="mt-1.5 font-mono text-[11px] font-bold text-[#0f2547] tracking-wider">
+          {label}
+        </span>
+      )}
     </div>
   );
 }

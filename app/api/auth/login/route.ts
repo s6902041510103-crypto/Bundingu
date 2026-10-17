@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createTeacherSession } from "@/lib/server/repository";
+import { authenticateTeacherAccount } from "@/lib/server/repository";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -32,7 +32,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const session = createTeacherSession(email, body?.name);
+    const authResult = authenticateTeacherAccount(email, password);
+    if (authResult.error || !authResult.session) {
+      return NextResponse.json(
+        { error: authResult.error || "อีเมลหรือรหัสผ่านไม่ถูกต้อง" },
+        { status: 401 },
+      );
+    }
+
+    const session = authResult.session;
 
     const response = NextResponse.json({
       ok: true,

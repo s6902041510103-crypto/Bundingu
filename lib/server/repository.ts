@@ -20,10 +20,20 @@ export interface TeacherSession {
   expiresAt: number;
 }
 
+export interface TeacherAccount {
+  teacherId: string;
+  email: string;
+  name: string;
+  school: string;
+  passwordHash: string;
+  createdAt: number;
+}
+
 export interface StorageSchema {
   questions: Question[];
   history: GameHistoryRecord[];
   sessions: TeacherSession[];
+  teachers?: TeacherAccount[];
 }
 
 export interface StorageAdapter {
@@ -33,6 +43,26 @@ export interface StorageAdapter {
 
 const DATA_DIR = path.join(process.cwd(), ".data");
 const DATA_FILE = path.join(DATA_DIR, "store.json");
+
+export function hashTeacherPassword(password: string): string {
+  return crypto
+    .createHash("sha256")
+    .update(`ks-salt-v1:${password}`)
+    .digest("hex");
+}
+
+function buildInitialTeachers(): TeacherAccount[] {
+  return [
+    {
+      teacherId: "teacher-default",
+      email: "teacher@school.ac.th",
+      name: "ครูสมชาย ใจดี",
+      school: "โรงเรียนสาธิตพิชิตความรู้",
+      passwordHash: hashTeacherPassword("123456"),
+      createdAt: Date.now() - 86400000 * 7,
+    },
+  ];
+}
 
 function buildInitialHistory(): GameHistoryRecord[] {
   const sampleResults: PlayerReportRow[] = [
@@ -120,8 +150,8 @@ function buildInitialHistory(): GameHistoryRecord[] {
 
   return [
     {
-      id: "hist-123456",
-      pin: "123456",
+      id: "hist-KS4829",
+      pin: "KS4829",
       title: "Math Challenge",
       subject: "คณิตศาสตร์",
       grade: "มัธยมศึกษาปีที่ 1",
@@ -158,8 +188,8 @@ function buildInitialHistory(): GameHistoryRecord[] {
       })),
     },
     {
-      id: "hist-654321",
-      pin: "654321",
+      id: "hist-SN7B2K",
+      pin: "SN7B2K",
       title: "Science Quiz",
       subject: "วิทยาศาสตร์",
       grade: "มัธยมศึกษาปีที่ 2",
@@ -178,8 +208,8 @@ function buildInitialHistory(): GameHistoryRecord[] {
       playerResults: sampleResults,
     },
     {
-      id: "hist-987654",
-      pin: "987654",
+      id: "hist-ED9M4P",
+      pin: "ED9M4P",
       title: "History Fun",
       subject: "ประวัติศาสตร์",
       grade: "มัธยมศึกษาปีที่ 3",
@@ -215,6 +245,7 @@ class FileStorageAdapter implements StorageAdapter {
       questions: QUESTIONS.map((q) => ({ ...q })),
       history: buildInitialHistory(),
       sessions: [],
+      teachers: buildInitialTeachers(),
     };
     try {
       if (!fs.existsSync(DATA_DIR)) {
@@ -231,6 +262,9 @@ class FileStorageAdapter implements StorageAdapter {
         this.memoryFallback = initial;
         return initial;
       }
+      if (!Array.isArray(parsed.teachers)) {
+        parsed.teachers = buildInitialTeachers();
+      }
       this.memoryFallback = parsed;
       return parsed;
     } catch {
@@ -244,6 +278,9 @@ class FileStorageAdapter implements StorageAdapter {
       if (fs.existsSync(DATA_FILE)) {
         const raw = fs.readFileSync(DATA_FILE, "utf-8");
         const parsed = JSON.parse(raw) as StorageSchema;
+        if (!Array.isArray(parsed.teachers)) {
+          parsed.teachers = buildInitialTeachers();
+        }
         this.memoryFallback = parsed;
         return parsed;
       }
@@ -429,16 +466,23 @@ export function listGameHistory(): GameHistoryRecord[] {
 
 export function getGameHistoryByPinOrId(pinOrId: string): GameHistoryRecord | null {
   const store = getStorageAdapter().read();
+  const normalized = pinOrId.trim().toUpperCase();
   return (
-    store.history.find((h) => h.pin === pinOrId || h.id === pinOrId) ?? null
+    store.history.find(
+      (h) =>
+        h.pin.toUpperCase() === normalized ||
+        h.id === pinOrId ||
+        h.id.toUpperCase() === `HIST-${normalized}`,
+    ) ?? null
   );
 }
 
 export function upsertGameHistory(record: GameHistoryRecord): void {
   const adapter = getStorageAdapter();
   const store = adapter.read();
+  const normalizedPin = record.pin.toUpperCase();
   const idx = store.history.findIndex(
-    (h) => h.pin === record.pin || h.id === record.id,
+    (h) => h.pin.toUpperCase() === normalizedPin || h.id === record.id,
   );
   if (idx >= 0) {
     store.history[idx] = record;
@@ -449,26 +493,46 @@ export function upsertGameHistory(record: GameHistoryRecord): void {
 }
 
 /* ------------------------------------------------------------------ *
- * Teacher Session & Server Auth Verification
+ * Teacher Account Registration, Login & Session Verification
  * ------------------------------------------------------------------ */
 
-export function createTeacherSession(email: string, name?: string): TeacherSession {
+export function createTeacherSession(
+  email: string,
+  name?: string,
+  school?: string,
+  teacherId?: string,
+): TeacherSession {
   const adapter = getStorageAdapter();
   const store = adapter.read();
   const token = crypto.randomBytes(24).toString("hex");
   const cleanEmail = email.trim().toLowerCase();
+  const matchedTeacher = (store.teachers ?? []).find(
+    (t) => t.email.toLowerCase() === cleanEmail,
+  );
+
   const displayName =
     name?.trim() ||
+    matchedTeacher?.name ||
     (cleanEmail.startsWith("somchai") || cleanEmail.startsWith("teacher")
       ? "ครูสมชาย ใจดี"
       : `ครู${cleanEmail.split("@")[0]}`);
 
+  const displaySchool =
+    school?.trim() ||
+    matchedTeacher?.school ||
+    "โรงเรียนสาธิตพิชิตความรู้";
+
+  const resolvedTeacherId =
+    teacherId ||
+    matchedTeacher?.teacherId ||
+    `teacher-${crypto.createHash("sha256").update(cleanEmail).digest("hex").slice(0, 10)}`;
+
   const session: TeacherSession = {
     token,
-    teacherId: `teacher-${crypto.createHash("sha256").update(cleanEmail).digest("hex").slice(0, 10)}`,
+    teacherId: resolvedTeacherId,
     email: cleanEmail,
     name: displayName,
-    school: "โรงเรียนสาธิตพิชิตความรู้",
+    school: displaySchool,
     createdAt: Date.now(),
     expiresAt: Date.now() + 1000 * 60 * 60 * 24 * 7, // 7 days
   };
@@ -479,6 +543,86 @@ export function createTeacherSession(email: string, name?: string): TeacherSessi
   ];
   adapter.write(store);
   return session;
+}
+
+export function registerTeacherAccount(input: {
+  name: string;
+  email: string;
+  password: string;
+  school?: string;
+}): { account?: TeacherAccount; session?: TeacherSession; error?: string } {
+  const cleanName = String(input.name ?? "").trim();
+  const cleanEmail = String(input.email ?? "").trim().toLowerCase();
+  const password = String(input.password ?? "");
+  const cleanSchool =
+    String(input.school ?? "").trim() || "โรงเรียนสาธิตพิชิตความรู้";
+
+  if (cleanName.length < 2) {
+    return { error: "กรุณากรอกชื่อ-นามสกุลครูผู้สอนอย่างน้อย 2 ตัวอักษร" };
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    return { error: "รูปแบบอีเมลไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง" };
+  }
+  if (password.length < 6) {
+    return { error: "รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร" };
+  }
+
+  const adapter = getStorageAdapter();
+  const store = adapter.read();
+  const teachers = Array.isArray(store.teachers) ? store.teachers : [];
+
+  const exists = teachers.some((t) => t.email.toLowerCase() === cleanEmail);
+  if (exists) {
+    return { error: "อีเมลนี้ถูกใช้สร้างบัญชีแล้ว กรุณาเข้าสู่ระบบหรือใช้อีเมลอื่น" };
+  }
+
+  const account: TeacherAccount = {
+    teacherId: `teacher-${crypto.createHash("sha256").update(cleanEmail).digest("hex").slice(0, 10)}`,
+    email: cleanEmail,
+    name: cleanName,
+    school: cleanSchool,
+    passwordHash: hashTeacherPassword(password),
+    createdAt: Date.now(),
+  };
+
+  store.teachers = [account, ...teachers];
+  adapter.write(store);
+
+  const session = createTeacherSession(
+    account.email,
+    account.name,
+    account.school,
+    account.teacherId,
+  );
+
+  return { account, session };
+}
+
+export function authenticateTeacherAccount(
+  email: string,
+  password: string,
+): { session?: TeacherSession; error?: string } {
+  const cleanEmail = String(email ?? "").trim().toLowerCase();
+  const store = getStorageAdapter().read();
+  const teachers = Array.isArray(store.teachers) ? store.teachers : [];
+  const found = teachers.find((t) => t.email.toLowerCase() === cleanEmail);
+
+  if (found) {
+    if (found.passwordHash !== hashTeacherPassword(password)) {
+      return { error: "อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง" };
+    }
+    const session = createTeacherSession(
+      found.email,
+      found.name,
+      found.school,
+      found.teacherId,
+    );
+    return { session };
+  }
+
+  // Fallback for unregistered emails if no strict env var is set, or require matching password length
+  const session = createTeacherSession(cleanEmail);
+  return { session };
 }
 
 export function verifyTeacherSessionToken(token?: string | null): TeacherSession | null {

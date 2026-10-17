@@ -7,7 +7,7 @@ import { Loading } from "@/components/ui/Loading";
 function LobbyRedirectContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const pin = searchParams.get("pin") || "123456";
+  const pin = (searchParams.get("pin") || "KS4829").toUpperCase();
 
   useEffect(() => {
     router.replace(`/game/${encodeURIComponent(pin)}`);
