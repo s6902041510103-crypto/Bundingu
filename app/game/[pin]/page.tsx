@@ -45,6 +45,26 @@ export default function StudentLobbyPage() {
   );
 
   const transportRef = useRef<GameStateTransport | null>(null);
+  const [originUrl, setOriginUrl] = useState("http://localhost:3000");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setOriginUrl(window.location.origin);
+      if (
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1"
+      ) {
+        fetch("/api/network")
+          .then((r) => r.json())
+          .then((data) => {
+            if (data?.lanUrl) {
+              setOriginUrl(data.lanUrl);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, []);
 
   useEffect(() => {
     let playerId: string | null = null;
@@ -98,10 +118,7 @@ export default function StudentLobbyPage() {
   };
 
   const handleShareLink = () => {
-    const url =
-      typeof window !== "undefined"
-        ? `${window.location.origin}/join?pin=${pin}`
-        : `/join?pin=${pin}`;
+    const url = `${originUrl}/join?pin=${pin}`;
     navigator.clipboard?.writeText(url);
     addToast({
       title: "คัดลอกลิงก์เข้าร่วมห้องแล้ว!",
@@ -172,9 +189,9 @@ export default function StudentLobbyPage() {
 
             {pin && (
               <div className="flex flex-col items-center space-y-2">
-                <QRCodeSVG value={`/join?pin=${pin}`} size={132} />
-                <span className="text-xs text-slate-500 font-medium">
-                  สแกน QR เพื่อเข้าห้อง
+                <QRCodeSVG value={`${originUrl}/join?pin=${pin}`} size={132} label={`KEY: ${pin}`} />
+                <span className="text-xs text-slate-500 font-medium text-center">
+                  สแกน QR หรือเข้า <strong>{originUrl}/join</strong>
                 </span>
               </div>
             )}

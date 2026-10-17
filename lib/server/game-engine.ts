@@ -9,6 +9,7 @@ import {
   LADDERS,
   MOCK_GAME,
   MOCK_PLAYERS,
+  QUESTIONS,
   SNAKES,
   SPECIAL_CELLS,
 } from "../game-data";
@@ -252,6 +253,73 @@ export function generateRoomKey(): string {
   return chars.join("");
 }
 
+function getOrCreateDemoRoom(): ServerRoom {
+  const map = getRoomMap();
+  const existing = map.get("KS4829") ?? loadRoomFromDisk("KS4829");
+  if (existing) {
+    map.set("KS4829", existing);
+    return existing;
+  }
+  const questions = QUESTIONS.slice(0, 10);
+  const state: GameState = {
+    game: {
+      ...MOCK_GAME,
+      pin: "KS4829",
+      id: "game-ks4829",
+      title: "ห้องทดลองบันไดงูแสนสนุก",
+    },
+    gameStatus: "lobby",
+    round: 0,
+    totalRounds: Math.min(5, questions.length),
+    question: null,
+    players: MOCK_PLAYERS.slice(0, 4).map((p) => ({
+      ...p,
+      position: 1,
+      score: 1,
+      laddersClimbed: 0,
+      snakesBitten: 0,
+      specialsTriggered: 0,
+      isAnswered: false,
+      selectedOptionId: null,
+      isCorrect: null,
+      status: "joined",
+      isConnected: true,
+      lastActiveAt: Date.now(),
+    })),
+    currentPlayerId: null,
+    dice: { value: null, rolling: false, rolledBy: null, lastReason: null },
+    board: BOARD_CONFIG,
+    specialCells: SPECIAL_CELLS,
+    enabledSpecials: ["star", "gift", "boost"],
+    settings: {
+      ...GAME_SETTINGS,
+      maxPlayers: 40,
+      questionTimeLimit: 20,
+    },
+    leaderboard: [],
+    viewerPlayerId: null,
+    movingPlayerId: null,
+    movement: null,
+    activeSpecialEvent: null,
+    rollQueue: [],
+    pacingMode: "manual",
+    lastEvent: "SYSTEM · ห้องทดลอง KS4829 พร้อมรับผู้เล่น",
+    updatedAt: Date.now(),
+  };
+  state.leaderboard = computeLeaderboard(state.players);
+
+  const demoRoom: ServerRoom = {
+    pin: "KS4829",
+    teacherId: "teacher-default",
+    rngSeed: 123456,
+    questionsPool: questions,
+    state,
+  };
+  map.set("KS4829", demoRoom);
+  persistRoomToDisk(demoRoom);
+  return demoRoom;
+}
+
 export function getServerRoom(pin: string): ServerRoom | null {
   const map = getRoomMap();
   const normalized = String(pin ?? "").trim().toUpperCase();
@@ -259,7 +327,7 @@ export function getServerRoom(pin: string): ServerRoom | null {
     return map.get(normalized) ?? null;
   }
   if (normalized === "123456" || normalized === "482915") {
-    return map.get("KS4829") ?? null;
+    return getServerRoom("KS4829");
   }
 
   // 1. Try restoring from persistent disk room snapshot (exact live state)
@@ -344,6 +412,11 @@ export function getServerRoom(pin: string): ServerRoom | null {
     map.set(savedRecord.pin.toUpperCase(), restoredRoom);
     persistRoomToDisk(restoredRoom);
     return restoredRoom;
+  }
+
+  // 3. Demo room fallback for KS4829
+  if (normalized === "KS4829") {
+    return getOrCreateDemoRoom();
   }
 
   return null;
@@ -446,10 +519,21 @@ export function createRoomOnServer(input: CreateGameInput): {
     }
   }
 
+  // Fallbacks so room creation NEVER fails due to missing question bank
   if (selectedQuestions.length === 0) {
-    return {
-      error: "กรุณาสร้างหรือเลือกคำถามอย่างน้อย 1 ข้อสำหรับใช้ในห้องเกมนี้",
-    };
+    if (input.subject && input.subject !== "ทั้งหมด") {
+      const storeBySubject = allStoreQuestions.filter((q) => q.subject === input.subject);
+      if (storeBySubject.length > 0) selectedQuestions = storeBySubject;
+    }
+  }
+  if (selectedQuestions.length === 0) {
+    selectedQuestions = teacherQuestions.length > 0 ? teacherQuestions : allStoreQuestions;
+  }
+  if (selectedQuestions.length === 0) {
+    selectedQuestions = QUESTIONS.map((q) => ({
+      ...q,
+      teacherId: input.teacherId,
+    }));
   }
 
   const initialPlayers: Player[] = input.seedDemoPlayers
@@ -827,12 +911,13 @@ export function executeServerGameCommand(
         return { error: "คุณได้ส่งคำตอบสำหรับข้อนี้ไปแล้ว" };
       }
 
-      const validOption = state.question.options.some((o) => o.id === command.optionId);
+      const submittedOptionId = command.optionId || (command as any).selectedOptionId;
+      const validOption = state.question.options.some((o) => o.id === submittedOptionId);
       if (!validOption) {
         return { error: "ตัวเลือกคำตอบไม่ถูกต้อง" };
       }
 
-      const isCorrect = command.optionId === state.question.correctOptionId;
+      const isCorrect = submittedOptionId === state.question.correctOptionId;
       const updatedPlayers = state.players.map((p) => {
         if (p.id !== command.playerId) return p;
         const newCorrect = (p.correctCount ?? 0) + (isCorrect ? 1 : 0);
@@ -842,7 +927,7 @@ export function executeServerGameCommand(
         const newScore = p.position + (newCorrect * 100) + finishBonus;
         return {
           ...p,
-          selectedOptionId: command.optionId,
+          selectedOptionId: submittedOptionId,
           answeredAt: Date.now(),
           answerState: isCorrect ? ("correct" as const) : ("wrong" as const),
           answeredCount: newAnswered,
