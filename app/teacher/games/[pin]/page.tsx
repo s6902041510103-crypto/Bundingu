@@ -47,6 +47,19 @@ export default function TeacherLiveControllerPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       setOriginUrl(window.location.origin);
+      if (
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1"
+      ) {
+        fetch("/api/network")
+          .then((r) => r.json())
+          .then((data) => {
+            if (data?.lanUrl) {
+              setOriginUrl(data.lanUrl);
+            }
+          })
+          .catch(() => {});
+      }
     }
   }, []);
 
@@ -318,7 +331,7 @@ export default function TeacherLiveControllerPage() {
                   label={`SCAN JOIN: ${pin}`}
                 />
                 <p className="text-xs text-slate-500">
-                  นักเรียนเข้าผ่านหน้า <strong>/join</strong> หรือสแกน QR Code นี้
+                  นักเรียนเข้าผ่าน <strong>{originUrl}/join</strong> หรือสแกน QR Code
                 </p>
               </div>
             </Card>
