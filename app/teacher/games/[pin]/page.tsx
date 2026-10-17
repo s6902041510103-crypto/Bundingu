@@ -14,6 +14,7 @@ import { KnowledgeSnakeLogo } from "@/components/ui/Logo";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { QRCodeSVG } from "@/components/ui/QRCode";
 import { Avatar } from "@/components/game/Avatar";
+import { GameBoardWrapper } from "@/components/game/GameBoard";
 import { Leaderboard } from "@/components/game/Leaderboard";
 import type { GameState, ServerGameCommand } from "@/lib/types";
 import {
@@ -29,9 +30,10 @@ import {
   Trophy,
   ArrowLeft,
   CheckCircle2,
-  AlertTriangle,
   FileBarChart,
   QrCode,
+  ArrowRight,
+  Eye,
 } from "lucide-react";
 
 export default function TeacherLiveControllerPage() {
@@ -112,13 +114,13 @@ export default function TeacherLiveControllerPage() {
   const handleCopyPin = () => {
     navigator.clipboard?.writeText(pin);
     addToast({
-      title: `คัดลอก Game PIN ${pin} แล้ว`,
+      title: `คัดลอกคีย์ห้อง ${pin} แล้ว`,
       variant: "info",
     });
   };
 
   if (authLoading) {
-    return <Loading fullScreen label="กำลังเปิดแผงควบคุมเกมสด..." />;
+    return <Loading fullScreen label="กำลังเปิดห้องเกมสำหรับครู..." />;
   }
 
   const hasUnresolvedSpecialEvent = Boolean(
@@ -128,8 +130,8 @@ export default function TeacherLiveControllerPage() {
   const hasPendingRolls =
     state.gameStatus === "dice" && state.rollQueue.length > 0;
 
-  // Rule: Teacher MUST NOT start a new question while Special Event is unresolved or players are still rolling/moving
-  const canStartQuestion =
+  // Rule: Teacher can start the next question when not in special event, not moving, and rollQueue is empty
+  const canStartNextQuestion =
     !hasUnresolvedSpecialEvent &&
     !isMoving &&
     !hasPendingRolls &&
@@ -147,62 +149,92 @@ export default function TeacherLiveControllerPage() {
   const answerProgressPercent =
     totalPlayers > 0 ? Math.round((answeredCount / totalPlayers) * 100) : 0;
 
+  const isLobbyPhase = state.gameStatus === "lobby";
+  const currentRoller =
+    state.rollQueue.length > 0
+      ? state.players.find((p) => p.id === state.rollQueue[0]) ?? null
+      : null;
+
   return (
-    <div className="min-h-screen bg-[#e9eff8] text-slate-900 font-body flex flex-col">
-      {/* Top Bar (Matches Reference Screen #6) */}
-      <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-xs px-4 sm:px-8 py-3.5">
-        <div className="mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-4">
+    <div
+      className={`min-h-screen font-body flex flex-col ${
+        isLobbyPhase
+          ? "bg-[#e9eff8] text-slate-900"
+          : "bg-arena-navy text-white"
+      }`}
+    >
+      {/* Top Header Bar */}
+      <header
+        className={`sticky top-0 z-30 border-b px-4 sm:px-6 py-3 ${
+          isLobbyPhase
+            ? "bg-white border-slate-200 shadow-xs text-slate-900"
+            : "bg-[#08152c]/95 backdrop-blur-md border-blue-400/20 text-white"
+        }`}
+      >
+        <div className="mx-auto max-w-[1560px] flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 sm:gap-4">
             <Link
               href="/teacher/dashboard"
-              className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
-              title="กลับหน้าแดชบอร์ด"
+              className={`p-2 rounded-xl border transition-colors ${
+                isLobbyPhase
+                  ? "border-slate-200 text-slate-600 hover:bg-slate-100"
+                  : "border-white/15 text-blue-200 hover:bg-white/10"
+              }`}
+              title="กลับหน้าแดชบอร์ดครู"
             >
               <ArrowLeft className="w-5 h-5" />
             </Link>
-            <KnowledgeSnakeLogo size="sm" theme="light" />
-            <div className="h-6 w-px bg-slate-200 hidden sm:block" />
-            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3.5 py-1.5 rounded-2xl">
-              <span className="text-xs font-display font-bold text-blue-700">
-                PIN:
+            <KnowledgeSnakeLogo
+              size="sm"
+              theme={isLobbyPhase ? "light" : "dark"}
+            />
+            <div
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-2xl border ${
+                isLobbyPhase
+                  ? "bg-blue-50 border-blue-200 text-[#0f2547]"
+                  : "bg-blue-950/90 border-blue-400/30 text-white"
+              }`}
+            >
+              <span className="text-xs font-display font-bold text-blue-500">
+                KEY:
               </span>
-              <span className="font-display text-xl sm:text-2xl font-black text-[#0f2547] tracking-wider">
+              <span className="font-display text-lg sm:text-xl font-black tracking-wider">
                 {pin}
               </span>
               <button
                 type="button"
                 onClick={handleCopyPin}
-                className="p-1 rounded-lg hover:bg-blue-100 text-blue-700 cursor-pointer"
-                title="คัดลอก PIN"
-                aria-label="คัดลอก PIN"
+                className="p-1 rounded-lg hover:bg-blue-500/20 text-blue-500 cursor-pointer"
+                title="คัดลอกคีย์ห้อง"
               >
                 <Copy className="w-4 h-4" />
               </button>
             </div>
+
+            <div className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/15 border border-amber-400/35 text-xs font-display font-bold text-amber-500">
+              <Eye className="w-3.5 h-3.5" />
+              <span>โหมดครูผู้คุมเกม (ดูบอร์ดและกดคำถามถัดไป · ไม่มีสิทธิ์ทอยเต๋า)</span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <Badge
               variant={
                 state.gameStatus === "finished"
                   ? "default"
-                  : state.gameStatus === "lobby"
+                  : isLobbyPhase
                   ? "warning"
                   : "success"
               }
               size="md"
               dot
             >
-              {state.gameStatus === "lobby"
-                ? "รอเริ่มเกม"
+              {isLobbyPhase
+                ? `รอนักเรียนเข้าห้อง (${totalPlayers} คน)`
                 : state.gameStatus === "finished"
-                ? "จบเกมแล้ว"
-                : "กำลังเล่น"}
+                ? "จบการแข่งขัน"
+                : `กำลังแข่งขัน · ข้อที่ ${state.round}/${state.totalRounds}`}
             </Badge>
-
-            <div className="px-3.5 py-1.5 rounded-full bg-slate-100 border border-slate-200 font-display font-bold text-sm text-slate-800">
-              รอบที่ {state.round}/{state.totalRounds}
-            </div>
 
             <Link
               href={`/game/${pin}/projector`}
@@ -214,442 +246,468 @@ export default function TeacherLiveControllerPage() {
                 size="sm"
                 iconLeft={<Monitor className="w-4 h-4 text-blue-600" />}
               >
-                เปิด Projector View
+                จอ Projector
               </Button>
             </Link>
+
+            {!isLobbyPhase && state.gameStatus !== "finished" && (
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={commandBusy}
+                onClick={() => sendTeacherCommand({ type: "END_GAME" })}
+                iconLeft={<XCircle className="w-4 h-4" />}
+              >
+                จบเกม
+              </Button>
+            )}
           </div>
         </div>
       </header>
 
-      {/* Main Controller Body */}
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
-        {/* Big 3 Control Buttons Row (Matches Reference Screen #6) */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <button
-            type="button"
-            disabled={!canStartQuestion || commandBusy}
-            onClick={() =>
-              sendTeacherCommand(
-                state.gameStatus === "lobby"
-                  ? { type: "START_GAME" }
-                  : { type: "START_QUESTION" },
-              )
-            }
-            className="flex items-center justify-center gap-3 py-5 px-6 rounded-2xl font-display font-extrabold text-lg sm:text-xl text-white bg-gradient-to-b from-[#2573ff] to-[#1554d1] hover:from-[#3680ff] hover:to-[#1b5de0] shadow-lg shadow-blue-600/25 disabled:opacity-45 disabled:pointer-events-none cursor-pointer transition-all"
-          >
-            <Play className="w-6 h-6 fill-current" />
-            <span>
-              {state.gameStatus === "lobby"
-                ? "เริ่มคำถามข้อแรก"
-                : "เริ่มคำถามข้อถัดไป"}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            disabled={!advanceCheck.allowed || commandBusy}
-            onClick={() => sendTeacherCommand({ type: "ADVANCE_TURN" })}
-            title={advanceCheck.reason || advanceCheck.label}
-            className="flex flex-col items-center justify-center py-4 px-6 rounded-2xl font-display font-extrabold text-lg sm:text-xl bg-gradient-to-b from-amber-400 to-amber-500 text-slate-950 hover:from-amber-300 hover:to-amber-400 shadow-lg shadow-amber-500/20 disabled:bg-none disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:pointer-events-none cursor-pointer transition-all"
-          >
-            <div className="flex items-center gap-2">
-              <SkipForward className="w-6 h-6" />
-              <span>ไปต่อ ({advanceCheck.label})</span>
-            </div>
-            {advanceCheck.reason && (
-              <span className="text-[11px] font-normal opacity-80 mt-0.5">
-                {advanceCheck.reason}
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            disabled={state.gameStatus === "finished" || commandBusy}
-            onClick={() => sendTeacherCommand({ type: "END_GAME" })}
-            className="flex items-center justify-center gap-3 py-5 px-6 rounded-2xl font-display font-extrabold text-lg sm:text-xl text-white bg-gradient-to-b from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 shadow-lg shadow-red-600/25 disabled:opacity-45 disabled:pointer-events-none cursor-pointer transition-all"
-          >
-            <XCircle className="w-6 h-6" />
-            <span>สิ้นสุดเกม</span>
-          </button>
-        </div>
-
-        {/* Active Special Event / Snake / Ladder Alert Banner */}
-        {state.activeSpecialEvent && !state.activeSpecialEvent.resolved && (
-          <div
-            role="alert"
-            className="p-5 rounded-2xl bg-amber-50 border-2 border-amber-400 shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-bounce-in"
-          >
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center text-2xl shrink-0">
-                <Sparkles className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="gold" size="sm">
-                    Special Event กำลังทำงาน
-                  </Badge>
-                  <span className="text-xs font-semibold text-amber-800">
-                    (ระบบล็อกปุ่มเริ่มคำถามใหม่จนกว่าเหตุการณ์พิเศษจะเสร็จสิ้น)
-                  </span>
-                </div>
-                <h3 className="font-display font-extrabold text-lg text-slate-900 mt-1">
-                  {state.activeSpecialEvent.playerName}: {state.activeSpecialEvent.title}
-                </h3>
-                <p className="text-sm text-slate-700">
-                  {state.activeSpecialEvent.description} (ช่อง {state.activeSpecialEvent.from} →{" "}
-                  {state.activeSpecialEvent.to})
+      {/* =====================================================================
+          STAGE 1: TEACHER WAITING LOBBY (รอนักเรียนเข้าจนครบแล้วกดเริ่มเกม)
+         ===================================================================== */}
+      {isLobbyPhase ? (
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-6xl w-full mx-auto space-y-6">
+          <div className="grid lg:grid-cols-12 gap-6 items-stretch">
+            {/* Left: Big Room Key & QR Code for Classroom Screen */}
+            <Card
+              variant="elevated"
+              padding="lg"
+              className="lg:col-span-5 flex flex-col items-center justify-between text-center bg-gradient-to-b from-blue-50/90 via-white to-white border-2 border-blue-200 space-y-5"
+            >
+              <div className="space-y-1.5">
+                <Badge variant="primary" size="md">
+                  ขั้นตอนที่ 1 · ให้นักเรียนเข้าห้อง
+                </Badge>
+                <h1 className="font-display text-2xl font-extrabold text-[#0f2547] pt-1">
+                  {state.game.title}
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-500">
+                  วิชา: {state.game.subject} · {state.totalRounds} รอบ · เวลาตอบ{" "}
+                  {state.settings.questionTimeLimit} วินาที/ข้อ
                 </p>
               </div>
-            </div>
-            <Button
-              variant="gold"
-              size="md"
-              onClick={() => sendTeacherCommand({ type: "RESOLVE_SPECIAL_EVENT" })}
-              iconLeft={<CheckCircle2 className="w-4 h-4" />}
-            >
-              ยืนยันจบเหตุการณ์พิเศษ
-            </Button>
-          </div>
-        )}
 
-        {/* Main 3-Column Live Control Grid (Matches Reference Screen #6) */}
-        <div className="grid lg:grid-cols-12 gap-6 items-start">
-          {/* Left & Center: Players Count, Current Question, Countdown, and Answer Progress */}
-          <div className="lg:col-span-7 space-y-6">
-            <div className="grid sm:grid-cols-2 gap-4">
-              {/* Players Status Box */}
-              <Card variant="default" padding="md" className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-display font-semibold text-slate-500">
-                    ผู้เล่นในห้อง (Realtime)
-                  </span>
-                  <Users className="w-5 h-5 text-blue-600" />
+              <div className="w-full p-5 rounded-3xl bg-[#0f2547] text-white shadow-lg space-y-2">
+                <div className="inline-flex items-center gap-1.5 text-xs font-display font-bold text-amber-300 uppercase tracking-wider">
+                  <QrCode className="w-4 h-4" />
+                  <span>คีย์เข้าห้องเกม (Room Key)</span>
                 </div>
-                <div className="font-display text-4xl font-black text-[#0f2547]">
-                  {totalPlayers}/{state.settings.maxPlayers}
+                <div className="font-display text-5xl sm:text-6xl font-black tracking-[0.18em] text-white">
+                  {pin}
                 </div>
-                <div className="pt-1 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
-                  <span>สถานะห้อง:</span>
-                  <span className="font-display font-bold text-emerald-700">
-                    {state.gameStatus === "lobby"
-                      ? "รอครูเริ่มคำถาม"
-                      : state.gameStatus === "question" ||
-                        state.gameStatus === "answering"
-                      ? "กำลังเปิดรับคำตอบ"
-                      : state.gameStatus === "dice"
-                      ? "ช่วงทอยลูกเต๋า"
-                      : state.gameStatus === "special_event"
-                      ? "กำลังแสดงเหตุการณ์พิเศษ"
-                      : state.gameStatus === "finished"
-                      ? "จบการแข่งขัน"
-                      : "เฉลยคำตอบแล้ว"}
-                  </span>
-                </div>
-              </Card>
-
-              {/* Current Question & Countdown Box */}
-              <Card variant="default" padding="md" className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-display font-semibold text-slate-500">
-                    คำถามปัจจุบัน
-                  </span>
-                  <Clock className="w-5 h-5 text-amber-500" />
-                </div>
-                {state.question ? (
-                  <>
-                    <div className="font-display font-bold text-base text-[#0f2547] line-clamp-2">
-                      ข้อที่ {state.question.number} — {state.question.subject}:{" "}
-                      {state.question.prompt}
-                    </div>
-                    <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                      <span className="text-xs text-slate-500">เวลาตอบ (Countdown):</span>
-                      <span
-                        className={`font-mono font-extrabold text-lg ${
-                          state.question.timeLeft <= 5 && !state.question.revealed
-                            ? "text-red-600 animate-pulse"
-                            : "text-blue-700"
-                        }`}
-                      >
-                        {state.question.revealed
-                          ? "เฉลยแล้ว"
-                          : `${state.question.timeLeft}/${state.question.timeLimit} วินาที`}
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="py-3 text-sm text-slate-500">
-                    ยังไม่ได้เปิดคำถาม กดปุ่ม &ldquo;เริ่มคำถาม&rdquo; ด้านบนเพื่อเริ่มรอบ
-                  </div>
-                )}
-              </Card>
-            </div>
-
-            {/* Answer Progress Bar & Latest Walk/Dice Result */}
-            <Card variant="default" padding="md" className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-display font-bold text-base text-[#0f2547]">
-                    การตอบคำถามของผู้เล่น
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    ตอบแล้ว {answeredCount}/{totalPlayers} คน ({answerProgressPercent}%)
-                  </p>
-                </div>
-                {state.question && !state.question.revealed && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => sendTeacherCommand({ type: "REVEAL_ANSWERS" })}
-                  >
-                    เฉลยคำตอบทันที
-                  </Button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleCopyPin}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-xs font-display font-semibold text-blue-100 cursor-pointer transition-colors"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>คัดลอกคีย์ {pin}</span>
+                </button>
               </div>
 
-              <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
-                <div
-                  className="h-full bg-gradient-to-r from-[#2573ff] to-emerald-500 rounded-full transition-all duration-300"
-                  style={{ width: `${answerProgressPercent}%` }}
+              <div className="flex flex-col items-center gap-2">
+                <QRCodeSVG
+                  value={`${originUrl}/join?pin=${pin}`}
+                  size={168}
+                  label={`SCAN JOIN: ${pin}`}
                 />
-              </div>
-
-              {/* Latest Dice / Walk / Snake / Ladder Event Log */}
-              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3 text-xs sm:text-sm">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Dice5 className="w-5 h-5 text-blue-600 shrink-0" />
-                  <span className="font-medium text-slate-800 truncate">
-                    {state.lastEvent || "พร้อมดำเนินการ"}
-                  </span>
-                </div>
-                {state.dice.value && (
-                  <Badge variant="primary" size="sm">
-                    ลูกเต๋าล่าสุด: {state.dice.value}
-                  </Badge>
-                )}
+                <p className="text-xs text-slate-500">
+                  นักเรียนเข้าผ่านหน้า <strong>/join</strong> หรือสแกน QR Code นี้
+                </p>
               </div>
             </Card>
 
-            {/* Real-time Players Status List */}
-            <Card variant="default" padding="md" className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-display font-bold text-base text-[#0f2547]">
-                  รายชื่อผู้เล่นและสถานะการตอบ ({state.players.length} คน)
-                </h3>
-                <span className="text-xs text-slate-500">ซิงก์ข้อมูลแบบ Realtime</span>
+            {/* Right: Live Students Waiting List + BIG "Start Game" Button */}
+            <Card
+              variant="elevated"
+              padding="lg"
+              className="lg:col-span-7 flex flex-col justify-between space-y-6"
+            >
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
+                  <div>
+                    <h2 className="font-display text-xl font-extrabold text-[#0f2547] flex items-center gap-2">
+                      <Users className="w-6 h-6 text-blue-600" />
+                      <span>นักเรียนที่เข้ามาในห้องแล้ว ({totalPlayers} คน)</span>
+                    </h2>
+                    <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                      รายชื่อจะเด้งขึ้นอัตโนมัติแบบ Realtime เมื่อครบตามที่ครูต้องการแล้ว กดปุ่ม &ldquo;เริ่มเกม&rdquo; ด้านล่างได้เลย
+                    </p>
+                  </div>
+
+                  <Badge variant={totalPlayers > 0 ? "success" : "warning"} size="lg" dot>
+                    {totalPlayers > 0
+                      ? `พร้อมแล้ว ${totalPlayers} คน`
+                      : "รอนักเรียนคนแรกเข้าห้อง..."}
+                  </Badge>
+                </div>
+
+                {totalPlayers === 0 ? (
+                  <div className="py-16 px-6 rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/60 text-center space-y-3">
+                    <div className="w-14 h-14 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center mx-auto animate-pulse">
+                      <Users className="w-7 h-7" />
+                    </div>
+                    <p className="font-display font-bold text-base text-slate-700">
+                      กำลังรอนักเรียนกรอกคีย์ <span className="text-blue-700 font-mono">{pin}</span> เพื่อเข้าห้อง...
+                    </p>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      เมื่อนักเรียนเข้าห้องมาแล้ว ชื่อและตัวละครของนักเรียนจะปรากฏที่นี่ทันที
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-80 overflow-y-auto pr-1">
+                    {state.players.map((p, idx) => (
+                      <div
+                        key={p.id}
+                        className="flex items-center gap-3 p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200 shadow-2xs"
+                      >
+                        <Avatar avatarId={p.avatarId} size="md" ring />
+                        <div className="min-w-0">
+                          <p className="font-display font-bold text-sm text-slate-900 truncate">
+                            {p.name}
+                          </p>
+                          <span className="text-[11px] font-semibold text-emerald-700">
+                            #{idx + 1} · พร้อมเล่น
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-1">
-                {state.players.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-slate-200 bg-slate-50/70"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Avatar avatarId={p.avatarId} size="sm" />
-                      <div className="min-w-0">
-                        <p className="font-display font-bold text-sm text-slate-900 truncate">
-                          {p.name}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          ช่องที่ {p.position} · คะแนน {p.score}
-                        </p>
-                      </div>
-                    </div>
-                    <Badge
-                      variant={
-                        p.answerState === "correct"
-                          ? "success"
-                          : p.answerState === "wrong"
-                          ? "danger"
-                          : p.answerState === "selected" || p.selectedOptionId
-                          ? "primary"
-                          : "default"
-                      }
-                      size="sm"
-                    >
-                      {p.answerState === "correct"
-                        ? "ตอบถูก ✓"
-                        : p.answerState === "wrong"
-                        ? "ตอบผิด ✗"
-                        : p.answerState === "selected" || p.selectedOptionId
-                        ? "ส่งคำตอบแล้ว"
-                        : "รอตอบ"}
-                    </Badge>
-                  </div>
-                ))}
+              {/* Start Game Action Area */}
+              <div className="pt-4 border-t border-slate-100 space-y-3">
+                <button
+                  type="button"
+                  disabled={totalPlayers === 0 || commandBusy}
+                  onClick={() => sendTeacherCommand({ type: "START_GAME" })}
+                  className="w-full py-5 px-6 rounded-2xl font-display font-extrabold text-xl text-white bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 hover:from-emerald-400 hover:to-teal-500 shadow-lg shadow-emerald-600/25 disabled:opacity-45 disabled:pointer-events-none cursor-pointer transition-all flex items-center justify-center gap-3"
+                >
+                  <Play className="w-7 h-7 fill-current" />
+                  <span>
+                    {totalPlayers === 0
+                      ? "รอนักเรียนเข้าห้องอย่างน้อย 1 คนเพื่อเริ่มเกม"
+                      : `นักเรียนครบแล้ว (${totalPlayers} คน) — กดเริ่มเกมและเข้าสู่กระดานทันที!`}
+                  </span>
+                </button>
+                <p className="text-center text-xs text-slate-500">
+                  เมื่อกดเริ่มเกม หน้าจอของครูและนักเรียนทุกคนจะเข้าสู่หน้ากระดานเกม 100 ช่องพร้อมคำถามข้อที่ 1 ทันที
+                </p>
               </div>
             </Card>
           </div>
-
-          {/* Right Column: Room Key + QR Code, Roll Queue & Live Leaderboard */}
-          <div className="lg:col-span-5 space-y-6">
-            {/* Room Key & QR Code Card */}
-            <Card
-              variant="default"
-              padding="md"
-              className="bg-gradient-to-br from-blue-50/90 to-white border-blue-200"
-            >
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="space-y-2 text-center sm:text-left">
-                  <div className="inline-flex items-center gap-1.5 text-xs font-display font-bold text-blue-700 uppercase">
-                    <QrCode className="w-4 h-4" />
-                    <span>คีย์ห้องเกม & QR Code เข้าร่วม</span>
-                  </div>
-                  <div className="font-display text-3xl sm:text-4xl font-black text-[#0f2547] tracking-[0.18em]">
-                    {pin}
-                  </div>
-                  <p className="text-xs text-slate-600">
-                    ให้นักเรียนกรอกคีย์ <strong>{pin}</strong> หรือสแกน QR Code
-                  </p>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleCopyPin}
-                    iconLeft={<Copy className="w-3.5 h-3.5" />}
-                  >
-                    คัดลอกคีย์ {pin}
-                  </Button>
-                </div>
-
-                <div className="shrink-0">
-                  <QRCodeSVG
-                    value={`${originUrl}/join?pin=${pin}`}
-                    size={112}
-                    label={`KEY: ${pin}`}
-                  />
-                </div>
+        </main>
+      ) : (
+        /* =====================================================================
+            STAGE 2: TEACHER IN-GAME BOARD & HOST VIEW
+            (ครูอยู่หน้ากระดานเกมเหมือนนักเรียน ดูบอร์ดสด ไม่มีสิทธิ์ทอยเต๋า แต่คอยกดคำถามถัดไป)
+           ===================================================================== */
+        <main className="flex-1 p-3 sm:p-5 max-w-[1560px] w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* LEFT / CENTER (7 cols): Live 10x10 Snake & Ladder Board */}
+          <div className="lg:col-span-7 flex flex-col items-center space-y-3 w-full">
+            {/* Live Event Banner above Board */}
+            <div className="w-full max-w-[680px] px-4 py-2.5 rounded-2xl bg-[#112448]/95 border border-blue-400/25 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Dice5 className="w-5 h-5 text-amber-400 shrink-0" />
+                <span className="font-display font-bold text-xs sm:text-sm text-blue-100 truncate">
+                  {state.lastEvent || "กำลังดำเนินการแข่งขัน"}
+                </span>
               </div>
-            </Card>
+              {state.dice.value && (
+                <Badge variant="gold" size="sm">
+                  เต๋าล่าสุด: {state.dice.value} แต้ม
+                </Badge>
+              )}
+            </div>
 
-            {/* Roll Queue Card */}
-            <Card variant="default" padding="md" className="space-y-4">
+            <div className="w-full max-w-[680px]">
+              <GameBoardWrapper
+                players={state.players}
+                currentPlayerId={state.currentPlayerId}
+                movingPlayerId={state.movingPlayerId}
+                movementPath={state.movement?.path}
+                mode="game"
+              />
+            </div>
+          </div>
+
+          {/* RIGHT (5 cols): Teacher Host Control Panel (No personal dice roll / no student answer buttons) */}
+          <div className="lg:col-span-5 flex flex-col gap-4 w-full">
+            {/* 1. Primary Teacher Action Box (Next Question / Reveal / Special Event) */}
+            <div className="rounded-3xl bg-[#112448]/95 border-2 border-blue-400/30 p-5 shadow-board space-y-4">
               <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-display font-bold text-base text-[#0f2547]">
-                    คิวทอยลูกเต๋า (Roll Queue)
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    ผู้เล่นที่ตอบถูกเรียงตามความเร็ว ({state.rollQueue.length} คิว)
-                  </p>
+                <div className="flex items-center gap-2">
+                  <Badge variant="gold" size="sm">
+                    แผงควบคุมครูผู้สอน
+                  </Badge>
+                  <span className="text-xs text-blue-200/80">
+                    รอบที่ {state.round}/{state.totalRounds}
+                  </span>
                 </div>
-                {state.rollQueue.length > 0 && !hasUnresolvedSpecialEvent && (
+                <span className="text-xs font-display font-semibold text-emerald-300">
+                  ตอบแล้ว {answeredCount}/{totalPlayers} คน
+                </span>
+              </div>
+
+              {/* Special Event Banner if active */}
+              {hasUnresolvedSpecialEvent && state.activeSpecialEvent && (
+                <div className="p-4 rounded-2xl bg-amber-500/20 border-2 border-amber-400 text-amber-100 space-y-3">
+                  <div className="flex items-center gap-2 font-display font-bold text-base text-amber-300">
+                    <Sparkles className="w-5 h-5" />
+                    <span>
+                      {state.activeSpecialEvent.playerName}:{" "}
+                      {state.activeSpecialEvent.title}
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-100/90">
+                    {state.activeSpecialEvent.description} (ช่อง{" "}
+                    {state.activeSpecialEvent.from} → {state.activeSpecialEvent.to})
+                  </p>
                   <Button
                     variant="gold"
-                    size="sm"
+                    size="md"
+                    fullWidth
                     disabled={commandBusy}
                     onClick={() =>
-                      sendTeacherCommand({
-                        type: "ROLL_DICE",
-                        playerId: state.rollQueue[0],
-                      })
+                      sendTeacherCommand({ type: "RESOLVE_SPECIAL_EVENT" })
                     }
-                    iconLeft={<Dice5 className="w-4 h-4" />}
+                    iconLeft={<CheckCircle2 className="w-4 h-4" />}
                   >
-                    ทอยให้คิวแรก
+                    ยืนยันจบเหตุการณ์พิเศษ
                   </Button>
-                )}
-              </div>
+                </div>
+              )}
 
-              {state.rollQueue.length === 0 ? (
-                <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200/80 text-center text-sm text-slate-500">
-                  {state.question && !state.question.revealed
-                    ? "รอเฉลยคำตอบเพื่อจัดลำดับคิวทอยลูกเต๋า"
-                    : "ไม่มีคิวทอยลูกเต๋าที่ค้างอยู่"}
+              {/* Big Next Question Button (or status while students are answering/rolling) */}
+              {state.gameStatus === "finished" ? (
+                <div className="p-5 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 text-center space-y-3">
+                  <Trophy className="w-10 h-10 text-amber-400 mx-auto" />
+                  <h3 className="font-display text-xl font-extrabold text-white">
+                    การแข่งขันสิ้นสุดลงแล้ว!
+                  </h3>
+                  <div className="flex flex-wrap justify-center gap-2.5 pt-1">
+                    <Link href={`/teacher/reports?pin=${pin}`}>
+                      <Button
+                        variant="gold"
+                        size="md"
+                        iconLeft={<FileBarChart className="w-4 h-4" />}
+                      >
+                        ดูรายงานผล / พิมพ์ A4
+                      </Button>
+                    </Link>
+                    <Link href={`/teacher/games/new?templatePin=${pin}`}>
+                      <Button variant="secondary" size="md">
+                        เปิดห้องใหม่ด้วยคำถามชุดนี้ (ห้องเรียนถัดไป)
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              ) : canStartNextQuestion ? (
+                <button
+                  type="button"
+                  disabled={commandBusy}
+                  onClick={() => sendTeacherCommand({ type: "START_QUESTION" })}
+                  className="w-full py-4 px-6 rounded-2xl font-display font-extrabold text-lg sm:text-xl text-slate-950 bg-gradient-to-r from-amber-300 via-amber-400 to-orange-400 hover:from-amber-200 hover:to-orange-300 shadow-lg shadow-amber-500/25 cursor-pointer transition-all flex items-center justify-center gap-2.5"
+                >
+                  <span>
+                    {state.round >= state.totalRounds
+                      ? "🏆 สรุปผลและจบการแข่งขัน"
+                      : `➡️ ไปคำถามข้อถัดไป (ข้อที่ ${state.round + 1}/${state.totalRounds})`}
+                  </span>
+                  <ArrowRight className="w-6 h-6" />
+                </button>
+              ) : state.question && !state.question.revealed ? (
+                <div className="space-y-3">
+                  <div className="p-3.5 rounded-2xl bg-blue-950/80 border border-blue-400/25 flex items-center justify-between">
+                    <div>
+                      <p className="font-display font-bold text-sm text-white">
+                        กำลังให้นักเรียนเลือกคำตอบ...
+                      </p>
+                      <p className="text-xs text-blue-200/80">
+                        เมื่อนักเรียนตอบครบทุกคน ระบบจะเฉลยให้อัตโนมัติ
+                      </p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={commandBusy}
+                      onClick={() =>
+                        sendTeacherCommand({ type: "REVEAL_ANSWERS" })
+                      }
+                    >
+                      เฉลยทันที
+                    </Button>
+                  </div>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {state.rollQueue.map((playerId, idx) => {
-                    const p = state.players.find((pl) => pl.id === playerId);
-                    if (!p) return null;
-                    const isFirst = idx === 0;
+                <div className="p-4 rounded-2xl bg-blue-950/80 border border-blue-400/25 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-display font-bold text-sm text-amber-300">
+                      {currentRoller
+                        ? `🎲 รอนักเรียน "${currentRoller.name}" กดทอยลูกเต๋า...`
+                        : "กำลังเดินหมากบนกระดาน..."}
+                    </p>
+                    <p className="text-xs text-blue-200/75 mt-0.5">
+                      เหลือคิวทอยลูกเต๋าอีก {state.rollQueue.length} คน (เมื่อทอยครบแล้วปุ่มคำถามถัดไปจะเปิดให้กด)
+                    </p>
+                  </div>
+                  {currentRoller && !hasUnresolvedSpecialEvent && (
+                    <Button
+                      variant="gold"
+                      size="sm"
+                      disabled={commandBusy}
+                      onClick={() =>
+                        sendTeacherCommand({
+                          type: "ROLL_DICE",
+                          playerId: currentRoller.id,
+                        })
+                      }
+                      iconLeft={<SkipForward className="w-4 h-4" />}
+                    >
+                      ทอยให้ {currentRoller.name}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 2. Current Question Display for Teacher (Read-only observer view) */}
+            {state.question && (
+              <div className="rounded-3xl bg-[#112448]/95 border border-blue-400/25 p-5 shadow-board space-y-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <Badge variant="primary" size="sm">
+                    คำถามข้อที่ {state.question.number}/{state.totalRounds} ·{" "}
+                    {state.question.subject}
+                  </Badge>
+                  <div className="inline-flex items-center gap-1.5 font-mono font-bold text-sm text-amber-300">
+                    <Clock className="w-4 h-4" />
+                    <span>
+                      {state.question.revealed
+                        ? "เฉลยแล้ว"
+                        : `${state.question.timeLeft} วินาที`}
+                    </span>
+                  </div>
+                </div>
+
+                <h2 className="font-display text-base sm:text-lg font-extrabold text-white leading-snug">
+                  {state.question.prompt}
+                </h2>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {state.question.options.map((opt, idx) => {
+                    const letter = String.fromCharCode(65 + idx);
+                    const isCorrect =
+                      state.question?.revealed &&
+                      state.question.correctOptionId === opt.id;
                     return (
                       <div
-                        key={playerId}
-                        className={`flex items-center justify-between p-3 rounded-xl border ${
-                          isFirst
-                            ? "bg-amber-50 border-amber-300 shadow-xs"
-                            : "bg-white border-slate-200"
+                        key={opt.id}
+                        className={`px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm font-display font-semibold flex items-center gap-2.5 ${
+                          isCorrect
+                            ? "bg-emerald-500/25 border-emerald-400 text-emerald-200"
+                            : "bg-slate-900/70 border-white/10 text-blue-100"
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-display font-bold text-xs flex items-center justify-center">
-                            {idx + 1}
-                          </span>
-                          <Avatar avatarId={p.avatarId} size="sm" ring={isFirst} />
-                          <div>
-                            <p className="font-display font-bold text-sm text-slate-900">
-                              {p.name}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              ตำแหน่งปัจจุบัน: ช่อง {p.position}
-                            </p>
-                          </div>
-                        </div>
-                        <Badge variant={isFirst ? "gold" : "default"} size="sm">
-                          {isFirst ? "กำลังรอทอย" : "รอคิว"}
-                        </Badge>
+                        <span
+                          className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
+                            isCorrect
+                              ? "bg-emerald-400 text-slate-950"
+                              : "bg-white/10 text-white"
+                          }`}
+                        >
+                          {letter}
+                        </span>
+                        <span className="truncate">{opt.text}</span>
                       </div>
                     );
                   })}
                 </div>
-              )}
-            </Card>
+              </div>
+            )}
 
-            {/* Live Leaderboard & Game Finished Summary */}
-            <Card variant="default" padding="md" className="space-y-4">
+            {/* 3. Live Student Status & Leaderboard */}
+            <div className="rounded-3xl bg-[#112448]/95 border border-blue-400/25 p-5 shadow-board space-y-3">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Trophy className="w-5 h-5 text-amber-500" />
-                  <h3 className="font-display font-bold text-base text-[#0f2547]">
-                    อันดับคะแนนสด (Leaderboard)
-                  </h3>
-                </div>
-                {state.gameStatus === "finished" && (
-                  <Link href={`/teacher/reports?pin=${pin}`}>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      iconLeft={<FileBarChart className="w-4 h-4" />}
-                    >
-                      ดูรายงาน / พิมพ์ PDF
-                    </Button>
-                  </Link>
-                )}
+                <h3 className="font-display font-bold text-sm sm:text-base text-white flex items-center gap-2">
+                  <Trophy className="w-4 h-4 text-amber-400" />
+                  <span>ตำแหน่งและสถานะนักเรียน ({state.players.length} คน)</span>
+                </h3>
+                <span className="text-xs text-blue-200/70">
+                  คลิกดูบนกระดานได้แบบสด ๆ
+                </span>
               </div>
 
-              {state.gameStatus === "finished" && (
-                <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 text-center space-y-2">
-                  <Badge variant="gold" size="md">
-                    🏁 การแข่งขันสิ้นสุดแล้ว!
-                  </Badge>
-                  <Leaderboard
-                    entries={state.leaderboard}
-                    mode="podium"
-                    theme="light"
-                  />
-                </div>
-              )}
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {state.leaderboard.map((entry) => {
+                  const p = state.players.find((pl) => pl.id === entry.playerId);
+                  const isInQueue = state.rollQueue.includes(entry.playerId);
+                  const isFirstInQueue = state.rollQueue[0] === entry.playerId;
 
-              <Leaderboard
-                entries={state.leaderboard.slice(0, 8)}
-                mode="compact"
-                theme="light"
-              />
+                  return (
+                    <div
+                      key={entry.playerId}
+                      className={`flex items-center justify-between gap-2 p-2.5 rounded-xl border ${
+                        isFirstInQueue
+                          ? "bg-amber-500/20 border-amber-400"
+                          : "bg-slate-900/60 border-white/10"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="w-5 text-center font-display font-bold text-xs text-blue-200">
+                          #{entry.rank}
+                        </span>
+                        <Avatar avatarId={entry.avatarId} size="xs" />
+                        <div className="min-w-0">
+                          <p className="font-display font-bold text-xs sm:text-sm text-white truncate">
+                            {entry.name}
+                          </p>
+                          <p className="text-[11px] text-blue-200/75">
+                            ช่องที่ {entry.position} · {entry.score} คะแนน
+                          </p>
+                        </div>
+                      </div>
 
-              {hasUnresolvedSpecialEvent && (
-                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-center gap-2 text-xs text-amber-800">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>
-                    กรุณายืนยันจบ Special Event ก่อนเริ่มคำถามข้อถัดไป
-                  </span>
-                </div>
-              )}
-            </Card>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isInQueue && (
+                          <Badge variant="gold" size="sm">
+                            {isFirstInQueue ? "🎲 ถึงคิวทอย" : "รอทอย"}
+                          </Badge>
+                        )}
+                        {p && (
+                          <Badge
+                            variant={
+                              p.answerState === "correct"
+                                ? "success"
+                                : p.answerState === "wrong"
+                                ? "danger"
+                                : p.answerState === "selected" || p.selectedOptionId
+                                ? "primary"
+                                : "default"
+                            }
+                            size="sm"
+                          >
+                            {p.answerState === "correct"
+                              ? "ตอบถูก ✓"
+                              : p.answerState === "wrong"
+                              ? "ตอบผิด ✗"
+                              : p.answerState === "selected" || p.selectedOptionId
+                              ? "ตอบแล้ว"
+                              : "รอตอบ"}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
+      )}
 
       <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>

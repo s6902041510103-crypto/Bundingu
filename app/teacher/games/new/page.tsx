@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { TeacherLayoutShell } from "@/components/teacher/TeacherSidebar";
 import { useTeacherAuth } from "@/lib/hooks/useTeacherAuth";
 import { Button } from "@/components/ui/Button";
@@ -38,6 +38,7 @@ const STEPS = [
 ];
 
 function CreateGameContent() {
+  const router = useRouter();
   const { teacher, loading: authLoading } = useTeacherAuth(true);
   const { toasts, addToast, removeToast } = useToast();
   const searchParams = useSearchParams();
@@ -304,12 +305,12 @@ function CreateGameContent() {
       }
 
       setCreatedPin(data.pin);
-      setStep(4);
       addToast({
-        title: "สร้างห้องเกมสำเร็จและบันทึกชุดเกมไว้แล้ว!",
-        description: `คีย์เข้าห้องคือ ${data.pin} (สามารถนำชุดเกมนี้ไปเปิดห้องใหม่สำหรับนักเรียนห้องถัดไปได้ตลอดเวลา)`,
+        title: "สร้างห้องเกมสำเร็จ! กำลังเข้าสู่หน้ารอนักเรียน...",
+        description: `คีย์เข้าห้องคือ ${data.pin}`,
         variant: "success",
       });
+      router.push(`/teacher/games/${data.pin}`);
     } catch {
       setError("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้");
     } finally {

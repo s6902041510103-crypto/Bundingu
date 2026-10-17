@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { TeacherLayoutShell } from "@/components/teacher/TeacherSidebar";
 import { useTeacherAuth } from "@/lib/hooks/useTeacherAuth";
 import { Button } from "@/components/ui/Button";
@@ -28,6 +29,7 @@ import {
 } from "lucide-react";
 
 export default function TeacherDashboardPage() {
+  const router = useRouter();
   const { teacher, loading: authLoading } = useTeacherAuth(true);
   const { toasts, addToast, removeToast } = useToast();
 
@@ -129,12 +131,12 @@ export default function TeacherDashboardPage() {
       }
 
       setReopenTarget(null);
-      await fetchDashboardData();
       addToast({
         title: `เปิดห้องใหม่สำเร็จ! คีย์ห้องคือ ${data.pin}`,
-        description: `ใช้ชุดคำถามเดิมสำหรับ "${reopenTitle.trim()}" เรียบร้อยแล้ว`,
+        description: `กำลังเข้าสู่หน้ารอนักเรียนสำหรับ "${reopenTitle.trim()}"`,
         variant: "success",
       });
+      router.push(`/teacher/games/${data.pin}`);
     } catch {
       addToast({
         title: "เกิดข้อผิดพลาดในการเชื่อมต่อ",
