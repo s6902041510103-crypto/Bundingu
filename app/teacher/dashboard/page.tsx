@@ -1,230 +1,404 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { cn } from "@/lib/utils";
+import { TeacherLayoutShell } from "@/components/teacher/TeacherSidebar";
+import { useTeacherAuth } from "@/lib/hooks/useTeacherAuth";
 import { Button } from "@/components/ui/Button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { GameBoardWrapper } from "@/components/game/GameBoard";
-import { MOCK_PLAYERS } from "@/lib/game-data";
-import { Plus, Play, Users, Trash2, Edit, Clock, Trophy, ArrowRight, LogOut } from "lucide-react";
-
-const RECENT_GAMES = [
-  { id: "game-001", title: "วิทยาศาสตร์ ม.6", subject: "พลังงาน", rounds: 10, players: 24, createdAt: Date.now() - 86400000, status: "completed" },
-  { id: "game-002", title: "เคมี ม.5", subject: "ตารางธงบัตร", rounds: 15, players: 18, createdAt: Date.now() - 172800000, status: "completed" },
-  { id: "game-003", title: "ชีววิทยา ม.4", subject: "ระบบไหลเวียนโลหิต", rounds: 10, players: 32, createdAt: Date.now() - 259200000, status: "draft" },
-];
+import { Loading } from "@/components/ui/Loading";
+import { QRCodeSVG } from "@/components/ui/QRCode";
+import { ToastContainer, useToast } from "@/components/ui/Toast";
+import { Avatar } from "@/components/game/Avatar";
+import type { GameHistoryRecord, GameState } from "@/lib/types";
+import {
+  Plus,
+  Play,
+  Users,
+  BookOpen,
+  Trophy,
+  Calendar,
+  ExternalLink,
+  StopCircle,
+  FileBarChart,
+  Gamepad2,
+} from "lucide-react";
 
 export default function TeacherDashboardPage() {
-  const router = useRouter();
-  const [teacher, setTeacher] = useState<{ name: string; email: string } | null>(null);
+  const { teacher, loading: authLoading } = useTeacherAuth(true);
+  const { toasts, addToast, removeToast } = useToast();
+
+  const [activeRooms, setActiveRooms] = useState<GameState[]>([]);
+  const [history, setHistory] = useState<GameHistoryRecord[]>([]);
+  const [questionsCount, setQuestionsCount] = useState<number>(0);
+  const [loadingData, setLoadingData] = useState(true);
+
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      const res = await fetch("/api/games", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      setActiveRooms(Array.isArray(data.activeRooms) ? data.activeRooms : []);
+      setHistory(Array.isArray(data.history) ? data.history : []);
+      setQuestionsCount(typeof data.questionsCount === "number" ? data.questionsCount : 0);
+    } catch {
+      // ignore transient error
+    } finally {
+      setLoadingData(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem("ks-teacher");
-    if (stored) {
-      try {
-        setTeacher(JSON.parse(stored));
-      } catch {
-        router.push("/teacher/login");
-      }
-    } else {
-      router.push("/teacher/login");
-    }
-  }, [router]);
+    fetchDashboardData();
+    const timer = window.setInterval(fetchDashboardData, 4000);
+    return () => window.clearInterval(timer);
+  }, [fetchDashboardData]);
 
-  const handleLogout = () => {
-    sessionStorage.removeItem("ks-teacher");
-    router.push("/teacher/login");
+  const handleEndGame = async (pin: string) => {
+    try {
+      const res = await fetch(`/api/games/${encodeURIComponent(pin)}/command`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "END_GAME" }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        addToast({
+          title: "ไม่สามารถสิ้นสุดเกมได้",
+          description: data.error || "กรุณาลองใหม่อีกครั้ง",
+          variant: "danger",
+        });
+        return;
+      }
+      addToast({
+        title: `สิ้นสุดเกม PIN ${pin} แล้ว`,
+        description: "บันทึกผลคะแนนลงในประวัติเกมเรียบร้อยแล้ว",
+        variant: "success",
+      });
+      fetchDashboardData();
+    } catch {
+      addToast({
+        title: "เกิดข้อผิดพลาดในการเชื่อมต่อ",
+        variant: "danger",
+      });
+    }
   };
 
-  if (!teacher) {
-    return (
-      <div className="min-h-screen bg-bg-deep flex items-center justify-center">
-        <div className="animate-pulse-soft text-slate-400">กำลังโหลด...</div>
-      </div>
-    );
+  if (authLoading || loadingData) {
+    return <Loading fullScreen label="กำลังโหลดแดชบอร์ดครู..." />;
   }
 
+  const currentActiveRoom =
+    activeRooms.find((r) => r.gameStatus !== "finished") ?? null;
+
+  const totalGames = history.length;
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const gamesToday = history.filter((h) => h.createdAt >= startOfToday.getTime()).length;
+  const totalPlayers = history.reduce((sum, h) => sum + (h.playersCount || 0), 0);
+
   return (
-    <div className="min-h-screen bg-bg-deep text-foreground font-body">
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-40 glass-strong border-b border-slate-700">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Link href="/" className="flex items-center gap-2">
-                <span className="text-2xl">🐍</span>
-                <span className="font-display font-bold text-xl gradient-text">Knowledge Snake</span>
-              </Link>
-              <Badge variant="gold" size="sm">แดชบอร์ดครู</Badge>
+    <TeacherLayoutShell
+      teacher={teacher}
+      title="หน้าหลัก"
+      subtitle="ภาพรวมห้องเรียน สถิติจริง และเกมที่กำลังดำเนินการ"
+      actions={
+        <Link href="/teacher/games/new">
+          <Button variant="primary" size="md" iconLeft={<Plus className="w-4 h-4" />}>
+            สร้างเกมใหม่
+          </Button>
+        </Link>
+      }
+    >
+      <div className="space-y-7">
+        {/* Active Game Card (Matches Reference Screen #3) */}
+        {currentActiveRoom ? (
+          <div className="rounded-3xl overflow-hidden bg-white border border-emerald-200 shadow-card">
+            <div className="bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 px-6 py-3 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2 font-display font-bold text-base">
+                <Gamepad2 className="w-5 h-5" />
+                <span>เกมที่กำลังดำเนินการ</span>
+              </div>
+              <Badge
+                variant="gold"
+                size="sm"
+                className="bg-white/20 text-white border-white/30"
+              >
+                {currentActiveRoom.gameStatus === "lobby"
+                  ? "รอผู้เล่นเข้าห้อง"
+                  : `กำลังเล่น · รอบที่ ${currentActiveRoom.round}/${currentActiveRoom.totalRounds}`}
+              </Badge>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-slate-300 hidden sm:block">{teacher.name}</span>
-              <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">
-                <LogOut className="w-4 h-4" />
-                <span className="hidden sm:inline">ออกจากระบบ</span>
-              </Button>
+
+            <div className="p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div className="space-y-3 flex-1">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Avatar avatarId="panda" size="md" ring />
+                  <div>
+                    <h2 className="font-display text-xl sm:text-2xl font-extrabold text-[#0f2547]">
+                      {currentActiveRoom.game.title}
+                    </h2>
+                    <p className="text-xs sm:text-sm text-slate-500">
+                      หมวดวิชา: {currentActiveRoom.game.subject} · โฮสต์:{" "}
+                      {currentActiveRoom.game.hostName}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-4 pt-1">
+                  <div className="px-4 py-2 rounded-2xl bg-blue-50 border border-blue-200">
+                    <span className="text-xs text-blue-700 font-medium block">
+                      Game PIN
+                    </span>
+                    <span className="font-display text-2xl font-black text-blue-800 tracking-wider">
+                      {currentActiveRoom.game.pin}
+                    </span>
+                  </div>
+
+                  <div className="px-4 py-2 rounded-2xl bg-emerald-50 border border-emerald-200">
+                    <span className="text-xs text-emerald-700 font-medium block">
+                      ผู้เล่นในห้อง
+                    </span>
+                    <span className="font-display text-xl font-bold text-emerald-800">
+                      {currentActiveRoom.players.length}/
+                      {currentActiveRoom.settings.maxPlayers} คน
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <Link href={`/teacher/games/${currentActiveRoom.game.pin}`}>
+                    <Button
+                      variant="primary"
+                      size="md"
+                      iconLeft={<Play className="w-4 h-4" />}
+                    >
+                      เปิดหน้าควบคุมเกมสด
+                    </Button>
+                  </Link>
+                  <Link href={`/game/${currentActiveRoom.game.pin}/projector`}>
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      iconLeft={<ExternalLink className="w-4 h-4" />}
+                    >
+                      เปิดจอ Projector
+                    </Button>
+                  </Link>
+                  <Button
+                    variant="destructive"
+                    size="md"
+                    onClick={() => handleEndGame(currentActiveRoom.game.pin)}
+                    iconLeft={<StopCircle className="w-4 h-4" />}
+                  >
+                    สิ้นสุดเกม
+                  </Button>
+                </div>
+              </div>
+
+              {/* Real QR Code for Joining */}
+              <div className="flex flex-col items-center justify-center p-3 rounded-2xl bg-slate-50 border border-slate-200 self-center md:self-auto">
+                <QRCodeSVG
+                  value={`/join?pin=${currentActiveRoom.game.pin}`}
+                  size={112}
+                />
+                <span className="text-xs font-display font-semibold text-slate-600 mt-2">
+                  สแกน QR เพื่อเข้าร่วม
+                </span>
+              </div>
             </div>
           </div>
-        </div>
-      </header>
-
-      <main className="pt-20 pb-12 px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl space-y-8">
-          {/* Welcome Section */}
-          <section>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-              <div>
-                <h1 className="font-display text-3xl font-bold">สวัสดีครับ, {teacher.name}</h1>
-                <p className="text-slate-400 mt-1">จัดการเกมของคุณ สร้างเกมใหม่ หรือดูประวัติเกมที่ผ่านมา</p>
-              </div>
-              <Link href="/teacher/create">
-                <Button size="lg" variant="primary" iconLeft={<Plus className="w-5 h-5" />}>
-                  สร้างเกมใหม่
-                </Button>
-              </Link>
+        ) : (
+          <Card variant="elevated" padding="lg" className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <h2 className="font-display text-lg font-bold text-[#0f2547]">
+                ยังไม่มีห้องเกมที่กำลังเปิดอยู่ในขณะนี้
+              </h2>
+              <p className="text-sm text-slate-500 mt-1">
+                กดปุ่มสร้างเกมใหม่เพื่อรับ Game PIN และ QR Code สำหรับให้นักเรียนเข้าร่วม
+              </p>
             </div>
-          </section>
+            <Link href="/teacher/games/new">
+              <Button variant="primary" size="lg" iconLeft={<Plus className="w-5 h-5" />}>
+                สร้างเกมใหม่ทันที
+              </Button>
+            </Link>
+          </Card>
+        )}
 
-          {/* Quick Stats */}
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card variant="glass" padding="lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-400">เกมที่สร้าง</p>
-                  <p className="font-display text-3xl font-bold text-amber-400 mt-1">3</p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-violet-500/20 flex items-center justify-center">
-                  <Plus className="w-6 h-6 text-violet-400" />
-                </div>
-              </div>
-            </Card>
-            <Card variant="glass" padding="lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-400">นักเรียนรวม</p>
-                  <p className="font-display text-3xl font-bold text-sky-400 mt-1">74</p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-sky-500/20 flex items-center justify-center">
-                  <Users className="w-6 h-6 text-sky-400" />
-                </div>
-              </div>
-            </Card>
-            <Card variant="glass" padding="lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-400">เกมที่เสร็จแล้ว</p>
-                  <p className="font-display text-3xl font-bold text-emerald-400 mt-1">2</p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-                  <Trophy className="w-6 h-6 text-emerald-400" />
-                </div>
-              </div>
-            </Card>
-            <Card variant="glass" padding="lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-400">รอการเล่น</p>
-                  <p className="font-display text-3xl font-bold text-amber-400 mt-1">1</p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-amber-400" />
-                </div>
-              </div>
-            </Card>
-          </section>
-
-          {/* Create New Game Card */}
-          <section>
-            <Card variant="glass-strong" padding="lg" className="border-amber-400/30 bg-gradient-to-br from-amber-500/5 to-transparent">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
-                <div>
-                  <h2 className="font-display text-xl font-bold mb-1">พร้อมเริ่มเกมใหม่?</h2>
-                  <p className="text-slate-400">สร้างห้องเรียน ได้ PIN และ QR Code เริ่มเล่นได้ทันที</p>
-                </div>
-                <Link href="/teacher/create">
-                  <Button size="xl" variant="primary" iconLeft={<Play className="w-5 h-5" />}>
-                    เริ่มสร้างเกม
-                  </Button>
-                </Link>
-              </div>
-            </Card>
-          </section>
-
-          {/* Recent Games */}
-          <section>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-display text-2xl font-bold">เกมล่าสุด</h2>
-              <Badge variant="info" size="sm">Phase 1: Mock Data</Badge>
+        {/* 4 Summary Cards with Real Data (Matches Reference Screen #3) */}
+        <section
+          className="grid grid-cols-2 lg:grid-cols-4 gap-4"
+          aria-label="สรุปสถิติห้องเรียน"
+        >
+          <Card variant="default" padding="md" className="flex items-center justify-between">
+            <div>
+              <p className="text-xs sm:text-sm font-display font-medium text-slate-500">
+                เกมทั้งหมด
+              </p>
+              <p className="font-display text-3xl sm:text-4xl font-extrabold text-[#0f2547] mt-1">
+                {totalGames}
+              </p>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {RECENT_GAMES.map((game) => (
-                <Card key={game.id} variant="glass" padding="lg" className="group hover:border-violet-400/30 transition-all">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="font-display font-bold text-lg">{game.title}</h3>
-                      <p className="text-sm text-slate-400 mt-1">{game.subject}</p>
-                    </div>
-                    <Badge
-                      variant={game.status === "completed" ? "success" : "default"}
-                      className="text-xs"
-                    >
-                      {game.status === "completed" ? "เสร็จแล้ว" : "ร่าง"}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-4 text-sm text-slate-400 mb-4">
-                    <span className="flex items-center gap-1.5">
-                      <Users className="w-4 h-4" />
-                      {game.players} คน
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <Play className="w-4 h-4" />
-                      {game.rounds} ข้อ
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={`/game/lobby?pin=${game.id}`}
-                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 transition-colors"
-                    >
-                      <Play className="w-4 h-4" />
-                      เข้าห้อง
-                    </Link>
-                    <Link
-                      href={`/teacher/create?edit=${game.id}`}
-                      className="p-2 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 transition-colors"
-                      aria-label="แก้ไขเกม"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </Link>
-                    <button
-                      className="p-2 rounded-lg bg-slate-800 border border-slate-700 hover:bg-red-500/20 hover:border-red-500 transition-colors text-red-400"
-                      aria-label="ลบเกม"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </Card>
-              ))}
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <Trophy className="w-6 h-6" />
             </div>
-          </section>
+          </Card>
 
-          {/* Quick Board Preview */}
-          <section>
-            <h2 className="font-display text-2xl font-bold mb-4">ตัวอย่างกระดาน (Preview)</h2>
-            <Card variant="elevated" padding="lg" className="max-w-3xl">
-              <GameBoardWrapper
-                players={MOCK_PLAYERS.slice(0, 10)}
-                mode="preview"
-                highlightCell={25}
-                responsive={true}
-              />
-            </Card>
-          </section>
-        </div>
-      </main>
-    </div>
+          <Card variant="default" padding="md" className="flex items-center justify-between">
+            <div>
+              <p className="text-xs sm:text-sm font-display font-medium text-slate-500">
+                วันนี้
+              </p>
+              <p className="font-display text-3xl sm:text-4xl font-extrabold text-emerald-600 mt-1">
+                {gamesToday}
+              </p>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <Calendar className="w-6 h-6" />
+            </div>
+          </Card>
+
+          <Card variant="default" padding="md" className="flex items-center justify-between">
+            <div>
+              <p className="text-xs sm:text-sm font-display font-medium text-slate-500">
+                ผู้เล่นรวม
+              </p>
+              <p className="font-display text-3xl sm:text-4xl font-extrabold text-blue-600 mt-1">
+                {totalPlayers}
+              </p>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center">
+              <Users className="w-6 h-6" />
+            </div>
+          </Card>
+
+          <Card variant="default" padding="md" className="flex items-center justify-between">
+            <div>
+              <p className="text-xs sm:text-sm font-display font-medium text-slate-500">
+                คำถามในคลัง
+              </p>
+              <p className="font-display text-3xl sm:text-4xl font-extrabold text-amber-600 mt-1">
+                {questionsCount}
+              </p>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+              <BookOpen className="w-6 h-6" />
+            </div>
+          </Card>
+        </section>
+
+        {/* Recent Games Table (Matches Reference Screen #3) */}
+        <Card variant="default" padding="none" className="overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h2 className="font-display text-lg font-bold text-[#0f2547]">เกมล่าสุด</h2>
+            <Link
+              href="/teacher/history"
+              className="text-xs sm:text-sm font-display font-semibold text-blue-600 hover:underline"
+            >
+              ดูประวัติทั้งหมด →
+            </Link>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/70 text-xs font-display font-semibold text-slate-500">
+                  <th className="py-3.5 px-5">ชื่อเกม</th>
+                  <th className="py-3.5 px-4">PIN</th>
+                  <th className="py-3.5 px-4">วันที่</th>
+                  <th className="py-3.5 px-4">ผู้เล่น</th>
+                  <th className="py-3.5 px-4">ผู้นำ/ผู้ชนะ</th>
+                  <th className="py-3.5 px-4">สถานะ</th>
+                  <th className="py-3.5 px-5 text-right">การจัดการ</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
+                {history.slice(0, 6).map((game) => {
+                  const isLive =
+                    game.status === "lobby" || game.status === "playing";
+                  const dateStr = new Date(game.createdAt).toLocaleDateString(
+                    "th-TH",
+                    { day: "2-digit", month: "2-digit", year: "numeric" },
+                  );
+
+                  return (
+                    <tr
+                      key={game.id}
+                      className="hover:bg-slate-50/80 transition-colors"
+                    >
+                      <td className="py-3.5 px-5">
+                        <div className="font-display font-bold text-slate-900">
+                          {game.title}
+                        </div>
+                        <div className="text-xs text-slate-500">{game.subject}</div>
+                      </td>
+                      <td className="py-3.5 px-4 font-mono font-bold text-blue-700">
+                        {game.pin}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-600">{dateStr}</td>
+                      <td className="py-3.5 px-4 text-slate-700 font-medium">
+                        {game.playersCount} คน
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {game.winnerName ? (
+                          <div className="inline-flex items-center gap-2">
+                            {game.winnerAvatarId && (
+                              <Avatar avatarId={game.winnerAvatarId} size="xs" />
+                            )}
+                            <span className="font-medium text-slate-800">
+                              {game.winnerName}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {isLive ? (
+                          <Badge variant="success" size="sm" dot>
+                            {game.status === "lobby" ? "รอเริ่ม" : "กำลังเล่น"}
+                          </Badge>
+                        ) : (
+                          <Badge variant="default" size="sm" dot>
+                            เสร็จสิ้น
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-5 text-right">
+                        {isLive ? (
+                          <Link href={`/teacher/games/${game.pin}`}>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              iconLeft={<Play className="w-3.5 h-3.5" />}
+                            >
+                              ควบคุมเกม
+                            </Button>
+                          </Link>
+                        ) : (
+                          <Link href={`/teacher/reports?pin=${game.pin}`}>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              iconLeft={<FileBarChart className="w-3.5 h-3.5" />}
+                            >
+                              ดูรายงาน
+                            </Button>
+                          </Link>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+
+      <ToastContainer toasts={toasts} onClose={removeToast} />
+    </TeacherLayoutShell>
   );
 }
