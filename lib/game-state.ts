@@ -638,3 +638,66 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return state;
   }
 }
+
+/**
+ * Helper to Check if Teacher can click "Advance" based on Server Phase Rules
+ */
+export function canTeacherAdvance(state: GameState): {
+  allowed: boolean;
+  label: string;
+  reason?: string;
+} {
+  if (state.activeSpecialEvent && !state.activeSpecialEvent.resolved) {
+    return {
+      allowed: true,
+      label: "ยืนยันเหตุการณ์พิเศษ",
+      reason: "กดเพื่อปิดหน้าต่างเหตุการณ์พิเศษและดำเนินการต่อ",
+    };
+  }
+  switch (state.gameStatus) {
+    case "lobby":
+      return {
+        allowed: state.players.length > 0,
+        label: "เริ่มเกม",
+        reason: state.players.length === 0 ? "ต้องมีผู้เล่นอย่างน้อย 1 คนในห้อง" : undefined,
+      };
+    case "question":
+    case "answering":
+      return {
+        allowed: true,
+        label: "เฉลยคำตอบ",
+      };
+    case "reveal":
+      if (state.rollQueue.length > 0) {
+        return { allowed: true, label: "เริ่มคิวทอยลูกเต๋า" };
+      }
+      if (state.round >= state.totalRounds) {
+        return { allowed: true, label: "สรุปผลจบเกม" };
+      }
+      return { allowed: false, label: "ไปต่อ", reason: "กรุณากดปุ่ม 'เริ่มคำถาม' เพื่อเริ่มข้อถัดไป" };
+    case "dice":
+      return {
+        allowed: state.rollQueue.length > 0,
+        label: "ทอยให้ผู้เล่นถัดไป",
+      };
+    case "moving":
+      return {
+        allowed: false,
+        label: "กำลังเดิน...",
+        reason: "รอให้ตัวละครเดินเสร็จสิ้น",
+      };
+    case "special_event":
+      return {
+        allowed: true,
+        label: "ดำเนินการต่อหลังเหตุการณ์พิเศษ",
+      };
+    case "finished":
+      return {
+        allowed: false,
+        label: "จบเกมแล้ว",
+        reason: "การแข่งขันสิ้นสุดแล้ว",
+      };
+    default:
+      return { allowed: false, label: "ไปต่อ" };
+  }
+}
