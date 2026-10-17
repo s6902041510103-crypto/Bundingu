@@ -279,6 +279,7 @@ export type ServerGameCommand =
   | { type: "RESOLVE_SPECIAL_EVENT"; playerId?: string }
   | { type: "ADVANCE_TURN" }
   | { type: "END_GAME" }
+  | { type: "RESET_ROOM" }
   | { type: "SET_PACING_MODE"; mode: "auto" | "manual" };
 
 export interface PlayerReportRow {

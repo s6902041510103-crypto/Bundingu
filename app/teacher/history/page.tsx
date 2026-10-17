@@ -2,77 +2,143 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { TeacherLayoutShell } from "@/components/teacher/TeacherSidebar";
 import { useTeacherAuth } from "@/lib/hooks/useTeacherAuth";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Loading } from "@/components/ui/Loading";
-import { Avatar } from "@/components/game/Avatar";
+import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { SUBJECTS } from "@/lib/game-data";
 import type { GameHistoryRecord } from "@/lib/types";
-import { Search, FileBarChart, Play, RotateCcw } from "lucide-react";
+import { Search, Play, RotateCcw, Trash2, Plus } from "lucide-react";
 
-export default function TeacherHistoryPage() {
+export default function TeacherSavedRoomsPage() {
+  const router = useRouter();
   const { teacher, loading: authLoading } = useTeacherAuth(true);
-  const [history, setHistory] = useState<GameHistoryRecord[]>([]);
+  const { toasts, addToast, removeToast } = useToast();
+  const [savedRooms, setSavedRooms] = useState<GameHistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busyPin, setBusyPin] = useState<string | null>(null);
 
   const [subjectFilter, setSubjectFilter] = useState("ทั้งหมด");
   const [searchQuery, setSearchQuery] = useState("");
-  const [dateFilter, setDateFilter] = useState("");
 
   useEffect(() => {
-    const loadHistory = async () => {
+    const loadSavedRooms = async () => {
       try {
         const res = await fetch("/api/history", { cache: "no-store" });
         if (!res.ok) return;
         const data = await res.json();
-        setHistory(Array.isArray(data.history) ? data.history : []);
+        setSavedRooms(Array.isArray(data.history) ? data.history : []);
       } catch {
         // ignore
       } finally {
         setLoading(false);
       }
     };
-    loadHistory();
+    loadSavedRooms();
   }, []);
 
-  const filteredHistory = useMemo(() => {
-    return history.filter((item) => {
+  const handleOpenSavedRoom = async (room: GameHistoryRecord, forceReset = false) => {
+    setBusyPin(room.pin);
+    try {
+      if (forceReset || room.status === "completed") {
+        const res = await fetch(`/api/games/${encodeURIComponent(room.pin)}/command`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "RESET_ROOM" }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          addToast({
+            title: "ไม่สามารถเปิดห้องเกมนี้ได้",
+            description: data.error || "กรุณาลองใหม่อีกครั้ง",
+            variant: "danger",
+          });
+          setBusyPin(null);
+          return;
+        }
+      }
+      router.push(`/teacher/games/${room.pin}`);
+    } catch {
+      addToast({
+        title: "เกิดข้อผิดพลาดในการเชื่อมต่อ",
+        variant: "danger",
+      });
+      setBusyPin(null);
+    }
+  };
+
+  const handleDeleteRoom = async (room: GameHistoryRecord) => {
+    setBusyPin(room.pin);
+    try {
+      const res = await fetch(`/api/history?pin=${encodeURIComponent(room.pin)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        addToast({
+          title: "ไม่สามารถลบห้องเกมได้",
+          description: data.error || "กรุณาลองใหม่อีกครั้ง",
+          variant: "danger",
+        });
+        setBusyPin(null);
+        return;
+      }
+      setSavedRooms((prev) => prev.filter((item) => item.pin !== room.pin && item.id !== room.id));
+      addToast({
+        title: `ลบห้องเกม "${room.title}" (${room.pin}) แล้ว`,
+        variant: "info",
+      });
+    } catch {
+      addToast({
+        title: "เกิดข้อผิดพลาดในการลบห้องเกม",
+        variant: "danger",
+      });
+    } finally {
+      setBusyPin(null);
+    }
+  };
+
+  const filteredRooms = useMemo(() => {
+    return savedRooms.filter((item) => {
       if (subjectFilter !== "ทั้งหมด" && item.subject !== subjectFilter) {
         return false;
       }
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         const matchTitle = item.title.toLowerCase().includes(q);
-        const matchPin = item.pin.includes(q);
-        const matchWinner = (item.winnerName || "").toLowerCase().includes(q);
-        if (!matchTitle && !matchPin && !matchWinner) return false;
-      }
-      if (dateFilter) {
-        const itemDate = new Date(item.createdAt).toISOString().slice(0, 10);
-        if (itemDate !== dateFilter) return false;
+        const matchPin = item.pin.toLowerCase().includes(q);
+        if (!matchTitle && !matchPin) return false;
       }
       return true;
     });
-  }, [history, subjectFilter, searchQuery, dateFilter]);
+  }, [savedRooms, subjectFilter, searchQuery]);
 
   if (authLoading || loading) {
-    return <Loading fullScreen label="กำลังโหลดประวัติการเล่นเกม..." />;
+    return <Loading fullScreen label="กำลังโหลดห้องเกมที่สร้างไว้..." />;
   }
 
   return (
     <TeacherLayoutShell
       teacher={teacher}
-      title="ประวัติการเล่นเกม"
-      subtitle="รายการห้องเกมที่สร้างและบันทึกผลการแข่งขันจริง"
+      title="ห้องเกมที่สร้างไว้"
+      subtitle="รายการห้องเกมที่คุณสร้างเก็บไว้ สามารถกดเปิดใช้ซ้ำได้ตลอดเวลา หรือลบห้องที่ไม่ต้องการได้"
+      actions={
+        <Link href="/teacher/games/new">
+          <Button variant="primary" size="md" iconLeft={<Plus className="w-4 h-4" />}>
+            สร้างห้องเกมใหม่
+          </Button>
+        </Link>
+      }
     >
       <div className="space-y-6">
-        {/* Filter Bar (Matches Reference Screen #7) */}
+        {/* Filter Bar */}
         <Card variant="default" padding="md">
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5 items-center">
-            <div className="sm:col-span-4">
+            <div className="sm:col-span-5">
               <select
                 value={subjectFilter}
                 onChange={(e) => setSubjectFilter(e.target.value)}
@@ -88,138 +154,111 @@ export default function TeacherHistoryPage() {
               </select>
             </div>
 
-            <div className="sm:col-span-4">
-              <input
-                type="date"
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                aria-label="เลือกวันที่"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 text-sm text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none"
-              />
-            </div>
-
-            <div className="sm:col-span-4 relative">
+            <div className="sm:col-span-7 relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="ค้นหาชื่อเกม หรือ PIN..."
+                placeholder="ค้นหาชื่อห้องเกม หรือ คีย์ห้อง (PIN)..."
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 text-sm text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none"
               />
             </div>
           </div>
         </Card>
 
-        {/* History Table (Matches Reference Screen #7) */}
+        {/* Saved Rooms Table */}
         <Card variant="default" padding="none" className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/80 text-xs font-display font-semibold text-slate-500">
-                  <th className="py-3.5 px-5">วันที่</th>
-                  <th className="py-3.5 px-4">ชื่อเกม</th>
-                  <th className="py-3.5 px-4">PIN</th>
-                  <th className="py-3.5 px-4">ผู้เล่น</th>
-                  <th className="py-3.5 px-4">ผู้ชนะ / ผู้นำ</th>
-                  <th className="py-3.5 px-4">สถานะ</th>
-                  <th className="py-3.5 px-5 text-right">รายงาน</th>
+                  <th className="py-3.5 px-5">ชื่อห้องเกม</th>
+                  <th className="py-3.5 px-4">คีย์ห้อง (PIN)</th>
+                  <th className="py-3.5 px-4">หมวดวิชา</th>
+                  <th className="py-3.5 px-4">จำนวนข้อ / เวลาตอบ</th>
+                  <th className="py-3.5 px-4">สถานะห้อง</th>
+                  <th className="py-3.5 px-5 text-right">การจัดการ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {filteredHistory.length === 0 ? (
+                {filteredRooms.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-10 text-center text-slate-500">
-                      ไม่พบประวัติเกมที่ตรงกับตัวกรอง
+                    <td colSpan={6} className="py-10 text-center text-slate-500">
+                      ไม่พบห้องเกมที่สร้างไว้
                     </td>
                   </tr>
                 ) : (
-                  filteredHistory.map((item) => {
-                    const dateStr = new Date(item.createdAt).toLocaleDateString(
-                      "th-TH",
-                      { day: "2-digit", month: "2-digit", year: "numeric" },
-                    );
+                  filteredRooms.map((item) => {
                     const isLive =
                       item.status === "lobby" || item.status === "playing";
+                    const isBusy = busyPin === item.pin;
+                    const questionCount = item.questionIds?.length || item.totalRounds;
 
                     return (
                       <tr
                         key={item.id}
                         className="hover:bg-slate-50/80 transition-colors"
                       >
-                        <td className="py-4 px-5 text-slate-600 font-mono text-xs sm:text-sm">
-                          {dateStr}
-                        </td>
-                        <td className="py-4 px-4">
+                        <td className="py-4 px-5">
                           <div className="font-display font-bold text-slate-900">
                             {item.title}
-                          </div>
-                          <div className="text-xs text-slate-500">
-                            {item.subject} · {item.roundsPlayed}/{item.totalRounds} รอบ
                           </div>
                         </td>
                         <td className="py-4 px-4 font-mono font-bold text-blue-700">
                           {item.pin}
                         </td>
                         <td className="py-4 px-4 font-medium text-slate-700">
-                          {item.playersCount} คน
+                          {item.subject}
                         </td>
-                        <td className="py-4 px-4">
-                          {item.winnerName ? (
-                            <div className="inline-flex items-center gap-2">
-                              {item.winnerAvatarId && (
-                                <Avatar avatarId={item.winnerAvatarId} size="xs" />
-                              )}
-                              <span className="font-display font-semibold text-slate-800">
-                                {item.winnerName}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400">-</span>
-                          )}
+                        <td className="py-4 px-4 text-slate-600">
+                          {questionCount} ข้อ ({item.totalRounds} รอบ · {item.questionTimeLimit} วิ/ข้อ)
                         </td>
                         <td className="py-4 px-4">
                           {isLive ? (
                             <Badge variant="success" size="sm" dot>
-                              กำลังดำเนินการ
+                              {item.status === "lobby" ? "พร้อมรับนักเรียน" : "กำลังเปิดเล่น"}
                             </Badge>
                           ) : (
-                            <Badge variant="default" size="sm" dot>
-                              เสร็จสิ้น
+                            <Badge variant="primary" size="sm" dot>
+                              บันทึกไว้ (พร้อมเปิดใช้)
                             </Badge>
                           )}
                         </td>
                         <td className="py-4 px-5 text-right">
                           <div className="inline-flex flex-wrap items-center justify-end gap-2">
-                            <Link href={`/teacher/games/new?templatePin=${item.pin}`}>
+                            <Button
+                              type="button"
+                              variant="primary"
+                              size="sm"
+                              loading={isBusy}
+                              onClick={() => handleOpenSavedRoom(item, false)}
+                              iconLeft={<Play className="w-3.5 h-3.5" />}
+                            >
+                              เปิดใช้ห้องนี้
+                            </Button>
+                            {isLive && (
                               <Button
+                                type="button"
                                 variant="outline"
                                 size="sm"
+                                disabled={isBusy}
+                                onClick={() => handleOpenSavedRoom(item, true)}
                                 iconLeft={<RotateCcw className="w-3.5 h-3.5" />}
                               >
-                                เปิดห้องใหม่ (เปลี่ยนห้องเรียน)
+                                รีเซ็ตห้องใหม่
                               </Button>
-                            </Link>
-                            {isLive && (
-                              <Link href={`/teacher/games/${item.pin}`}>
-                                <Button
-                                  variant="primary"
-                                  size="sm"
-                                  iconLeft={<Play className="w-3.5 h-3.5" />}
-                                >
-                                  ควบคุม
-                                </Button>
-                              </Link>
                             )}
-                            <Link href={`/teacher/reports?pin=${item.pin}`}>
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                iconLeft={<FileBarChart className="w-3.5 h-3.5" />}
-                              >
-                                ดูผล / PDF
-                              </Button>
-                            </Link>
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="sm"
+                              disabled={isBusy}
+                              onClick={() => handleDeleteRoom(item)}
+                              iconLeft={<Trash2 className="w-3.5 h-3.5" />}
+                            >
+                              ลบห้อง
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -231,6 +270,8 @@ export default function TeacherHistoryPage() {
           </div>
         </Card>
       </div>
+
+      <ToastContainer toasts={toasts} onClose={removeToast} />
     </TeacherLayoutShell>
   );
 }

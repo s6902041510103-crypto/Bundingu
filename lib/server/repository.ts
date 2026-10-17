@@ -358,6 +358,26 @@ export function upsertGameHistory(record: GameHistoryRecord): void {
   adapter.write(store);
 }
 
+export function deleteGameHistoryRecord(pinOrId: string, teacherId?: string): boolean {
+  const adapter = getStorageAdapter();
+  const store = adapter.read();
+  const normalized = pinOrId.trim().toUpperCase();
+  const beforeLen = store.history.length;
+  store.history = store.history.filter((h) => {
+    const isMatch =
+      h.pin.toUpperCase() === normalized ||
+      h.id === pinOrId ||
+      h.id.toUpperCase() === `HIST-${normalized}` ||
+      h.id.toUpperCase() === `GAME-${normalized}`;
+    if (!isMatch) return true;
+    if (teacherId && h.teacherId && h.teacherId !== teacherId) return true;
+    return false;
+  });
+  if (store.history.length === beforeLen) return false;
+  adapter.write(store);
+  return true;
+}
+
 /* ------------------------------------------------------------------ *
  * Teacher Account Registration, Login & Session Verification
  * ------------------------------------------------------------------ */

@@ -73,6 +73,7 @@ function CreateGameContent() {
   const [error, setError] = useState<string>("");
   const [isCreating, setIsCreating] = useState<boolean>(false);
   const [createdPin, setCreatedPin] = useState<string | null>(null);
+  const [busyPin, setBusyPin] = useState<string | null>(null);
 
   const applySavedGameTemplate = (game: GameHistoryRecord) => {
     setActiveTemplatePin(game.pin);
@@ -88,9 +89,50 @@ function CreateGameContent() {
     }
     addToast({
       title: `โหลดชุดคำถามจาก "${game.title}" แล้ว`,
-      description: "คุณสามารถเปลี่ยนชื่อห้องเรียนสำหรับนักเรียนห้องใหม่ แล้วกดสร้างห้องได้ทันที",
+      description: "คุณสามารถปรับการตั้งค่าหรือกดเปิดใช้ห้องเดิมได้ทันที",
       variant: "success",
     });
+  };
+
+  const handleOpenSavedRoom = async (game: GameHistoryRecord) => {
+    setBusyPin(game.pin);
+    try {
+      if (game.status === "completed") {
+        await fetch(`/api/games/${encodeURIComponent(game.pin)}/command`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "RESET_ROOM" }),
+        });
+      }
+      router.push(`/teacher/games/${game.pin}`);
+    } catch {
+      setBusyPin(null);
+    }
+  };
+
+  const handleDeleteSavedRoom = async (game: GameHistoryRecord) => {
+    setBusyPin(game.pin);
+    try {
+      const res = await fetch(`/api/games?pin=${encodeURIComponent(game.pin)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        setBusyPin(null);
+        return;
+      }
+      setSavedGames((prev) => prev.filter((item) => item.pin !== game.pin && item.id !== game.id));
+      if (activeTemplatePin === game.pin) {
+        setActiveTemplatePin("");
+      }
+      addToast({
+        title: `ลบห้องเกม "${game.title}" (${game.pin}) แล้ว`,
+        variant: "info",
+      });
+    } catch {
+      // ignore
+    } finally {
+      setBusyPin(null);
+    }
   };
 
   useEffect(() => {
@@ -334,11 +376,11 @@ function CreateGameContent() {
   return (
     <TeacherLayoutShell
       teacher={teacher}
-      title="สร้างเกมใหม่ / เปิดห้องเรียนใหม่"
-      subtitle="สร้างคำถาม-คำตอบเอง และบันทึกชุดเกมไว้ใช้เปิดห้องใหม่เมื่อเปลี่ยนห้องเรียน"
+      title="สร้างห้องเกมใหม่ / จัดการห้องที่สร้างไว้"
+      subtitle="สร้างห้องเกมเก็บไว้เปิดใช้ได้ตลอดเวลาเมื่อสอนนักเรียนห้องถัดไป หรือลบห้องที่ไม่ต้องการได้"
     >
       <div className="space-y-6">
-        {/* Saved Game Templates Banner — Reuse existing game for a new classroom! */}
+        {/* Saved Rooms Banner — Open saved room directly or delete */}
         {step < 4 && savedGames.length > 0 && (
           <Card
             variant="default"
@@ -352,43 +394,71 @@ function CreateGameContent() {
                 </div>
                 <div>
                   <h2 className="font-display font-bold text-sm sm:text-base text-[#0f2547]">
-                    สอนวิชาเดิมแต่เปลี่ยนห้องเรียน? เลือกชุดเกมที่คุณเคยสร้างไว้ได้เลย
+                    ห้องเกมที่คุณสร้างเก็บไว้ (กดเปิดใช้งานได้ตลอดเวลา)
                   </h2>
                   <p className="text-xs text-slate-600">
-                    คลิกเลือกเกมด้านล่างเพื่อดึงคำถามและการตั้งค่าเดิมทั้งหมด มาสร้างคีย์ห้องใหม่ให้นักเรียนห้องถัดไปได้ทันที
+                    กด <strong>&ldquo;เปิดใช้ห้องนี้&rdquo;</strong> เพื่อเข้าห้องเดิมทันที หรือกดปุ่มถังขยะเพื่อลบห้องที่ไม่ใช้แล้ว
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2.5">
-              {savedGames.slice(0, 6).map((g) => {
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {savedGames.map((g) => {
                 const isSelected = activeTemplatePin === g.pin;
-                const qCount = g.questionIds?.length ?? allQuestions.filter((q) => q.subject === g.subject).length;
+                const isBusy = busyPin === g.pin;
+                const qCount =
+                  g.questionIds?.length ??
+                  allQuestions.filter((q) => q.subject === g.subject).length;
                 return (
-                  <button
+                  <div
                     key={g.id}
-                    type="button"
-                    onClick={() => applySavedGameTemplate(g)}
-                    className={`px-3.5 py-2 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
+                    className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
                       isSelected
-                        ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                        : "bg-white text-slate-800 border-slate-200 hover:border-blue-400 hover:bg-blue-50/50"
+                        ? "bg-blue-50 border-blue-500 shadow-xs"
+                        : "bg-white border-slate-200 hover:border-blue-300"
                     }`}
                   >
-                    <div>
-                      <div className="font-display font-bold text-xs sm:text-sm">
-                        {g.title}
+                    <button
+                      type="button"
+                      onClick={() => applySavedGameTemplate(g)}
+                      className="text-left min-w-0 flex-1 cursor-pointer"
+                    >
+                      <div className="font-display font-bold text-xs sm:text-sm text-slate-900 truncate">
+                        {g.title}{" "}
+                        <span className="font-mono text-xs text-blue-700">
+                          (PIN: {g.pin})
+                        </span>
                       </div>
-                      <div
-                        className={`text-[11px] ${
-                          isSelected ? "text-blue-100" : "text-slate-500"
-                        }`}
-                      >
+                      <div className="text-[11px] text-slate-500">
                         {g.subject} · {qCount} คำถาม · {g.totalRounds} รอบ
                       </div>
+                    </button>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        loading={isBusy}
+                        onClick={() => handleOpenSavedRoom(g)}
+                        iconLeft={<Play className="w-3.5 h-3.5" />}
+                      >
+                        เปิดใช้ห้องนี้
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        disabled={isBusy}
+                        onClick={() => handleDeleteSavedRoom(g)}
+                        aria-label={`ลบห้อง ${g.title}`}
+                        iconLeft={<Trash2 className="w-3.5 h-3.5" />}
+                      >
+                        ลบ
+                      </Button>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>

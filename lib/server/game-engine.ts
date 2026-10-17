@@ -27,7 +27,12 @@ import type {
   ServerGameCommand,
   SpecialEventState,
 } from "../types";
-import { listQuestions, upsertGameHistory } from "./repository";
+import {
+  deleteGameHistoryRecord,
+  getGameHistoryByPinOrId,
+  listQuestions,
+  upsertGameHistory,
+} from "./repository";
 
 /**
  * Internal authoritative room state stored only on the server.
@@ -208,7 +213,96 @@ export function getServerRoom(pin: string): ServerRoom | null {
   if (normalized === "123456" || normalized === "482915") {
     return map.get("KS4829") ?? null;
   }
+
+  // If the room was saved in repository (e.g. from a previous session or server restart),
+  // automatically restore it in memory so saved rooms can be opened and played forever!
+  const savedRecord = getGameHistoryByPinOrId(normalized);
+  if (savedRecord) {
+    const allQuestions = listQuestions();
+    const questionById = new Map(allQuestions.map((q) => [q.id, q]));
+    let selectedQuestions: Question[] = [];
+    if (savedRecord.questionIds && savedRecord.questionIds.length > 0) {
+      selectedQuestions = savedRecord.questionIds
+        .map((id) => questionById.get(id))
+        .filter((q): q is Question => Boolean(q));
+    }
+    if (selectedQuestions.length === 0) {
+      selectedQuestions = listQuestions({
+        teacherId: savedRecord.teacherId,
+        subject: savedRecord.subject,
+      });
+    }
+    if (selectedQuestions.length === 0) {
+      selectedQuestions = allQuestions;
+    }
+
+    const totalRounds = Math.min(
+      savedRecord.totalRounds || 5,
+      Math.max(1, selectedQuestions.length),
+    );
+    const enabledSpecials = savedRecord.enabledSpecials ?? ["star", "gift", "boost"];
+
+    const state: GameState = {
+      game: {
+        id: savedRecord.id || `game-${savedRecord.pin}`,
+        pin: savedRecord.pin,
+        title: savedRecord.title,
+        subject: savedRecord.subject,
+        grade: savedRecord.grade || "มัธยมศึกษาปีที่ 1",
+        hostName: savedRecord.hostName || "ครูผู้สอน",
+        school: MOCK_GAME.school,
+        createdAt: savedRecord.createdAt || Date.now(),
+      },
+      gameStatus: "lobby",
+      round: 0,
+      totalRounds,
+      question: null,
+      players: [],
+      currentPlayerId: null,
+      dice: { value: null, rolling: false, rolledBy: null, lastReason: null },
+      board: BOARD_CONFIG,
+      specialCells: SPECIAL_CELLS,
+      enabledSpecials,
+      settings: {
+        ...GAME_SETTINGS,
+        maxPlayers: savedRecord.maxPlayers || 40,
+        questionTimeLimit: savedRecord.questionTimeLimit || 20,
+      },
+      leaderboard: [],
+      viewerPlayerId: null,
+      movingPlayerId: null,
+      movement: null,
+      activeSpecialEvent: null,
+      rollQueue: [],
+      pacingMode: "manual",
+      lastEvent: `SYSTEM · เปิดห้องเกม "${savedRecord.title}" พร้อมรับผู้เล่น (PIN: ${savedRecord.pin})`,
+      updatedAt: Date.now(),
+    };
+
+    const restoredRoom: ServerRoom = {
+      pin: savedRecord.pin,
+      teacherId: savedRecord.teacherId || "teacher-01",
+      rngSeed: crypto.randomInt(100000, 999999999),
+      questionsPool: selectedQuestions,
+      state,
+    };
+
+    map.set(savedRecord.pin.toUpperCase(), restoredRoom);
+    return restoredRoom;
+  }
+
   return null;
+}
+
+export function deleteServerRoom(pin: string, teacherId?: string): boolean {
+  const map = getRoomMap();
+  const normalized = String(pin ?? "").trim().toUpperCase();
+  const room = map.get(normalized);
+  if (room && (!teacherId || room.teacherId === teacherId)) {
+    map.delete(normalized);
+  }
+  const deletedFromStore = deleteGameHistoryRecord(normalized, teacherId);
+  return Boolean(room || deletedFromStore);
 }
 
 export function listActiveServerRooms(teacherId?: string): ServerRoom[] {
@@ -435,6 +529,7 @@ export function executeServerGameCommand(
     "REVEAL_ANSWERS",
     "ADVANCE_TURN",
     "END_GAME",
+    "RESET_ROOM",
     "SET_PACING_MODE",
   ];
 
@@ -850,6 +945,27 @@ export function executeServerGameCommand(
         movingPlayerId: null,
         rollQueue: [],
         lastEvent: "HOST · ครูผู้สอนสิ้นสุดการแข่งขัน",
+        updatedAt: Date.now(),
+      };
+      syncRoomToHistory(room);
+      return { room, publicState: toPublicGameState(room) };
+    }
+
+    case "RESET_ROOM": {
+      room.state = {
+        ...state,
+        gameStatus: "lobby",
+        round: 0,
+        question: null,
+        players: [],
+        leaderboard: [],
+        currentPlayerId: null,
+        dice: { value: null, rolling: false, rolledBy: null, lastReason: null },
+        activeSpecialEvent: null,
+        movement: null,
+        movingPlayerId: null,
+        rollQueue: [],
+        lastEvent: `SYSTEM · รีเซ็ตห้องเกม "${state.game.title}" พร้อมรับนักเรียนรอบใหม่ (PIN ${room.pin})`,
         updatedAt: Date.now(),
       };
       syncRoomToHistory(room);

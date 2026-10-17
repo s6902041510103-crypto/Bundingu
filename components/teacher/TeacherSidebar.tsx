@@ -29,7 +29,7 @@ const NAV_ITEMS = [
   { href: "/teacher/dashboard", label: "หน้าหลัก", icon: Home },
   { href: "/teacher/games/new", label: "สร้างเกม", icon: PlusCircle },
   { href: "/teacher/questions", label: "คลังคำถาม", icon: BookOpen },
-  { href: "/teacher/history", label: "ประวัติเกม", icon: History },
+  { href: "/teacher/history", label: "ห้องเกมที่สร้างไว้", icon: History },
   { href: "/teacher/reports", label: "รายงาน", icon: FileBarChart },
   { href: "/teacher/settings", label: "ตั้งค่า", icon: Settings },
 ];

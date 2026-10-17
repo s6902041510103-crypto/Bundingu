@@ -8,7 +8,6 @@ import { useTeacherAuth } from "@/lib/hooks/useTeacherAuth";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { Modal } from "@/components/ui/Modal";
 import { Loading } from "@/components/ui/Loading";
 import { QRCodeSVG } from "@/components/ui/QRCode";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
@@ -19,13 +18,13 @@ import {
   Play,
   Users,
   BookOpen,
-  Trophy,
+  FolderKanban,
   Calendar,
   ExternalLink,
   StopCircle,
-  FileBarChart,
   Gamepad2,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 
 export default function TeacherDashboardPage() {
@@ -34,14 +33,10 @@ export default function TeacherDashboardPage() {
   const { toasts, addToast, removeToast } = useToast();
 
   const [activeRooms, setActiveRooms] = useState<GameState[]>([]);
-  const [history, setHistory] = useState<GameHistoryRecord[]>([]);
+  const [savedRooms, setSavedRooms] = useState<GameHistoryRecord[]>([]);
   const [questionsCount, setQuestionsCount] = useState<number>(0);
   const [loadingData, setLoadingData] = useState(true);
-
-  // Re-open room for a new class of students modal state
-  const [reopenTarget, setReopenTarget] = useState<GameHistoryRecord | null>(null);
-  const [reopenTitle, setReopenTitle] = useState<string>("");
-  const [isReopening, setIsReopening] = useState<boolean>(false);
+  const [busyPin, setBusyPin] = useState<string | null>(null);
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -49,7 +44,7 @@ export default function TeacherDashboardPage() {
       if (!res.ok) return;
       const data = await res.json();
       setActiveRooms(Array.isArray(data.activeRooms) ? data.activeRooms : []);
-      setHistory(Array.isArray(data.history) ? data.history : []);
+      setSavedRooms(Array.isArray(data.history) ? data.history : []);
       setQuestionsCount(typeof data.questionsCount === "number" ? data.questionsCount : 0);
     } catch {
       // ignore transient error
@@ -81,8 +76,8 @@ export default function TeacherDashboardPage() {
         return;
       }
       addToast({
-        title: `สิ้นสุดเกม PIN ${pin} แล้ว`,
-        description: "บันทึกผลคะแนนลงในประวัติเกมเรียบร้อยแล้ว",
+        title: `ปิดรอบการเล่นของห้อง ${pin} แล้ว`,
+        description: "ห้องเกมนี้ยังคงถูกเก็บไว้ สามารถกดเปิดใช้งานใหม่ได้ตลอดเวลา",
         variant: "success",
       });
       fetchDashboardData();
@@ -94,56 +89,66 @@ export default function TeacherDashboardPage() {
     }
   };
 
-  const openReopenModal = (game: GameHistoryRecord) => {
-    setReopenTarget(game);
-    setReopenTitle(`${game.title} (ห้องใหม่)`);
-  };
-
-  const handleConfirmReopen = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!reopenTarget || !reopenTitle.trim()) return;
-
-    setIsReopening(true);
+  const handleOpenSavedRoom = async (room: GameHistoryRecord, forceReset = false) => {
+    setBusyPin(room.pin);
     try {
-      const res = await fetch("/api/games", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: reopenTitle.trim(),
-          subject: reopenTarget.subject,
-          totalRounds: reopenTarget.totalRounds,
-          questionTimeLimit: reopenTarget.questionTimeLimit,
-          maxPlayers: reopenTarget.maxPlayers || 40,
-          questionIds: reopenTarget.questionIds,
-          enabledSpecials: reopenTarget.enabledSpecials ?? ["star", "gift", "boost"],
-          seedDemoPlayers: false,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error || !data.pin) {
-        addToast({
-          title: "ไม่สามารถเปิดห้องใหม่ได้",
-          description: data.error || "กรุณาตรวจสอบว่าชุดเกมนี้มีคำถามในคลังอย่างน้อย 1 ข้อ",
-          variant: "danger",
+      if (forceReset || room.status === "completed") {
+        const res = await fetch(`/api/games/${encodeURIComponent(room.pin)}/command`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "RESET_ROOM" }),
         });
-        setIsReopening(false);
-        return;
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          addToast({
+            title: "ไม่สามารถเปิดห้องเกมนี้ได้",
+            description: data.error || "กรุณาลองใหม่อีกครั้ง",
+            variant: "danger",
+          });
+          setBusyPin(null);
+          return;
+        }
       }
-
-      setReopenTarget(null);
-      addToast({
-        title: `เปิดห้องใหม่สำเร็จ! คีย์ห้องคือ ${data.pin}`,
-        description: `กำลังเข้าสู่หน้ารอนักเรียนสำหรับ "${reopenTitle.trim()}"`,
-        variant: "success",
-      });
-      router.push(`/teacher/games/${data.pin}`);
+      router.push(`/teacher/games/${room.pin}`);
     } catch {
       addToast({
         title: "เกิดข้อผิดพลาดในการเชื่อมต่อ",
         variant: "danger",
       });
+      setBusyPin(null);
+    }
+  };
+
+  const handleDeleteSavedRoom = async (room: GameHistoryRecord) => {
+    setBusyPin(room.pin);
+    try {
+      const res = await fetch(`/api/games?pin=${encodeURIComponent(room.pin)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        addToast({
+          title: "ไม่สามารถลบห้องเกมได้",
+          description: data.error || "กรุณาลองใหม่อีกครั้ง",
+          variant: "danger",
+        });
+        setBusyPin(null);
+        return;
+      }
+
+      setSavedRooms((prev) => prev.filter((r) => r.pin !== room.pin && r.id !== room.id));
+      setActiveRooms((prev) => prev.filter((r) => r.game.pin !== room.pin));
+      addToast({
+        title: `ลบห้องเกม "${room.title}" (${room.pin}) เรียบร้อยแล้ว`,
+        variant: "info",
+      });
+    } catch {
+      addToast({
+        title: "เกิดข้อผิดพลาดในการลบห้องเกม",
+        variant: "danger",
+      });
     } finally {
-      setIsReopening(false);
+      setBusyPin(null);
     }
   };
 
@@ -154,33 +159,35 @@ export default function TeacherDashboardPage() {
   const currentActiveRoom =
     activeRooms.find((r) => r.gameStatus !== "finished") ?? null;
 
-  const totalGames = history.length;
+  const totalSavedRooms = savedRooms.length;
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
-  const gamesToday = history.filter((h) => h.createdAt >= startOfToday.getTime()).length;
-  const totalPlayers = history.reduce((sum, h) => sum + (h.playersCount || 0), 0);
+  const roomsCreatedToday = savedRooms.filter(
+    (h) => h.createdAt >= startOfToday.getTime(),
+  ).length;
+  const activeCount = activeRooms.filter((r) => r.gameStatus !== "finished").length;
 
   return (
     <TeacherLayoutShell
       teacher={teacher}
       title="หน้าหลัก"
-      subtitle="ภาพรวมห้องเรียน สถิติจริง และเกมที่กำลังดำเนินการ"
+      subtitle="จัดการห้องเกมที่สร้างไว้ เปิดใช้ซ้ำได้ตลอดเวลาสำหรับทุกห้องเรียน"
       actions={
         <Link href="/teacher/games/new">
           <Button variant="primary" size="md" iconLeft={<Plus className="w-4 h-4" />}>
-            สร้างเกมใหม่
+            สร้างห้องเกมใหม่
           </Button>
         </Link>
       }
     >
       <div className="space-y-7">
-        {/* Active Game Card (Matches Reference Screen #3) */}
+        {/* Active Game Card */}
         {currentActiveRoom ? (
           <div className="rounded-3xl overflow-hidden bg-white border border-emerald-200 shadow-card">
             <div className="bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 px-6 py-3 flex items-center justify-between text-white">
               <div className="flex items-center gap-2 font-display font-bold text-base">
                 <Gamepad2 className="w-5 h-5" />
-                <span>เกมที่กำลังดำเนินการ</span>
+                <span>ห้องเกมที่กำลังเปิดอยู่</span>
               </div>
               <Badge
                 variant="gold"
@@ -188,8 +195,8 @@ export default function TeacherDashboardPage() {
                 className="bg-white/20 text-white border-white/30"
               >
                 {currentActiveRoom.gameStatus === "lobby"
-                  ? "รอผู้เล่นเข้าห้อง"
-                  : `กำลังเล่น · รอบที่ ${currentActiveRoom.round}/${currentActiveRoom.totalRounds}`}
+                  ? "รอนักเรียนเข้าห้อง"
+                  : `กำลังเล่น · ข้อที่ ${currentActiveRoom.round}/${currentActiveRoom.totalRounds}`}
               </Badge>
             </div>
 
@@ -211,7 +218,7 @@ export default function TeacherDashboardPage() {
                 <div className="flex flex-wrap items-center gap-4 pt-1">
                   <div className="px-4 py-2 rounded-2xl bg-blue-50 border border-blue-200">
                     <span className="text-xs text-blue-700 font-medium block">
-                      Game PIN
+                      คีย์ห้อง (PIN)
                     </span>
                     <span className="font-display text-2xl font-black text-blue-800 tracking-wider">
                       {currentActiveRoom.game.pin}
@@ -220,7 +227,7 @@ export default function TeacherDashboardPage() {
 
                   <div className="px-4 py-2 rounded-2xl bg-emerald-50 border border-emerald-200">
                     <span className="text-xs text-emerald-700 font-medium block">
-                      ผู้เล่นในห้อง
+                      ผู้เล่นในห้องตอนนี้
                     </span>
                     <span className="font-display text-xl font-bold text-emerald-800">
                       {currentActiveRoom.players.length}/
@@ -236,7 +243,7 @@ export default function TeacherDashboardPage() {
                       size="md"
                       iconLeft={<Play className="w-4 h-4" />}
                     >
-                      เปิดหน้าควบคุมเกมสด
+                      เข้าหน้าควบคุมห้องเกม
                     </Button>
                   </Link>
                   <Link href={`/game/${currentActiveRoom.game.pin}/projector`}>
@@ -254,7 +261,7 @@ export default function TeacherDashboardPage() {
                     onClick={() => handleEndGame(currentActiveRoom.game.pin)}
                     iconLeft={<StopCircle className="w-4 h-4" />}
                   >
-                    สิ้นสุดเกม
+                    จบเกมรอบนี้
                   </Button>
                 </div>
               </div>
@@ -275,46 +282,46 @@ export default function TeacherDashboardPage() {
           <Card variant="elevated" padding="lg" className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div>
               <h2 className="font-display text-lg font-bold text-[#0f2547]">
-                ยังไม่มีห้องเกมที่กำลังเปิดอยู่ในขณะนี้
+                เลือกเปิดห้องเกมที่สร้างไว้ด้านล่าง หรือสร้างห้องเกมใหม่
               </h2>
               <p className="text-sm text-slate-500 mt-1">
-                กดปุ่มสร้างเกมใหม่เพื่อรับ Game PIN และ QR Code สำหรับให้นักเรียนเข้าร่วม
+                ห้องเกมที่คุณสร้างจะถูกเก็บไว้ถาวร สามารถกดเปิดใช้งานซ้ำได้ตลอดเวลาเมื่อเปลี่ยนห้องเรียน หรือลบออกได้ตามต้องการ
               </p>
             </div>
             <Link href="/teacher/games/new">
               <Button variant="primary" size="lg" iconLeft={<Plus className="w-5 h-5" />}>
-                สร้างเกมใหม่ทันที
+                สร้างห้องเกมใหม่
               </Button>
             </Link>
           </Card>
         )}
 
-        {/* 4 Summary Cards with Real Data (Matches Reference Screen #3) */}
+        {/* 4 Summary Cards */}
         <section
           className="grid grid-cols-2 lg:grid-cols-4 gap-4"
-          aria-label="สรุปสถิติห้องเรียน"
+          aria-label="สรุปข้อมูลห้องเกม"
         >
           <Card variant="default" padding="md" className="flex items-center justify-between">
             <div>
               <p className="text-xs sm:text-sm font-display font-medium text-slate-500">
-                เกมทั้งหมด
+                ห้องเกมที่สร้างไว้
               </p>
               <p className="font-display text-3xl sm:text-4xl font-extrabold text-[#0f2547] mt-1">
-                {totalGames}
+                {totalSavedRooms}
               </p>
             </div>
             <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Trophy className="w-6 h-6" />
+              <FolderKanban className="w-6 h-6" />
             </div>
           </Card>
 
           <Card variant="default" padding="md" className="flex items-center justify-between">
             <div>
               <p className="text-xs sm:text-sm font-display font-medium text-slate-500">
-                วันนี้
+                สร้างวันนี้
               </p>
               <p className="font-display text-3xl sm:text-4xl font-extrabold text-emerald-600 mt-1">
-                {gamesToday}
+                {roomsCreatedToday}
               </p>
             </div>
             <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
@@ -325,10 +332,10 @@ export default function TeacherDashboardPage() {
           <Card variant="default" padding="md" className="flex items-center justify-between">
             <div>
               <p className="text-xs sm:text-sm font-display font-medium text-slate-500">
-                ผู้เล่นรวม
+                กำลังเปิดใช้งาน
               </p>
               <p className="font-display text-3xl sm:text-4xl font-extrabold text-blue-600 mt-1">
-                {totalPlayers}
+                {activeCount}
               </p>
             </div>
             <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center">
@@ -351,15 +358,22 @@ export default function TeacherDashboardPage() {
           </Card>
         </section>
 
-        {/* Recent Games Table (Matches Reference Screen #3) */}
+        {/* Saved Rooms Table — Open anytime forever or delete */}
         <Card variant="default" padding="none" className="overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="font-display text-lg font-bold text-[#0f2547]">เกมล่าสุด</h2>
+            <div>
+              <h2 className="font-display text-lg font-bold text-[#0f2547]">
+                ห้องเกมที่สร้างเก็บไว้ (เปิดใช้งานได้ตลอด)
+              </h2>
+              <p className="text-xs text-slate-500">
+                บันทึกเฉพาะห้องเกมที่สร้างไว้ ไม่ต้องเก็บประวัติการเล่นซ้ำซ้อน สามารถกดเปิดใช้หรือลบห้องได้ทันที
+              </p>
+            </div>
             <Link
               href="/teacher/history"
               className="text-xs sm:text-sm font-display font-semibold text-blue-600 hover:underline"
             >
-              ดูประวัติทั้งหมด →
+              จัดการห้องทั้งหมด →
             </Link>
           </div>
 
@@ -367,188 +381,108 @@ export default function TeacherDashboardPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/70 text-xs font-display font-semibold text-slate-500">
-                  <th className="py-3.5 px-5">ชื่อเกม</th>
-                  <th className="py-3.5 px-4">PIN</th>
-                  <th className="py-3.5 px-4">วันที่</th>
-                  <th className="py-3.5 px-4">ผู้เล่น</th>
-                  <th className="py-3.5 px-4">ผู้นำ/ผู้ชนะ</th>
-                  <th className="py-3.5 px-4">สถานะ</th>
+                  <th className="py-3.5 px-5">ชื่อห้องเกม</th>
+                  <th className="py-3.5 px-4">คีย์ห้อง (PIN)</th>
+                  <th className="py-3.5 px-4">หมวดวิชา</th>
+                  <th className="py-3.5 px-4">จำนวนข้อ / เวลาตอบ</th>
+                  <th className="py-3.5 px-4">สถานะห้อง</th>
                   <th className="py-3.5 px-5 text-right">การจัดการ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {history.length === 0 ? (
+                {savedRooms.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-10 px-6 text-center text-slate-500">
-                      ยังไม่มีประวัติการสร้างห้องเกม — กดปุ่ม{" "}
+                    <td colSpan={6} className="py-10 px-6 text-center text-slate-500">
+                      ยังไม่มีห้องเกมที่สร้างเก็บไว้ — กดปุ่ม{" "}
                       <Link href="/teacher/games/new" className="text-blue-600 font-bold underline">
-                        สร้างเกมใหม่
+                        สร้างห้องเกมใหม่
                       </Link>{" "}
-                      เพื่อเริ่มห้องเรียนแรกของคุณ
+                      เพื่อบันทึกห้องไว้ใช้สอนได้เลย
                     </td>
                   </tr>
                 ) : (
-                  history.slice(0, 6).map((game) => {
+                  savedRooms.map((game) => {
                     const isLive =
                       game.status === "lobby" || game.status === "playing";
-                    const dateStr = new Date(game.createdAt).toLocaleDateString(
-                      "th-TH",
-                      { day: "2-digit", month: "2-digit", year: "numeric" },
-                    );
+                    const isBusy = busyPin === game.pin;
+                    const questionCount = game.questionIds?.length || game.totalRounds;
 
                     return (
-                    <tr
-                      key={game.id}
-                      className="hover:bg-slate-50/80 transition-colors"
-                    >
-                      <td className="py-3.5 px-5">
-                        <div className="font-display font-bold text-slate-900">
-                          {game.title}
-                        </div>
-                        <div className="text-xs text-slate-500">{game.subject}</div>
-                      </td>
-                      <td className="py-3.5 px-4 font-mono font-bold text-blue-700">
-                        {game.pin}
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-600">{dateStr}</td>
-                      <td className="py-3.5 px-4 text-slate-700 font-medium">
-                        {game.playersCount} คน
-                      </td>
-                      <td className="py-3.5 px-4">
-                        {game.winnerName ? (
-                          <div className="inline-flex items-center gap-2">
-                            {game.winnerAvatarId && (
-                              <Avatar avatarId={game.winnerAvatarId} size="xs" />
-                            )}
-                            <span className="font-medium text-slate-800">
-                              {game.winnerName}
-                            </span>
+                      <tr
+                        key={game.id}
+                        className="hover:bg-slate-50/80 transition-colors"
+                      >
+                        <td className="py-3.5 px-5">
+                          <div className="font-display font-bold text-slate-900">
+                            {game.title}
                           </div>
-                        ) : (
-                          <span className="text-slate-400">-</span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        {isLive ? (
-                          <Badge variant="success" size="sm" dot>
-                            {game.status === "lobby" ? "รอเริ่ม" : "กำลังเล่น"}
-                          </Badge>
-                        ) : (
-                          <Badge variant="default" size="sm" dot>
-                            เสร็จสิ้น
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-5 text-right">
-                        <div className="inline-flex flex-wrap items-center justify-end gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openReopenModal(game)}
-                            iconLeft={<RotateCcw className="w-3.5 h-3.5" />}
-                          >
-                            เปิดห้องใหม่ (เปลี่ยนห้องเรียน)
-                          </Button>
+                        </td>
+                        <td className="py-3.5 px-4 font-mono font-bold text-blue-700">
+                          {game.pin}
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-700 font-medium">
+                          {game.subject}
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-600">
+                          {questionCount} ข้อ ({game.totalRounds} รอบ · {game.questionTimeLimit} วิ/ข้อ)
+                        </td>
+                        <td className="py-3.5 px-4">
                           {isLive ? (
-                            <Link href={`/teacher/games/${game.pin}`}>
-                              <Button
-                                variant="primary"
-                                size="sm"
-                                iconLeft={<Play className="w-3.5 h-3.5" />}
-                              >
-                                ควบคุมเกม
-                              </Button>
-                            </Link>
+                            <Badge variant="success" size="sm" dot>
+                              {game.status === "lobby" ? "พร้อมรับนักเรียน" : "กำลังเปิดเล่น"}
+                            </Badge>
                           ) : (
-                            <Link href={`/teacher/reports?pin=${game.pin}`}>
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                iconLeft={<FileBarChart className="w-3.5 h-3.5" />}
-                              >
-                                ดูรายงาน
-                              </Button>
-                            </Link>
+                            <Badge variant="primary" size="sm" dot>
+                              บันทึกไว้ (พร้อมเปิดใช้)
+                            </Badge>
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
+                        </td>
+                        <td className="py-3.5 px-5 text-right">
+                          <div className="inline-flex flex-wrap items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="primary"
+                              size="sm"
+                              loading={isBusy}
+                              onClick={() => handleOpenSavedRoom(game, false)}
+                              iconLeft={<Play className="w-3.5 h-3.5" />}
+                            >
+                              เปิดใช้ห้องนี้
+                            </Button>
+                            {isLive && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={isBusy}
+                                onClick={() => handleOpenSavedRoom(game, true)}
+                                iconLeft={<RotateCcw className="w-3.5 h-3.5" />}
+                                title="ล้างผู้เล่นเดิมและเริ่มรอนักเรียนกลุ่มใหม่ในห้องนี้"
+                              >
+                                รีเซ็ตห้องใหม่
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="sm"
+                              disabled={isBusy}
+                              onClick={() => handleDeleteSavedRoom(game)}
+                              iconLeft={<Trash2 className="w-3.5 h-3.5" />}
+                            >
+                              ลบห้อง
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
         </Card>
       </div>
-
-      {/* Modal: Open a New Room from a Saved Game for a New Classroom */}
-      <Modal
-        isOpen={Boolean(reopenTarget)}
-        onClose={() => setReopenTarget(null)}
-        title="เปิดห้องใหม่จากชุดเกมเดิม (สำหรับเมื่อเด็กเปลี่ยนห้อง)"
-        description="ใช้ชุดคำถาม รายวิชา จำนวนรอบ และเวลาตอบเดิมทั้งหมด แต่สร้างคีย์ห้องใหม่และ QR Code ใหม่ให้นักเรียนกลุ่มใหม่"
-        size="md"
-      >
-        {reopenTarget && (
-          <form onSubmit={handleConfirmReopen} className="space-y-4">
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1">
-              <p>
-                ต้นฉบับ: <strong className="text-slate-900">{reopenTarget.title}</strong> (คีย์เดิม:{" "}
-                <span className="font-mono font-bold text-blue-700">{reopenTarget.pin}</span>)
-              </p>
-              <p>
-                รายวิชา: <strong>{reopenTarget.subject}</strong> · จำนวนรอบ:{" "}
-                <strong>{reopenTarget.totalRounds} รอบ</strong> · เวลาตอบ:{" "}
-                <strong>{reopenTarget.questionTimeLimit} วินาที/ข้อ</strong>
-              </p>
-            </div>
-
-            <div>
-              <label className="block font-display text-sm font-bold text-slate-700 mb-1.5">
-                ตั้งชื่อห้องเรียนใหม่ <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={reopenTitle}
-                onChange={(e) => setReopenTitle(e.target.value)}
-                placeholder="เช่น คณิตศาสตร์ ม.1/2"
-                className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-200 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
-              <Link
-                href={`/teacher/games/new?templatePin=${reopenTarget.pin}`}
-                className="text-xs font-display font-semibold text-blue-600 hover:underline"
-              >
-                แก้ไข/เพิ่มคำถามก่อนเปิดห้อง →
-              </Link>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setReopenTarget(null)}
-                >
-                  ยกเลิก
-                </Button>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="md"
-                  loading={isReopening}
-                  iconLeft={<RotateCcw className="w-4 h-4" />}
-                >
-                  สร้างห้องใหม่และรับคีย์ทันที
-                </Button>
-              </div>
-            </div>
-          </form>
-        )}
-      </Modal>
 
       <ToastContainer toasts={toasts} onClose={removeToast} />
     </TeacherLayoutShell>

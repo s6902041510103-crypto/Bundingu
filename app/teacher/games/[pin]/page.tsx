@@ -486,21 +486,23 @@ export default function TeacherLiveControllerPage() {
                 <div className="p-5 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 text-center space-y-3">
                   <Trophy className="w-10 h-10 text-amber-400 mx-auto" />
                   <h3 className="font-display text-xl font-extrabold text-white">
-                    การแข่งขันสิ้นสุดลงแล้ว!
+                    การแข่งขันรอบนี้สิ้นสุดลงแล้ว!
                   </h3>
+                  <p className="text-xs text-blue-100/90">
+                    ห้องเกมนี้ถูกบันทึกไว้แล้ว คุณสามารถกดรีเซ็ตเพื่อเปิดรับนักเรียนห้องถัดไปในห้องเดิมได้ทันที
+                  </p>
                   <div className="flex flex-wrap justify-center gap-2.5 pt-1">
-                    <Link href={`/teacher/reports?pin=${pin}`}>
-                      <Button
-                        variant="gold"
-                        size="md"
-                        iconLeft={<FileBarChart className="w-4 h-4" />}
-                      >
-                        ดูรายงานผล / พิมพ์ A4
-                      </Button>
-                    </Link>
-                    <Link href={`/teacher/games/new?templatePin=${pin}`}>
+                    <Button
+                      variant="gold"
+                      size="md"
+                      disabled={commandBusy}
+                      onClick={() => sendTeacherCommand({ type: "RESET_ROOM" })}
+                    >
+                      🔄 เปิดใช้ห้องนี้อีกครั้ง (รอนักเรียนกลุ่มใหม่)
+                    </Button>
+                    <Link href="/teacher/dashboard">
                       <Button variant="secondary" size="md">
-                        เปิดห้องใหม่ด้วยคำถามชุดนี้ (ห้องเรียนถัดไป)
+                        กลับหน้าห้องเกมที่สร้างไว้
                       </Button>
                     </Link>
                   </div>
