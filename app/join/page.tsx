@@ -1,304 +1,294 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
-import { Card, CardContent } from "@/components/ui/Card";
-import { Avatar, AvatarPicker } from "@/components/game/Avatar";
+import { Card } from "@/components/ui/Card";
+import { KnowledgeSnakeLogo } from "@/components/ui/Logo";
+import { AvatarPicker } from "@/components/game/Avatar";
 import { AVATARS } from "@/lib/game-data";
-import { ArrowRight, User, Dice1, Shield, AlertCircle } from "lucide-react";
+import type { AvatarId } from "@/lib/types";
+import {
+  Shuffle,
+  AlertCircle,
+  ArrowLeft,
+  ShieldCheck,
+  Play,
+} from "lucide-react";
 
 const PIN_PATTERN = /^\d{6}$/;
 
-export default function JoinPage() {
+function JoinFormContent() {
   const router = useRouter();
-  const [pin, setPin] = useState("");
+  const searchParams = useSearchParams();
+  const initialPin = searchParams.get("pin") || "";
+
+  const [pin, setPin] = useState(initialPin.replace(/\D/g, "").slice(0, 6));
   const [nickname, setNickname] = useState("");
-  const [avatarId, setAvatarId] = useState<typeof AVATARS[0]["id"]>("fox");
+  const [avatarId, setAvatarId] = useState<AvatarId>("panda");
   const [error, setError] = useState("");
   const [isJoining, setIsJoining] = useState(false);
-  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
 
-  // Auto-focus first input
   useEffect(() => {
-    const input = document.getElementById("pin-input");
-    input?.focus();
-  }, []);
+    const queryPin = searchParams.get("pin");
+    if (queryPin) {
+      setPin(queryPin.replace(/\D/g, "").slice(0, 6));
+    }
+    // Restore previous player profile for easy reconnect
+    try {
+      const saved = sessionStorage.getItem("ks-player");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.nickname) setNickname(parsed.nickname);
+        if (parsed.avatarId) setAvatarId(parsed.avatarId);
+      }
+    } catch {
+      // ignore
+    }
+  }, [searchParams]);
 
-  const handlePinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, "").slice(0, 6);
-    setPin(value);
-    if (error) setError("");
-  };
-
-  const handleNicknameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.slice(0, 20);
-    setNickname(value);
-    if (error) setError("");
+  const handleRandomAvatar = () => {
+    const others = AVATARS.filter((a) => a.id !== avatarId);
+    const random = others[Math.floor(Math.random() * others.length)] ?? AVATARS[0];
+    setAvatarId(random.id);
   };
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
-    if (!PIN_PATTERN.test(pin)) {
-      setError("PIN ต้องเป็นตัวเลข 6 หลัก");
+    const cleanPin = pin.trim();
+    const cleanName = nickname.trim();
+
+    if (!PIN_PATTERN.test(cleanPin)) {
+      setError("กรุณากรอกรหัส Game PIN เป็นตัวเลข 6 หลัก (เช่น 123456)");
       return;
     }
-    if (!nickname.trim()) {
-      setError("กรุณาใส่ชื่อเล่น");
+    if (!cleanName) {
+      setError("กรุณากรอกชื่อเล่นของคุณก่อนเข้าห้อง");
+      return;
+    }
+    if (cleanName.length > 20) {
+      setError("ชื่อเล่นต้องมีความยาวไม่เกิน 20 ตัวอักษร");
       return;
     }
 
     setIsJoining(true);
+    try {
+      // Check if we have an existing playerId for this room to support seamless Reconnect
+      let existingPlayerId: string | undefined;
+      try {
+        const existingRoomData = sessionStorage.getItem(`ks-room-${cleanPin}`);
+        if (existingRoomData) {
+          const parsed = JSON.parse(existingRoomData);
+          if (parsed.playerId) existingPlayerId = parsed.playerId;
+        }
+      } catch {
+        // ignore
+      }
 
-    // Simulate join delay
-    await new Promise((r) => setTimeout(r, 800));
+      const res = await fetch(`/api/games/${encodeURIComponent(cleanPin)}/command`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "JOIN_GAME",
+          nickname: cleanName,
+          avatarId,
+          playerId: existingPlayerId,
+        }),
+      });
 
-    // Store in sessionStorage for mock persistence
-    const playerData = {
-      pin,
-      nickname: nickname.trim(),
-      avatarId,
-      playerId: `p-${Date.now().toString(36)}`,
-      joinedAt: Date.now(),
-    };
-    sessionStorage.setItem("ks-player", JSON.stringify(playerData));
-    sessionStorage.setItem(`ks-room-${pin}`, JSON.stringify(playerData));
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setError(data.error || `ไม่พบห้องเกมรหัส PIN ${cleanPin}`);
+        setIsJoining(false);
+        return;
+      }
 
-    setIsJoining(false);
-    router.push(`/game/lobby?pin=${pin}`);
-  };
+      const joinedPlayer = data.joinedPlayer || {
+        id: existingPlayerId || `p-${Date.now().toString(36)}`,
+        name: cleanName,
+        avatarId,
+      };
 
-  const handleRandomAvatar = () => {
-    const random = AVATARS[Math.floor(Math.random() * AVATARS.length)];
-    setAvatarId(random.id);
+      const playerRecord = {
+        pin: cleanPin,
+        nickname: joinedPlayer.name,
+        avatarId: joinedPlayer.avatarId,
+        playerId: joinedPlayer.id,
+        joinedAt: Date.now(),
+      };
+
+      sessionStorage.setItem("ks-player", JSON.stringify(playerRecord));
+      sessionStorage.setItem(`ks-room-${cleanPin}`, JSON.stringify(playerRecord));
+
+      if (data.state && data.state.gameStatus !== "lobby") {
+        router.push(`/game/${cleanPin}/play`);
+      } else {
+        router.push(`/game/${cleanPin}`);
+      }
+    } catch {
+      setError("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้ กรุณาลองใหม่อีกครั้ง");
+      setIsJoining(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-bg-deep text-foreground font-body flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md">
-        {/* Back link */}
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-slate-400 hover:text-white text-sm font-medium mb-6 transition-colors"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          กลับหน้าแรก
-        </Link>
-
-        {/* Join Card */}
-        <Card variant="glass-strong" padding="lg">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 mb-4">
-              <Dice1 className="w-8 h-8 text-slate-950" />
-            </div>
-            <h1 className="font-display text-2xl font-bold mb-2">เข้าร่วมเกม</h1>
-            <p className="text-slate-400">ใส่ PIN ที่ครูให้มา ใส่ชื่อเล่น เล่นได้ทันที</p>
-          </div>
-
-          {/* Features */}
-          <div className="flex items-center justify-center gap-6 mb-6 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-            <div className="flex items-center gap-2 text-slate-300 text-sm">
-              <Shield className="w-4 h-4 text-emerald-400" />
-              <span>ไม่ต้องสมัครสมาชิก</span>
-            </div>
-            <div className="w-px h-6 bg-slate-700" />
-            <div className="flex items-center gap-2 text-slate-300 text-sm">
-              <User className="w-4 h-4 text-sky-400" />
-              <span>เล่นได้ทันที</span>
-            </div>
-            <div className="w-px h-6 bg-slate-700" />
-            <div className="flex items-center gap-2 text-slate-300 text-sm">
-              <Dice1 className="w-4 h-4 text-amber-400" />
-              <span>Multiplayer จริง</span>
-            </div>
-          </div>
-
-          <form onSubmit={handleJoin} className="space-y-5">
-            {/* PIN Input */}
-            <div>
-              <label htmlFor="pin-input" className="block text-sm font-medium text-slate-300 mb-2">
-                Game PIN <span className="text-amber-400">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  id="pin-input"
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={pin}
-                  onChange={handlePinChange}
-                  maxLength={6}
-                  placeholder="123456"
-                  disabled={isJoining}
-                  className={cn(
-                    "w-full px-4 py-3.5 text-center text-2xl font-display font-bold tracking-widest",
-                    "bg-slate-800 border-2 rounded-xl transition-all duration-200",
-                    "placeholder:text-slate-600",
-                    "focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent",
-                    "disabled:opacity-50 disabled:cursor-not-allowed",
-                    error ? "border-red-500 bg-red-500/5" : "border-slate-700 hover:border-slate-600",
-                  )}
-                  autoComplete="off"
-                  aria-describedby={error ? "pin-error" : undefined}
-                />
-              </div>
-              {error && (
-                <p id="pin-error" className="mt-1.5 flex items-center gap-1.5 text-sm text-red-400" role="alert">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  {error}
-                </p>
-              )}
-            </div>
-
-            {/* Nickname Input */}
-            <div>
-              <label htmlFor="nickname-input" className="block text-sm font-medium text-slate-300 mb-2">
-                ชื่อเล่น <span className="text-amber-400">*</span>
-              </label>
-              <input
-                id="nickname-input"
-                type="text"
-                value={nickname}
-                onChange={handleNicknameChange}
-                maxLength={20}
-                placeholder="เช่น Mew, Bank, Ton"
-                disabled={isJoining}
-                className={cn(
-                  "w-full px-4 py-3 text-base",
-                  "bg-slate-800 border-2 rounded-xl transition-all duration-200",
-                  "placeholder:text-slate-600",
-                  "focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent",
-                  "disabled:opacity-50 disabled:cursor-not-allowed",
-                  error ? "border-red-500 bg-red-500/5" : "border-slate-700 hover:border-slate-600",
-                )}
-                autoComplete="nickname"
-              />
-            </div>
-
-            {/* Avatar Selection */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                อวตาร์ <span className="text-amber-400">*</span>
-              </label>
-              <div className="flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() => setShowAvatarPicker(true)}
-                  disabled={isJoining}
-                  className={cn(
-                    "relative flex-shrink-0 w-16 h-16 rounded-2xl border-2 transition-all duration-200",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400",
-                    "hover:scale-105 active:scale-95",
-                    isJoining && "opacity-50 cursor-not-allowed",
-                  )}
-                  style={{
-                    background: `linear-gradient(135deg, ${AVATARS.find(a => a.id === avatarId)?.primary} 0%, ${AVATARS.find(a => a.id === avatarId)?.secondary} 100%)`,
-                    borderColor: AVATARS.find(a => a.id === avatarId)?.ring,
-                    color: AVATARS.find(a => a.id === avatarId)?.accent,
-                  } as React.CSSProperties}
-                  aria-label={`อวตาร์ปัจจุบัน: ${AVATARS.find(a => a.id === avatarId)?.labelTh}`}
-                >
-                  <span className="text-3xl" role="img" aria-hidden="true">
-                    {AVATARS.find(a => a.id === avatarId)?.emoji}
-                  </span>
-                </button>
-                <div className="flex-1 flex flex-col gap-2">
-                  <button
-                    type="button"
-                    onClick={handleRandomAvatar}
-                    disabled={isJoining}
-                    className={cn(
-                      "px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200",
-                      "bg-slate-800 border border-slate-700 text-slate-300",
-                      "hover:bg-slate-700 hover:border-slate-600 hover:text-white",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400",
-                      "disabled:opacity-50 disabled:cursor-not-allowed",
-                    )}
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      สุ่มอวตาร์ใหม่
-                    </span>
-                  </button>
-                  <p className="text-xs text-slate-500">
-                    {AVATARS.find(a => a.id === avatarId)?.labelTh} — {AVATARS.find(a => a.id === avatarId)?.label}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Join Button */}
-            <Button
-              type="submit"
-              disabled={isJoining || !PIN_PATTERN.test(pin) || !nickname.trim()}
-              variant="primary"
-              size="lg"
-              fullWidth
-              className="py-3.5 text-lg"
-              loading={isJoining}
-            >
-              {isJoining ? "กำลังเข้าห้อง..." : "เข้าร่วมเกม"}
-              <ArrowRight className="w-5 h-5" />
-            </Button>
-          </form>
-
-          {/* Help text */}
-          <div className="mt-6 pt-6 border-t border-slate-700">
-            <p className="text-center text-sm text-slate-500">
-              ไม่มี PIN? <Link href="/teacher/login" className="text-amber-400 hover:underline font-medium">สร้างเกมเอง</Link>
-            </p>
-          </div>
-        </Card>
-
-        {/* Footer note */}
-        <p className="mt-6 text-center text-xs text-slate-500">
-          Knowledge Snake Phase 1 — Mock Data Only
+    <Card variant="elevated" padding="lg" className="w-full max-w-lg rounded-3xl border-white shadow-2xl">
+      <div className="text-center mb-5">
+        <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-[#0f2547]">
+          เข้าร่วมเกม
+        </h1>
+        <p className="text-slate-500 text-sm mt-1">
+          กรุณากรอก Game PIN และเลือกตัวละครของคุณ
         </p>
       </div>
 
-      {/* Avatar Picker Modal */}
-      {showAvatarPicker && (
+      {error && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={() => setShowAvatarPicker(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="avatar-picker-title"
+          role="alert"
+          className="mb-4 p-3.5 rounded-2xl bg-red-50 border border-red-200 flex items-center gap-2.5 text-sm text-red-700 animate-fade-in"
         >
-          <Card variant="glass-strong" padding="lg" className="w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h2 id="avatar-picker-title" className="font-display text-xl font-bold">เลือกอวตาร์</h2>
-              <button
-                onClick={() => setShowAvatarPicker(false)}
-                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 transition-colors"
-                aria-label="ปิด"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <p className="text-slate-400 text-sm mb-4">เลือกอวตาร์ที่ชอบ จะเปลี่ยนได้เฉพาะตอนเข้าห้องเท่านั้น</p>
-            <AvatarPicker
-              selectedId={avatarId}
-              onSelect={(id) => {
-                setAvatarId(id);
-                setShowAvatarPicker(false);
-              }}
-              size="lg"
-              columns={4}
-            />
-          </Card>
+          <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+          <span>{error}</span>
         </div>
       )}
+
+      <form onSubmit={handleJoin} className="space-y-4" noValidate>
+        {/* Game PIN Input */}
+        <div>
+          <label
+            htmlFor="pin-input"
+            className="block font-display text-sm font-bold text-slate-700 mb-1.5"
+          >
+            Game PIN (6 หลัก)
+          </label>
+          <input
+            id="pin-input"
+            type="text"
+            inputMode="numeric"
+            value={pin}
+            onChange={(e) => {
+              setPin(e.target.value.replace(/\D/g, "").slice(0, 6));
+              if (error) setError("");
+            }}
+            maxLength={6}
+            placeholder="123456"
+            disabled={isJoining}
+            autoComplete="off"
+            className={cn(
+              "w-full px-4 py-3 text-center text-2xl font-display font-black tracking-widest rounded-xl border-2 bg-slate-50/70 text-[#0f2547] transition-all",
+              "placeholder:text-slate-300 focus:bg-white focus:outline-none focus:border-blue-600",
+              error ? "border-red-300" : "border-slate-200",
+            )}
+          />
+        </div>
+
+        {/* Nickname Input */}
+        <div>
+          <label
+            htmlFor="nickname-input"
+            className="block font-display text-sm font-bold text-slate-700 mb-1.5"
+          >
+            ชื่อเล่น (ไม่เกิน 20 ตัวอักษร)
+          </label>
+          <input
+            id="nickname-input"
+            type="text"
+            value={nickname}
+            onChange={(e) => {
+              setNickname(e.target.value.slice(0, 20));
+              if (error) setError("");
+            }}
+            maxLength={20}
+            placeholder="เช่น น้องมิน, Panda, Ton"
+            disabled={isJoining}
+            className={cn(
+              "w-full px-4 py-3 text-base rounded-xl border-2 bg-slate-50/70 text-slate-900 transition-all",
+              "placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-600",
+              error ? "border-red-300" : "border-slate-200",
+            )}
+          />
+        </div>
+
+        {/* Avatar Selector + Random Avatar Button (Matches Reference Student Screen #1) */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-display text-sm font-bold text-slate-700">
+              เลือก Avatar คู่ใจ
+            </span>
+            <button
+              type="button"
+              onClick={handleRandomAvatar}
+              disabled={isJoining}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-display text-xs font-bold transition-colors cursor-pointer"
+            >
+              <Shuffle className="w-3.5 h-3.5" />
+              <span>สุ่ม Avatar</span>
+            </button>
+          </div>
+
+          <AvatarPicker
+            selectedId={avatarId}
+            onSelect={setAvatarId}
+            size="md"
+            columns={4}
+          />
+        </div>
+
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          fullWidth
+          loading={isJoining}
+          iconLeft={<Play className="w-5 h-5 fill-current" />}
+          className="py-3.5 text-base shadow-lg shadow-blue-600/25"
+        >
+          {isJoining ? "กำลังเข้าร่วมห้อง..." : "เข้าร่วมเกม"}
+        </Button>
+      </form>
+
+      <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-center gap-2 text-xs text-slate-500">
+        <ShieldCheck className="w-4 h-4 text-emerald-600" />
+        <span>ไม่ต้องสมัครสมาชิก เล่นได้ทันที</span>
+      </div>
+    </Card>
+  );
+}
+
+export default function JoinPage() {
+  return (
+    <div className="min-h-screen flex flex-col bg-adventure-sky text-slate-900 font-body">
+      {/* Top Bar */}
+      <header className="px-4 sm:px-8 py-4">
+        <div className="mx-auto max-w-7xl flex items-center justify-between">
+          <KnowledgeSnakeLogo size="md" theme="light" showSubtitle />
+          <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/85 hover:bg-white text-slate-700 font-display text-xs sm:text-sm font-semibold shadow-xs"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>หน้าหลัก</span>
+            </Link>
+            <Link
+              href="/teacher/login"
+              className="hidden sm:inline-flex items-center px-4 py-2 rounded-full bg-blue-600/10 hover:bg-blue-600/20 text-blue-800 font-display text-xs sm:text-sm font-semibold"
+            >
+              สำหรับครูผู้สอน
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      <main className="flex-1 flex items-center justify-center px-4 py-6">
+        <Suspense fallback={<div className="p-8 text-center">กำลังโหลด...</div>}>
+          <JoinFormContent />
+        </Suspense>
+      </main>
     </div>
   );
 }
