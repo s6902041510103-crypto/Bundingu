@@ -10,6 +10,8 @@ import { QRCodeSVG } from "@/components/ui/QRCode";
 import { Avatar } from "@/components/game/Avatar";
 import { GameBoardWrapper } from "@/components/game/GameBoard";
 import { Leaderboard } from "@/components/game/Leaderboard";
+import { SoundToggle } from "@/components/game/SoundToggle";
+import { ConfettiCanvas } from "@/components/game/ConfettiEffect";
 import type { GameState } from "@/lib/types";
 import { Clock, Monitor, CheckCircle, Trophy, Sparkles } from "lucide-react";
 
@@ -87,6 +89,8 @@ export default function ProjectorViewPage() {
               <Clock className="w-5 h-5 text-amber-400" />
               <span>{timeLeftFormatted}</span>
             </div>
+
+            <SoundToggle />
           </div>
         </div>
       </header>
@@ -226,14 +230,43 @@ export default function ProjectorViewPage() {
 
             {/* Active Special Event Banner on Projector */}
             {state.activeSpecialEvent && !state.activeSpecialEvent.resolved && (
-              <div className="rounded-2xl bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 p-4 shadow-xl flex items-center gap-3 animate-bounce-in">
-                <Sparkles className="w-7 h-7 shrink-0" />
+              <div
+                className={`rounded-2xl p-4 shadow-xl flex items-center gap-3 animate-bounce-in border ${
+                  state.activeSpecialEvent.kind === "snake"
+                    ? "bg-gradient-to-r from-rose-600 to-red-800 text-white border-rose-400"
+                    : state.activeSpecialEvent.kind === "ladder"
+                    ? "bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 border-yellow-200"
+                    : state.activeSpecialEvent.kind === "shield"
+                    ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-cyan-300"
+                    : state.activeSpecialEvent.kind === "gem"
+                    ? "bg-gradient-to-r from-teal-400 to-emerald-600 text-white border-teal-200"
+                    : state.activeSpecialEvent.kind === "rocket"
+                    ? "bg-gradient-to-r from-purple-500 to-indigo-700 text-white border-purple-300"
+                    : "bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 border-amber-300"
+                }`}
+              >
+                <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-2xl shrink-0">
+                  {state.activeSpecialEvent.kind === "snake"
+                    ? "🐍"
+                    : state.activeSpecialEvent.kind === "ladder"
+                    ? "🪜"
+                    : state.activeSpecialEvent.kind === "shield"
+                    ? "🛡️"
+                    : state.activeSpecialEvent.kind === "gem"
+                    ? "💎"
+                    : state.activeSpecialEvent.kind === "rocket"
+                    ? "🚀"
+                    : state.activeSpecialEvent.kind === "magnet"
+                    ? "🧲"
+                    : state.activeSpecialEvent.kind === "gift"
+                    ? "🎁"
+                    : "⭐"}
+                </div>
                 <div>
                   <p className="font-display font-black text-base">
-                    {state.activeSpecialEvent.playerName}:{" "}
-                    {state.activeSpecialEvent.title}
+                    {state.activeSpecialEvent.playerName}: {state.activeSpecialEvent.title}
                   </p>
-                  <p className="text-xs font-medium">
+                  <p className="text-xs font-medium opacity-90">
                     {state.activeSpecialEvent.description}
                   </p>
                 </div>
@@ -270,6 +303,10 @@ export default function ProjectorViewPage() {
           </div>
         </div>
       </main>
+
+      {state.gameStatus === "finished" && (
+        <ConfettiCanvas active={true} count={140} durationMs={6500} />
+      )}
     </div>
   );
 }

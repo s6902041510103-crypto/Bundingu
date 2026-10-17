@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import type { ActiveQuestion, QuestionOption } from "@/lib/types";
 import { AlertCircle, CheckCircle, XCircle, Send } from "lucide-react";
+import { sounds } from "@/lib/audio";
+import { ConfettiCanvas } from "@/components/game/ConfettiEffect";
 
 interface AnswerOptionProps {
   option: QuestionOption;
@@ -112,10 +114,27 @@ export function QuestionCard({
   className,
 }: QuestionCardProps) {
   const [draftOptionId, setDraftOptionId] = useState<string | null>(null);
+  const prevRevealedRef = React.useRef(false);
 
   useEffect(() => {
     setDraftOptionId(null);
   }, [question?.id, question?.number]);
+
+  const isSubmitted = viewerAnswerState !== "idle" || Boolean(viewerSelectedOptionId);
+  const isRevealed =
+    Boolean(question?.revealed) || Boolean(isSubmitted && question?.correctOptionId);
+  const disabled = readOnly || isSubmitted || isRevealed;
+
+  useEffect(() => {
+    if (isRevealed && !prevRevealedRef.current && !readOnly) {
+      if (viewerAnswerState === "correct") {
+        sounds.playCorrect();
+      } else if (viewerAnswerState === "wrong") {
+        sounds.playWrong();
+      }
+    }
+    prevRevealedRef.current = isRevealed;
+  }, [isRevealed, viewerAnswerState, readOnly]);
 
   if (!question) {
     return (
@@ -139,15 +158,11 @@ export function QuestionCard({
     );
   }
 
-  const isSubmitted = viewerAnswerState !== "idle" || Boolean(viewerSelectedOptionId);
-  const isRevealed =
-    Boolean(question.revealed) || Boolean(isSubmitted && question.correctOptionId);
-  const disabled = readOnly || isSubmitted || isRevealed;
-
   const activeChoice = isSubmitted ? viewerSelectedOptionId : draftOptionId;
 
   const handleOptionClick = (optId: string) => {
     if (disabled) return;
+    sounds.playClick();
     setDraftOptionId(optId);
     if (!requireConfirmButton) {
       onAnswer?.(optId);
@@ -156,6 +171,7 @@ export function QuestionCard({
 
   const handleConfirmSubmit = () => {
     if (!draftOptionId || disabled) return;
+    sounds.playClick();
     onAnswer?.(draftOptionId);
   };
 
@@ -257,24 +273,49 @@ export function QuestionCard({
 
       {/* Post-Reveal Feedback & Explanation */}
       {isRevealed && (
-        <div className="space-y-2 pt-1 animate-fade-in">
+        <div className="space-y-2 pt-1 animate-fade-in relative">
           {!readOnly && (
-            <div
-              className={cn(
-                "p-2.5 rounded-xl text-sm font-display font-bold text-center border",
-                viewerAnswerState === "correct"
-                  ? "bg-emerald-50 border-emerald-300 text-emerald-800"
-                  : viewerAnswerState === "wrong"
-                  ? "bg-red-50 border-red-300 text-red-800"
-                  : "bg-slate-100 border-slate-200 text-slate-700",
+            <>
+              {viewerAnswerState === "correct" && (
+                <ConfettiCanvas active={true} count={65} />
               )}
-            >
-              {viewerAnswerState === "correct"
-                ? "🎉 ตอบถูกต้อง! กดปุ่มทอยลูกเต๋าด้านล่างได้เลยทันที!"
-                : viewerAnswerState === "wrong"
-                ? "❌ ตอบไม่ถูกต้อง รอแก้มือในข้อถัดไปนะ!"
-                : "⏰ หมดเวลาตอบสำหรับข้อนี้"}
-            </div>
+              <div
+                className={cn(
+                  "p-3 rounded-2xl text-sm font-display font-bold text-center border shadow-sm transition-all",
+                  viewerAnswerState === "correct"
+                    ? "bg-gradient-to-r from-emerald-500/15 via-teal-500/20 to-emerald-500/15 border-emerald-500 text-emerald-900 ring-2 ring-emerald-400/30"
+                    : viewerAnswerState === "wrong"
+                    ? "bg-gradient-to-r from-rose-500/10 via-red-500/15 to-rose-500/10 border-rose-300 text-rose-900"
+                    : "bg-slate-100 border-slate-200 text-slate-700",
+                )}
+              >
+                {viewerAnswerState === "correct" ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-2xl animate-bounce">🎉</span>
+                    <div>
+                      <div className="text-base font-black text-emerald-800">
+                        ถูกต้อง! รับคะแนน <span className="text-emerald-600 font-black">+100</span>
+                      </div>
+                      <div className="text-xs text-emerald-700 font-semibold">
+                        ได้รับสิทธิ์ทอยลูกเต๋าเพื่อเดินตัวละครแล้ว!
+                      </div>
+                    </div>
+                  </div>
+                ) : viewerAnswerState === "wrong" ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-2xl">💪</span>
+                    <div>
+                      <div className="text-base font-black text-rose-800">ยังไม่ถูกต้องในข้อนี้</div>
+                      <div className="text-xs text-rose-700 font-medium">
+                        อย่าเพิ่งท้อนะ สะสมคะแนนและแก้มือในข้อถัดไป!
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  "⏰ หมดเวลาตอบสำหรับข้อนี้"
+                )}
+              </div>
+            </>
           )}
 
           {question.explanation && (

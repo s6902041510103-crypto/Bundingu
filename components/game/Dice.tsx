@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { KnowledgeSnakeLogo } from "@/components/ui/Logo";
 import { Avatar } from "@/components/game/Avatar";
+import { sounds } from "@/lib/audio";
+import { ConfettiCanvas } from "@/components/game/ConfettiEffect";
 import type { AvatarId } from "@/lib/types";
 
 /**
@@ -146,6 +148,7 @@ export function Dice({
       if (wasRollingRef.current) {
         wasRollingRef.current = false;
         setJustLanded(true);
+        sounds.playDiceLand();
       }
       if (value !== null) {
         onRollComplete?.(value);
@@ -154,6 +157,7 @@ export function Dice({
     }
     wasRollingRef.current = true;
     setJustLanded(false);
+    sounds.playDiceRoll();
     const interval = window.setInterval(() => {
       setSpinTick((t) => t + 1);
     }, 110);
@@ -451,8 +455,11 @@ export function DiceRollOverlayModal({
         className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 text-center"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-10 sm:mb-12">
+        <div className="mb-10 sm:mb-12 relative">
           <Dice value={value} rolling={!isFinishedRolling} size="xl" />
+          {isFinishedRolling && value === 6 && (
+            <ConfettiCanvas active={true} count={80} />
+          )}
         </div>
 
         {!isFinishedRolling ? (

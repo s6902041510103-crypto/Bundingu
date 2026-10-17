@@ -15,6 +15,10 @@ import { GameBoardWrapper } from "@/components/game/GameBoard";
 import { QuestionCard } from "@/components/game/QuestionCard";
 import { Dice, DiceRollOverlayModal } from "@/components/game/Dice";
 import { Leaderboard } from "@/components/game/Leaderboard";
+import { SpecialEventModal } from "@/components/game/SpecialEventModal";
+import { SoundToggle } from "@/components/game/SoundToggle";
+import { ConfettiCanvas } from "@/components/game/ConfettiEffect";
+import { sounds } from "@/lib/audio";
 import type { GameState } from "@/lib/types";
 import {
   Clock,
@@ -351,6 +355,8 @@ export default function StudentGameplayPage() {
             >
               <Trophy className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
+
+            <SoundToggle />
           </div>
         </div>
       </header>
@@ -587,71 +593,21 @@ export default function StudentGameplayPage() {
         onClose={() => setDiceOverlayOpen(false)}
       />
 
-      {/* Special Event Modal (Snake / Ladder / Star / Gift / Boost) — only pops up for the player who landed on it */}
-      <Modal
+      {/* Special Event Modal (Snake / Ladder / Shield / Gem / Star / Gift / Rocket / Magnet / Boost) */}
+      <SpecialEventModal
         isOpen={Boolean(
           !diceOverlayOpen &&
             state.activeSpecialEvent &&
             !state.activeSpecialEvent.resolved &&
             (!activeViewerId || state.activeSpecialEvent.playerId === activeViewerId),
         )}
+        event={state.activeSpecialEvent}
         onClose={handleResolveSpecialEvent}
-        title="เหตุการณ์พิเศษบนกระดาน!"
-        theme="dark"
-        size="sm"
-      >
-        {state.activeSpecialEvent && (
-          <div className="text-center space-y-4">
-            <div className="flex justify-center">
-              <Avatar
-                avatarId={state.activeSpecialEvent.avatarId}
-                size="2xl"
-                ring
-              />
-            </div>
-            <div>
-              <Badge
-                variant={
-                  state.activeSpecialEvent.kind === "snake"
-                    ? "danger"
-                    : state.activeSpecialEvent.kind === "ladder"
-                    ? "success"
-                    : "gold"
-                }
-                size="md"
-              >
-                {state.activeSpecialEvent.kind === "snake"
-                  ? "🐍 งูพิษดึงลง"
-                  : state.activeSpecialEvent.kind === "ladder"
-                  ? "🪜 บันไดวิเศษ"
-                  : "⭐ ช่องโบนัสพิเศษ"}
-              </Badge>
-              <h3 className="font-display font-extrabold text-xl text-white mt-2">
-                {state.activeSpecialEvent.playerName}
-              </h3>
-              <p className="font-display font-bold text-amber-300 text-base mt-1">
-                {state.activeSpecialEvent.title}
-              </p>
-              <p className="text-sm text-blue-100 mt-1">
-                {state.activeSpecialEvent.description}
-              </p>
-              <p className="text-xs font-mono text-blue-200 mt-2">
-                เคลื่อนที่จากช่อง {state.activeSpecialEvent.from} → ช่อง{" "}
-                {state.activeSpecialEvent.to}
-              </p>
-            </div>
-            <Button
-              variant="gold"
-              size="lg"
-              fullWidth
-              onClick={handleResolveSpecialEvent}
-              iconLeft={<CheckCircle2 className="w-5 h-5" />}
-            >
-              รับทราบและดำเนินการต่อ
-            </Button>
-          </div>
-        )}
-      </Modal>
+      />
+
+      {state.gameStatus === "finished" && (
+        <ConfettiCanvas active={true} count={120} durationMs={6000} />
+      )}
 
       {/* Game Finished / Competition Results Modal */}
       <Modal

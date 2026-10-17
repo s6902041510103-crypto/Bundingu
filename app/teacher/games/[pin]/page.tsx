@@ -16,6 +16,7 @@ import { QRCodeSVG } from "@/components/ui/QRCode";
 import { Avatar } from "@/components/game/Avatar";
 import { GameBoardWrapper } from "@/components/game/GameBoard";
 import { Leaderboard } from "@/components/game/Leaderboard";
+import { SoundToggle } from "@/components/game/SoundToggle";
 import type { GameState, ServerGameCommand } from "@/lib/types";
 import {
   Play,
@@ -261,6 +262,8 @@ export default function TeacherLiveControllerPage() {
                 จบเกม
               </Button>
             )}
+
+            <SoundToggle />
           </div>
         </div>
       </header>

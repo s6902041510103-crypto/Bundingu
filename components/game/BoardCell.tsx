@@ -110,7 +110,7 @@ export function BoardCellComponent({
         {cell.special && cell.tone !== "start" && cell.tone !== "finish" && (
           <div className="relative group/item flex items-center justify-center">
             <span
-              className="text-xs sm:text-sm md:text-base leading-none drop-shadow-md transition-transform duration-200 hover:scale-125 cursor-help"
+              className="text-xs sm:text-sm md:text-base leading-none drop-shadow-md transition-transform duration-200 hover:scale-125 cursor-help animate-pulse"
               aria-label={cell.special.label}
             >
               {cell.special.emoji}
@@ -121,19 +121,19 @@ export function BoardCellComponent({
 
       {/* Start / Finish / Special Banner Label */}
       {cell.tone === "start" && (
-        <span className="text-[7px] sm:text-[9px] font-display font-black uppercase tracking-wider bg-black/25 px-1 py-0.5 rounded text-white self-center shadow-xs">
+        <span className="text-[7px] sm:text-[9px] font-display font-black uppercase tracking-wider bg-black/25 px-1 py-0.5 rounded text-white self-center shadow-xs animate-pulse">
           START
         </span>
       )}
       {cell.tone === "finish" && (
-        <span className="text-[7px] sm:text-[9px] font-display font-black uppercase tracking-wider bg-black/35 px-1 py-0.5 rounded text-amber-200 self-center shadow-xs">
+        <span className="text-[7px] sm:text-[9px] font-display font-black uppercase tracking-wider bg-black/35 px-1 py-0.5 rounded text-amber-200 self-center shadow-xs animate-pulse">
           FINISH 🏆
         </span>
       )}
 
       {/* Special Item Mini-Pill Badge */}
       {cell.special && cell.tone !== "start" && cell.tone !== "finish" && playersOnCell.length === 0 && (
-        <span className="text-[6px] sm:text-[8px] font-display font-bold uppercase tracking-tight bg-black/20 text-white px-1 rounded-sm self-center leading-tight">
+        <span className="text-[6px] sm:text-[8px] font-display font-bold uppercase tracking-tight bg-black/25 backdrop-blur-xs text-white px-1 py-0.5 rounded-sm self-center leading-tight shadow-xs">
           {cell.special.label}
         </span>
       )}
@@ -175,9 +175,12 @@ export function BoardCellComponent({
                   key={player.id}
                   className={cn(
                     "relative rounded-full transition-transform duration-300",
-                    isMoving && "animate-bounce-in scale-110",
+                    isMoving && "scale-125 z-40 animate-bounce drop-shadow-[0_4px_12px_rgba(245,158,11,0.9)]",
                   )}
                 >
+                  {isMoving && (
+                    <span className="absolute -inset-1 rounded-full bg-amber-400/50 animate-ping pointer-events-none" />
+                  )}
                   <Avatar
                     avatarId={player.avatarId as AvatarId}
                     size="xs"
