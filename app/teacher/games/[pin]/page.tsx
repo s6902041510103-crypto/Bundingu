@@ -666,8 +666,11 @@ export default function TeacherLiveControllerPage() {
                           <p className="font-display font-bold text-xs sm:text-sm text-white truncate">
                             {entry.name}
                           </p>
-                          <p className="text-[11px] text-blue-200/75">
-                            ช่องที่ {entry.position} · {entry.score} คะแนน
+                          <p className="text-[11px] text-blue-200/75 flex items-center gap-1.5 flex-wrap">
+                            <span>ช่องที่ {entry.position} · {entry.score} คะแนน</span>
+                            <span className="text-emerald-400 font-mono font-bold">✓{p?.correctCount ?? entry.correctCount ?? 0}</span>
+                            <span className="text-rose-400 font-mono font-bold">✗{p?.wrongCount ?? entry.wrongCount ?? 0}</span>
+                            {(entry.shield || p?.shield) && <span title="มีโล่ป้องกันงู">🛡️</span>}
                           </p>
                         </div>
                       </div>

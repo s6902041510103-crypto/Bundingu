@@ -60,7 +60,9 @@ export interface Player {
   finishRank: number | null;
   /** Real gameplay telemetry for accurate reports */
   correctCount?: number;
+  wrongCount?: number;
   answeredCount?: number;
+  shield?: boolean;
   laddersClimbed?: number;
   snakesBitten?: number;
   specialEventsTriggered?: number;
@@ -106,7 +108,16 @@ export interface LadderLink {
   to: number;
 }
 
-export type SpecialCellKind = "start" | "finish" | "star" | "gift" | "boost";
+export type SpecialCellKind =
+  | "start"
+  | "finish"
+  | "star"
+  | "gift"
+  | "boost"
+  | "shield"
+  | "gem"
+  | "rocket"
+  | "magnet";
 
 export interface SpecialCell {
   at: number;
@@ -153,8 +164,10 @@ export interface LeaderboardEntry {
   laddersClimbed?: number;
   snakesBitten?: number;
   correctCount?: number;
+  wrongCount?: number;
   answeredCount?: number;
   accuracyPercent?: number | null;
+  shield?: boolean;
 }
 
 export interface GameSettings {
@@ -182,7 +195,7 @@ export interface SpecialEventState {
   playerId: string;
   playerName: string;
   avatarId: AvatarId;
-  kind: "snake" | "ladder" | "star" | "gift" | "boost";
+  kind: "snake" | "ladder" | "star" | "gift" | "boost" | "shield" | "gem" | "rocket" | "magnet";
   from: number;
   to: number;
   title: string;
@@ -295,6 +308,7 @@ export interface PlayerReportRow {
   laddersClimbed: number;
   snakesBitten: number;
   correctCount: number;
+  wrongCount: number;
   answeredCount: number;
   /** Null when answeredCount === 0 so fake statistics are never fabricated */
   accuracyPercent: number | null;

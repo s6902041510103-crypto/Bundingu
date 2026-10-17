@@ -104,10 +104,18 @@ export function Leaderboard({
                 {rank}
               </span>
               <Avatar avatarId={entry.avatarId} size="xs" />
-              <span className="font-display font-semibold truncate flex-1">
-                {entry.name}
-                {isViewer && " (คุณ)"}
-              </span>
+              <div className="flex-1 min-w-0">
+                <p className="font-display font-semibold truncate flex items-center gap-1">
+                  <span>{entry.name}</span>
+                  {isViewer && <span className="text-xs text-emerald-400">(คุณ)</span>}
+                  {entry.shield && <span title="มีเกราะป้องกันงู">🛡️</span>}
+                </p>
+                <div className="flex items-center gap-1.5 text-[11px] opacity-80">
+                  <span className="text-emerald-400">ถูก {entry.correctCount ?? 0}</span>
+                  <span>/</span>
+                  <span className="text-rose-400">ผิด {entry.wrongCount ?? 0}</span>
+                </div>
+              </div>
               <span className="font-mono font-bold text-amber-400">{entry.score}</span>
             </div>
           );
@@ -150,10 +158,17 @@ export function Leaderboard({
             </div>
             <Avatar avatarId={entry.avatarId} size="sm" />
             <div className="flex-1 min-w-0">
-              <p className="font-display font-bold truncate">
-                {entry.name} {isViewer && <span className="text-xs text-emerald-400">(คุณ)</span>}
+              <p className="font-display font-bold truncate flex items-center gap-1.5">
+                <span>{entry.name}</span>
+                {isViewer && <span className="text-xs text-emerald-400 font-semibold">(คุณ)</span>}
+                {entry.shield && <span title="มีเกราะป้องกันงู">🛡️</span>}
               </p>
-              <p className="text-xs opacity-75">ช่องที่ {entry.position}</p>
+              <div className="flex items-center gap-2 text-xs opacity-85 mt-0.5">
+                <span>ช่องที่ {entry.position}</span>
+                <span>•</span>
+                <span className="text-emerald-400 font-bold">✓ ถูก {entry.correctCount ?? 0}</span>
+                <span className="text-rose-400 font-bold">✗ ผิด {entry.wrongCount ?? 0}</span>
+              </div>
             </div>
             <div className="text-right font-display font-extrabold text-amber-500">
               {entry.score} <span className="text-xs font-normal opacity-75">คะแนน</span>
@@ -197,12 +212,18 @@ function PodiumStep({
           ring
           className={cn(isViewer && "ring-4 ring-emerald-400")}
         />
-        <span className="mt-1.5 font-display font-bold text-xs sm:text-sm truncate max-w-[100px] text-center">
-          {entry.name}
+        <span className="mt-1.5 font-display font-bold text-xs sm:text-sm truncate max-w-[100px] text-center flex items-center gap-1 justify-center">
+          <span>{entry.name}</span>
+          {entry.shield && <span title="มีเกราะป้องกันงู">🛡️</span>}
         </span>
         <span className="text-xs font-mono font-bold text-amber-600">
           {entry.score} คะแนน
         </span>
+        <div className="flex items-center gap-1 text-[10px] font-semibold mt-0.5">
+          <span className="text-emerald-500">ถูก {entry.correctCount ?? 0}</span>
+          <span className="text-slate-400">/</span>
+          <span className="text-rose-500">ผิด {entry.wrongCount ?? 0}</span>
+        </div>
       </div>
       <div
         className={cn(

@@ -128,6 +128,7 @@ function syncRoomToHistory(room: ServerRoom): void {
     const finishBonus = finishRank ? (state.settings.finishBonuses[finishRank - 1] ?? 0) : 0;
     const answered = p?.answeredCount ?? 0;
     const correct = p?.correctCount ?? 0;
+    const wrong = p?.wrongCount ?? Math.max(0, answered - correct);
     return {
       rank: entry.rank,
       playerId: entry.playerId,
@@ -141,6 +142,7 @@ function syncRoomToHistory(room: ServerRoom): void {
       laddersClimbed: p?.laddersClimbed ?? 0,
       snakesBitten: p?.snakesBitten ?? 0,
       correctCount: correct,
+      wrongCount: wrong,
       answeredCount: answered,
       accuracyPercent: answered > 0 ? Math.round((correct / answered) * 100) : null,
     };
@@ -762,13 +764,20 @@ export function executeServerGameCommand(
       const isCorrect = command.optionId === state.question.correctOptionId;
       const updatedPlayers = state.players.map((p) => {
         if (p.id !== command.playerId) return p;
+        const newCorrect = (p.correctCount ?? 0) + (isCorrect ? 1 : 0);
+        const newWrong = (p.wrongCount ?? 0) + (isCorrect ? 0 : 1);
+        const newAnswered = (p.answeredCount ?? 0) + 1;
+        const finishBonus = p.finishRank ? (state.settings.finishBonuses[p.finishRank - 1] ?? 0) : 0;
+        const newScore = p.position + (newCorrect * 100) + finishBonus;
         return {
           ...p,
           selectedOptionId: command.optionId,
           answeredAt: Date.now(),
           answerState: isCorrect ? ("correct" as const) : ("wrong" as const),
-          answeredCount: (p.answeredCount ?? 0) + 1,
-          correctCount: (p.correctCount ?? 0) + (isCorrect ? 1 : 0),
+          answeredCount: newAnswered,
+          correctCount: newCorrect,
+          wrongCount: newWrong,
+          score: newScore,
         };
       });
 
@@ -790,8 +799,8 @@ export function executeServerGameCommand(
         currentPlayerId: updatedRollQueue[0] ?? state.currentPlayerId,
         leaderboard: computeLeaderboard(updatedPlayers),
         lastEvent: isCorrect
-          ? `PLAYER · ${player.name} ตอบถูก! ได้รับสิทธิ์ทอยลูกเต๋าทันที`
-          : `PLAYER · ${player.name} ส่งคำตอบแล้ว (${answeredTotal}/${updatedPlayers.length} คน)`,
+          ? `PLAYER · ${player.name} ตอบถูก! (+100 คะแนน) ได้รับสิทธิ์ทอยลูกเต๋าทันที`
+          : `PLAYER · ${player.name} ตอบผิด (${answeredTotal}/${updatedPlayers.length} คน)`,
         updatedAt: Date.now(),
       };
 
@@ -1003,10 +1012,17 @@ function revealAnswersOnServer(room: ServerRoom): {
   // Preserve anyone already in rollQueue (e.g. bonus roll or not yet rolled) and append newly-correct unrolled players
   const queue = Array.from(new Set([...state.rollQueue, ...unrolledCorrectIds]));
 
-  const updatedPlayers = state.players.map((p) => ({
-    ...p,
-    bonusNextTurn: false,
-  }));
+  const updatedPlayers = state.players.map((p) => {
+    const didNotAnswer = p.selectedOptionId === null;
+    const newWrong = didNotAnswer ? (p.wrongCount ?? 0) + 1 : (p.wrongCount ?? 0);
+    const newAnswered = didNotAnswer ? (p.answeredCount ?? 0) + 1 : (p.answeredCount ?? 0);
+    return {
+      ...p,
+      wrongCount: newWrong,
+      answeredCount: newAnswered,
+      bonusNextTurn: false,
+    };
+  });
 
   // If another player is now in queue to roll, auto-resolve any earlier player's special event so it doesn't block them
   const resolvedSpecialEvent =
@@ -1063,11 +1079,37 @@ function performServerDiceRollAndMove(
   let specialEvent: SpecialEventState | null = null;
   let grantBonusRoll = false;
   let grantNextRoundBoost = false;
+  let hasShieldNow = player.shield ?? false;
+  let gemPointsAwarded = 0;
 
-  if (effect) {
+  // 1. Check if snake was triggered but player possesses a SHIELD
+  if (effect && effect.kind === "snake" && hasShieldNow) {
+    hasShieldNow = false; // Shield used up to block snake!
+    finalPos = landedPos; // Protected! Stays at landedPos!
+    specialEvent = {
+      id: `evt-${Date.now()}-${player.id}`,
+      playerId: player.id,
+      playerName: player.name,
+      avatarId: player.avatarId,
+      kind: "shield",
+      from: landedPos,
+      to: landedPos,
+      title: "🛡️ เกราะป้องกันงูทำงาน!",
+      description: `ตกหัวเจ้างูที่ช่อง ${landedPos} แต่โล่วิเศษสลายตัวรับแทน ทำให้ไม่ร่วงลงไป! ปลอดภัย!`,
+      resolved: false,
+      bonusRollGranted: false,
+    };
+  } else if (effect) {
     finalPos = effect.to;
     grantBonusRoll = effect.specialKind === "star";
     grantNextRoundBoost = effect.specialKind === "boost";
+    if (effect.specialKind === "shield") {
+      hasShieldNow = true;
+    }
+    if (effect.specialKind === "gem") {
+      gemPointsAwarded = 50;
+    }
+
     specialEvent = {
       id: `evt-${Date.now()}-${player.id}`,
       playerId: player.id,
@@ -1093,16 +1135,21 @@ function performServerDiceRollAndMove(
 
   const updatedPlayers = state.players.map((p) => {
     if (p.id !== player.id) return p;
+    const correctPoints = (p.correctCount ?? 0) * 100;
+    const newScore = finalPos + finishBonus + correctPoints + gemPointsAwarded;
+
     return {
       ...p,
       position: finalPos,
-      score: finalPos + finishBonus,
+      score: newScore,
       lastRoll: diceValue,
       finishRank: newFinishRank,
-      snakesBitten: (p.snakesBitten ?? 0) + (effect?.kind === "snake" ? 1 : 0),
+      shield: hasShieldNow,
+      snakesBitten: (p.snakesBitten ?? 0) + (effect?.kind === "snake" && !player.shield ? 1 : 0),
       laddersClimbed: (p.laddersClimbed ?? 0) + (effect?.kind === "ladder" ? 1 : 0),
       specialEventsTriggered:
-        (p.specialEventsTriggered ?? 0) + (effect?.kind === "special" ? 1 : 0),
+        (p.specialEventsTriggered ?? 0) +
+        (effect?.kind === "special" || (effect?.kind === "snake" && player.shield) ? 1 : 0),
       bonusNextTurn: grantNextRoundBoost ? true : p.bonusNextTurn,
     };
   });

@@ -60,9 +60,13 @@ export const LADDERS: LadderLink[] = [
 
 export const SPECIAL_CELLS: SpecialCell[] = [
   { at: 1, kind: "start", label: "START", emoji: "🚩", description: "จุดเริ่มต้นของทุกคน" },
-  { at: 25, kind: "star", label: "BONUS", emoji: "⭐", description: "ช่องดาว — ได้สิทธิ์ทอยลูกเต๋าโบนัสอีกครั้ง!" },
-  { at: 50, kind: "gift", label: "GIFT", emoji: "🎁", description: "ช่องของขวัญ — เดินหน้าเพิ่มทันที 3 ช่อง!" },
-  { at: 75, kind: "boost", label: "BOOST", emoji: "✨", description: "ช่องเร่งความเร็ว — ได้สิทธิ์ทอยในรอบถัดไปทันที!" },
+  { at: 12, kind: "shield", label: "SHIELD", emoji: "🛡️", description: "โล่วิเศษ — ได้รับเกราะป้องกันการตกหัวงู 1 ครั้ง!" },
+  { at: 25, kind: "star", label: "STAR", emoji: "⭐", description: "ช่องดาวโบนัส — ได้สิทธิ์ทอยลูกเต๋าเพิ่มอีก 1 ครั้งทันที!" },
+  { at: 38, kind: "gem", label: "GEM", emoji: "💎", description: "อัญมณีมหัศจรรย์ — รับคะแนนโบนัสพิเศษ +50 คะแนน!" },
+  { at: 50, kind: "gift", label: "GIFT", emoji: "🎁", description: "กล่องของขวัญนำโชค — ก้าวเดินหน้าเพิ่มทันที 3 ช่อง!" },
+  { at: 60, kind: "magnet", label: "MAGNET", emoji: "🧲", description: "แม่เหล็กพลังสูง — ดูดตัวละครพุ่งไปหาบันไดช่อง 61 ทันที!" },
+  { at: 75, kind: "rocket", label: "ROCKET", emoji: "🚀", description: "จรวดบูสเตอร์ — พุ่งทะยานไปข้างหน้า 5 ช่อง!" },
+  { at: 88, kind: "boost", label: "BOOST", emoji: "⚡", description: "สายฟ้าพลังงาน — ได้รับสิทธิ์ทอยลูกเต๋าในรอบถัดไปทันที!" },
   { at: BOARD_TOTAL, kind: "finish", label: "FINISH", emoji: "🏁", description: "เส้นชัย — พิชิตช่องที่ 100 สำเร็จ!" },
 ];
 

@@ -14,13 +14,13 @@ interface BoardCellProps {
   mode?: "game" | "preview";
 }
 
-// Vibrant fantasy board palette inspired by the reference UI
+// Rich 3D fantasy board tile palette
 const PALETTE_CYCLE = [
-  "bg-[#fef08a] text-amber-950", // warm yellow
-  "bg-[#bae6fd] text-sky-950",   // sky blue
-  "bg-[#bbf7d0] text-emerald-950", // mint green
-  "bg-[#fed7aa] text-orange-950", // soft orange
-  "bg-[#e9d5ff] text-purple-950", // lavender
+  "bg-gradient-to-b from-[#fef08a] to-[#fde047] text-amber-950 border-amber-300/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),inset_0_-1px_1px_rgba(0,0,0,0.08)]", // warm sunshine gold
+  "bg-gradient-to-b from-[#bae6fd] to-[#7dd3fc] text-sky-950 border-sky-300/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),inset_0_-1px_1px_rgba(0,0,0,0.08)]",     // crystal sky blue
+  "bg-gradient-to-b from-[#bbf7d0] to-[#86efac] text-emerald-950 border-emerald-300/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),inset_0_-1px_1px_rgba(0,0,0,0.08)]", // spring meadow green
+  "bg-gradient-to-b from-[#fed7aa] to-[#fdba74] text-orange-950 border-orange-300/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),inset_0_-1px_1px_rgba(0,0,0,0.08)]",   // sunset peach
+  "bg-gradient-to-b from-[#e9d5ff] to-[#d8b4fe] text-purple-950 border-purple-300/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),inset_0_-1px_1px_rgba(0,0,0,0.08)]",   // royal lilac
 ];
 
 export function BoardCellComponent({
@@ -36,14 +36,49 @@ export function BoardCellComponent({
     movingPlayerId && playersOnCell.some((p) => p.id === movingPlayerId),
   );
 
-  const colorClass =
-    cell.tone === "start"
-      ? "bg-gradient-to-br from-emerald-400 to-green-500 text-white ring-1 ring-inset ring-white/50"
-      : cell.tone === "finish"
-      ? "bg-gradient-to-br from-rose-500 via-red-500 to-orange-500 text-white ring-1 ring-inset ring-amber-200"
-      : cell.tone === "special"
-      ? "bg-gradient-to-br from-amber-300 to-yellow-400 text-amber-950 ring-1 ring-inset ring-amber-500/50"
-      : PALETTE_CYCLE[(cell.number + cell.row) % PALETTE_CYCLE.length];
+  let colorClass = PALETTE_CYCLE[(cell.number + cell.row) % PALETTE_CYCLE.length];
+
+  if (cell.tone === "start") {
+    colorClass =
+      "bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700 text-white shadow-[inset_0_2px_0_rgba(255,255,255,0.5),0_2px_8px_rgba(16,185,129,0.35)] border-emerald-300";
+  } else if (cell.tone === "finish") {
+    colorClass =
+      "bg-gradient-to-br from-amber-400 via-rose-500 to-red-600 text-white shadow-[inset_0_2px_0_rgba(255,255,255,0.6),0_2px_10px_rgba(239,68,68,0.45)] border-amber-300 animate-pulse";
+  } else if (cell.special) {
+    switch (cell.special.kind) {
+      case "shield":
+        colorClass =
+          "bg-gradient-to-br from-sky-300 via-blue-400 to-indigo-500 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] border-sky-300";
+        break;
+      case "gem":
+        colorClass =
+          "bg-gradient-to-br from-teal-200 via-cyan-400 to-blue-500 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] border-cyan-300";
+        break;
+      case "star":
+        colorClass =
+          "bg-gradient-to-br from-amber-200 via-yellow-300 to-orange-400 text-amber-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] border-yellow-300";
+        break;
+      case "gift":
+        colorClass =
+          "bg-gradient-to-br from-rose-200 via-pink-400 to-purple-500 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] border-pink-300";
+        break;
+      case "rocket":
+        colorClass =
+          "bg-gradient-to-br from-violet-300 via-purple-500 to-indigo-600 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] border-purple-300";
+        break;
+      case "magnet":
+        colorClass =
+          "bg-gradient-to-br from-red-300 via-orange-400 to-amber-500 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] border-orange-300";
+        break;
+      case "boost":
+        colorClass =
+          "bg-gradient-to-br from-yellow-200 via-amber-300 to-yellow-500 text-amber-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] border-amber-300";
+        break;
+      default:
+        colorClass =
+          "bg-gradient-to-br from-amber-300 to-yellow-400 text-amber-950 border-amber-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]";
+    }
+  }
 
   const visiblePlayers = playersOnCell.slice(0, 3);
   const overflowCount = Math.max(0, playersOnCell.length - visiblePlayers.length);
@@ -52,7 +87,7 @@ export function BoardCellComponent({
     <div
       className={cn(
         "relative flex flex-col justify-between p-0.5 sm:p-1 select-none",
-        "border border-amber-900/15 transition-transform duration-150 overflow-visible",
+        "border transition-transform duration-150 overflow-visible",
         colorClass,
         isHighlighted && "ring-2 ring-amber-400 z-20 scale-[1.03]",
         isCurrentPlayerHere && "ring-2 ring-blue-500 z-20",
@@ -61,58 +96,67 @@ export function BoardCellComponent({
       data-cell={cell.number}
       title={`ช่อง ${cell.number}${cell.special ? ` — ${cell.special.label}: ${cell.special.description}` : ""}${cell.snake ? ` (งู ${cell.snake.from}→${cell.snake.to})` : ""}${cell.ladder ? ` (บันได ${cell.ladder.from}→${cell.ladder.to})` : ""}`}
     >
-      {/* Top Row: Square Number & Special Badge */}
+      {/* Top Row: Square Number & Special Item Emblem */}
       <div className="flex items-start justify-between w-full leading-none z-10">
         <span
           className={cn(
-            "font-display font-extrabold text-[9px] sm:text-[11px] md:text-xs tracking-tighter drop-shadow-2xs",
-            (cell.tone === "start" || cell.tone === "finish") && "text-white",
+            "font-display font-black text-[9px] sm:text-[11px] md:text-xs tracking-tighter drop-shadow-xs",
+            (cell.tone === "start" || cell.tone === "finish" || (cell.special && cell.special.kind !== "star" && cell.special.kind !== "boost")) && "text-white",
           )}
         >
           {cell.number}
         </span>
 
         {cell.special && cell.tone !== "start" && cell.tone !== "finish" && (
-          <span
-            className="text-[10px] sm:text-xs leading-none drop-shadow-xs"
-            aria-label={cell.special.label}
-          >
-            {cell.special.emoji}
-          </span>
+          <div className="relative group/item flex items-center justify-center">
+            <span
+              className="text-xs sm:text-sm md:text-base leading-none drop-shadow-md transition-transform duration-200 hover:scale-125 cursor-help"
+              aria-label={cell.special.label}
+            >
+              {cell.special.emoji}
+            </span>
+          </div>
         )}
       </div>
 
-      {/* Start / Finish Banner Label */}
+      {/* Start / Finish / Special Banner Label */}
       {cell.tone === "start" && (
-        <span className="text-[7px] sm:text-[9px] font-display font-black uppercase tracking-wider bg-black/20 px-1 rounded text-white self-center">
+        <span className="text-[7px] sm:text-[9px] font-display font-black uppercase tracking-wider bg-black/25 px-1 py-0.5 rounded text-white self-center shadow-xs">
           START
         </span>
       )}
       {cell.tone === "finish" && (
-        <span className="text-[7px] sm:text-[9px] font-display font-black uppercase tracking-wider bg-black/25 px-1 rounded text-amber-200 self-center">
-          FINISH
+        <span className="text-[7px] sm:text-[9px] font-display font-black uppercase tracking-wider bg-black/35 px-1 py-0.5 rounded text-amber-200 self-center shadow-xs">
+          FINISH 🏆
         </span>
       )}
 
-      {/* Snake Head / Ladder Foot subtle indicator */}
-      {cell.snake && playersOnCell.length === 0 && (
+      {/* Special Item Mini-Pill Badge */}
+      {cell.special && cell.tone !== "start" && cell.tone !== "finish" && playersOnCell.length === 0 && (
+        <span className="text-[6px] sm:text-[8px] font-display font-bold uppercase tracking-tight bg-black/20 text-white px-1 rounded-sm self-center leading-tight">
+          {cell.special.label}
+        </span>
+      )}
+
+      {/* Subtle indicator for snake head / ladder foot if unoccupied */}
+      {cell.snake && playersOnCell.length === 0 && !cell.special && (
         <span
-          className="text-[9px] sm:text-[11px] self-end opacity-85 leading-none"
+          className="text-[9px] sm:text-[11px] self-end opacity-75 leading-none"
           aria-hidden="true"
         >
           🐍
         </span>
       )}
-      {cell.ladder && playersOnCell.length === 0 && (
+      {cell.ladder && playersOnCell.length === 0 && !cell.special && (
         <span
-          className="text-[9px] sm:text-[11px] self-end opacity-85 leading-none"
+          className="text-[9px] sm:text-[11px] self-end opacity-75 leading-none"
           aria-hidden="true"
         >
           🪜
         </span>
       )}
 
-      {/* Players on this Square — arranged neatly so multiple avatars never overlap unreadably */}
+      {/* Players on this Square */}
       {playersOnCell.length > 0 && (
         <div
           className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none p-0.5"
@@ -162,11 +206,48 @@ interface SnakeOverlayProps {
   cells: BoardCell[];
 }
 
-const SNAKE_COLORS = [
-  { body: "#ef4444", stripe: "#fca5a5", head: "#dc2626" },
-  { body: "#ec4899", stripe: "#f9a8d4", head: "#db2777" },
-  { body: "#8b5cf6", stripe: "#c4b5fd", head: "#7c3aed" },
-  { body: "#f97316", stripe: "#fdba74", head: "#ea580c" },
+// 4 distinct vibrant 3D snakes
+const SNAKE_3D_THEMES = [
+  {
+    id: "emerald",
+    stroke: "url(#snake-grad-emerald)",
+    highlight: "rgba(255, 255, 255, 0.75)",
+    belly: "#fde047",
+    headColor: "#059669",
+    eyeColor: "#fef08a",
+    pupil: "#0f172a",
+    tongue: "#dc2626",
+  },
+  {
+    id: "ruby",
+    stroke: "url(#snake-grad-ruby)",
+    highlight: "rgba(255, 255, 255, 0.75)",
+    belly: "#fdba74",
+    headColor: "#dc2626",
+    eyeColor: "#fef08a",
+    pupil: "#0f172a",
+    tongue: "#ef4444",
+  },
+  {
+    id: "amethyst",
+    stroke: "url(#snake-grad-amethyst)",
+    highlight: "rgba(255, 255, 255, 0.75)",
+    belly: "#f472b6",
+    headColor: "#7c3aed",
+    eyeColor: "#fef08a",
+    pupil: "#0f172a",
+    tongue: "#e11d48",
+  },
+  {
+    id: "golden",
+    stroke: "url(#snake-grad-golden)",
+    highlight: "rgba(255, 255, 255, 0.75)",
+    belly: "#fef08a",
+    headColor: "#ea580c",
+    eyeColor: "#ffffff",
+    pupil: "#0f172a",
+    tongue: "#b91c1c",
+  },
 ];
 
 export function SnakeOverlay({ snakes, cells }: SnakeOverlayProps) {
@@ -179,55 +260,151 @@ export function SnakeOverlay({ snakes, cells }: SnakeOverlayProps) {
       preserveAspectRatio="none"
       aria-hidden="true"
     >
+      <defs>
+        {/* Drop shadow filter for 3D depth */}
+        <filter id="snake-depth-shadow" x="-20%" y="-20%" width="150%" height="150%">
+          <feDropShadow dx="0.6" dy="1.0" stdDeviation="0.6" floodColor="#091428" floodOpacity="0.4" />
+        </filter>
+
+        {/* 3D Multi-Stop Linear Gradients */}
+        <linearGradient id="snake-grad-emerald" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#047857" />
+          <stop offset="35%" stopColor="#10b981" />
+          <stop offset="65%" stopColor="#34d399" />
+          <stop offset="100%" stopColor="#065f46" />
+        </linearGradient>
+
+        <linearGradient id="snake-grad-ruby" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#991b1b" />
+          <stop offset="35%" stopColor="#ef4444" />
+          <stop offset="65%" stopColor="#f87171" />
+          <stop offset="100%" stopColor="#b91c1c" />
+        </linearGradient>
+
+        <linearGradient id="snake-grad-amethyst" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#581c87" />
+          <stop offset="35%" stopColor="#9333ea" />
+          <stop offset="65%" stopColor="#c084fc" />
+          <stop offset="100%" stopColor="#6b21a8" />
+        </linearGradient>
+
+        <linearGradient id="snake-grad-golden" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#9a3412" />
+          <stop offset="35%" stopColor="#ea580c" />
+          <stop offset="65%" stopColor="#fb923c" />
+          <stop offset="100%" stopColor="#c2410c" />
+        </linearGradient>
+      </defs>
+
       {snakes.map((snake, idx) => {
         const start = cellMap.get(snake.from);
         const end = cellMap.get(snake.to);
         if (!start || !end) return null;
 
-        const palette = SNAKE_COLORS[idx % SNAKE_COLORS.length];
+        const theme = SNAKE_3D_THEMES[idx % SNAKE_3D_THEMES.length];
         const dx = end.x - start.x;
         const dy = end.y - start.y;
-        const mid1X = start.x + dx * 0.33 + (idx % 2 === 0 ? 7 : -7);
+        const curveOffset = idx % 2 === 0 ? 8 : -8;
+        const mid1X = start.x + dx * 0.33 + curveOffset;
         const mid1Y = start.y + dy * 0.33;
-        const mid2X = start.x + dx * 0.66 + (idx % 2 === 0 ? -7 : 7);
+        const mid2X = start.x + dx * 0.66 - curveOffset;
         const mid2Y = start.y + dy * 0.66;
 
         const d = `M ${start.x} ${start.y} C ${mid1X} ${mid1Y}, ${mid2X} ${mid2Y}, ${end.x} ${end.y}`;
 
+        // Angle for snake head pointing slightly along initial curve
+        const headAngle = (Math.atan2(mid1Y - start.y, mid1X - start.x) * 180) / Math.PI;
+
         return (
-          <g key={`snake-${snake.from}-${snake.to}`} opacity={0.9}>
-            {/* Shadow */}
+          <g key={`snake-${snake.from}-${snake.to}`}>
+            {/* 1. Deep 3D Ambient Shadow */}
             <path
               d={d}
-              stroke="rgba(15, 23, 42, 0.25)"
-              strokeWidth="2.4"
+              stroke="rgba(15, 23, 42, 0.4)"
+              strokeWidth="3.2"
               strokeLinecap="round"
               fill="none"
-              transform="translate(0.4, 0.6)"
+              transform="translate(0.5, 0.8)"
             />
-            {/* Snake Body */}
+
+            {/* 2. Dark Volumetric Contour Body */}
             <path
               d={d}
-              stroke={palette.body}
-              strokeWidth="2.1"
+              stroke="#0f172a"
+              strokeWidth="2.7"
               strokeLinecap="round"
               fill="none"
             />
-            {/* Snake Stripes */}
+
+            {/* 3. 3D Gradient Snake Body */}
             <path
               d={d}
-              stroke={palette.stripe}
+              stroke={theme.stroke}
+              strokeWidth="2.3"
+              strokeLinecap="round"
+              fill="none"
+            />
+
+            {/* 4. Diamond / Scale Ribs Texture */}
+            <path
+              d={d}
+              stroke={theme.belly}
               strokeWidth="1.2"
-              strokeDasharray="1.6 2.2"
+              strokeDasharray="1.2 2.2"
               strokeLinecap="round"
               fill="none"
+              opacity={0.85}
             />
-            {/* Snake Head at `from` square */}
-            <circle cx={start.x} cy={start.y} r="2.2" fill={palette.head} />
-            <circle cx={start.x - 0.6} cy={start.y - 0.5} r="0.45" fill="#ffffff" />
-            <circle cx={start.x + 0.6} cy={start.y - 0.5} r="0.45" fill="#ffffff" />
-            {/* Snake Tail tip at `to` square */}
-            <circle cx={end.x} cy={end.y} r="1.1" fill={palette.body} />
+
+            {/* 5. Specular 3D Sunlight Highlight along the spine */}
+            <path
+              d={d}
+              stroke={theme.highlight}
+              strokeWidth="0.75"
+              strokeLinecap="round"
+              fill="none"
+              opacity={0.7}
+            />
+
+            {/* 6. Coiled 3D Tail at `to` cell */}
+            <circle cx={end.x} cy={end.y} r="1.3" fill="#0f172a" />
+            <circle cx={end.x} cy={end.y} r="1.1" fill={theme.headColor} />
+            <circle cx={end.x} cy={end.y} r="0.6" fill={theme.belly} />
+
+            {/* 7. Expressive 3D Snake Head at `from` cell */}
+            <g transform={`translate(${start.x}, ${start.y}) rotate(${headAngle + 90})`}>
+              {/* Flicking Forked Tongue */}
+              <path
+                d="M 0 2.5 L 0 4.2 L -0.6 5.2 M 0 4.2 L 0.6 5.2"
+                stroke={theme.tongue}
+                strokeWidth="0.45"
+                strokeLinecap="round"
+                fill="none"
+              />
+
+              {/* Head Base Shadow */}
+              <ellipse cx="0" cy="0.4" rx="2.5" ry="2.7" fill="#0f172a" opacity={0.6} />
+
+              {/* Sculpted Head */}
+              <ellipse cx="0" cy="0" rx="2.4" ry="2.6" fill={theme.headColor} stroke="#0f172a" strokeWidth="0.4" />
+
+              {/* Snout highlight */}
+              <ellipse cx="0" cy="1.2" rx="1.5" ry="1.0" fill={theme.belly} opacity={0.8} />
+
+              {/* Left Eye */}
+              <circle cx="-1.1" cy="-0.3" r="0.75" fill={theme.eyeColor} stroke="#0f172a" strokeWidth="0.25" />
+              <ellipse cx="-1.1" cy="-0.3" rx="0.2" ry="0.5" fill={theme.pupil} />
+              <circle cx="-1.25" cy="-0.5" r="0.2" fill="#ffffff" />
+
+              {/* Right Eye */}
+              <circle cx="1.1" cy="-0.3" r="0.75" fill={theme.eyeColor} stroke="#0f172a" strokeWidth="0.25" />
+              <ellipse cx="1.1" cy="-0.3" rx="0.2" ry="0.5" fill={theme.pupil} />
+              <circle cx="0.95" cy="-0.5" r="0.2" fill="#ffffff" />
+
+              {/* Nostrils */}
+              <circle cx="-0.4" cy="1.6" r="0.15" fill="#0f172a" />
+              <circle cx="0.4" cy="1.6" r="0.15" fill="#0f172a" />
+            </g>
           </g>
         );
       })}
@@ -250,6 +427,23 @@ export function LadderOverlay({ ladders, cells }: LadderOverlayProps) {
       preserveAspectRatio="none"
       aria-hidden="true"
     >
+      <defs>
+        {/* Ladder 3D golden wood gradients */}
+        <linearGradient id="ladder-rail-gold" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#78350f" />
+          <stop offset="35%" stopColor="#f59e0b" />
+          <stop offset="65%" stopColor="#fef3c7" />
+          <stop offset="100%" stopColor="#b45309" />
+        </linearGradient>
+
+        <linearGradient id="ladder-rung-gold" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#92400e" />
+          <stop offset="45%" stopColor="#fde047" />
+          <stop offset="70%" stopColor="#f59e0b" />
+          <stop offset="100%" stopColor="#78350f" />
+        </linearGradient>
+      </defs>
+
       {ladders.map((ladder) => {
         const start = cellMap.get(ladder.from);
         const end = cellMap.get(ladder.to);
@@ -259,40 +453,41 @@ export function LadderOverlay({ ladders, cells }: LadderOverlayProps) {
         const dy = end.y - start.y;
         const len = Math.hypot(dx, dy) || 1;
         // Normal vector for parallel rails
-        const nx = (-dy / len) * 1.35;
-        const ny = (dx / len) * 1.35;
+        const nx = (-dy / len) * 1.4;
+        const ny = (dx / len) * 1.4;
 
         const rungs = Math.max(4, Math.round(len / 5.5));
 
         return (
-          <g key={`ladder-${ladder.from}-${ladder.to}`} opacity={0.92}>
-            {/* Rail shadows */}
+          <g key={`ladder-${ladder.from}-${ladder.to}`}>
+            {/* 1. Deep 3D Shadow under rails */}
             <line
-              x1={start.x - nx + 0.3}
-              y1={start.y - ny + 0.5}
-              x2={end.x - nx + 0.3}
-              y2={end.y - ny + 0.5}
-              stroke="rgba(15, 23, 42, 0.22)"
-              strokeWidth="1.1"
+              x1={start.x - nx + 0.4}
+              y1={start.y - ny + 0.7}
+              x2={end.x - nx + 0.4}
+              y2={end.y - ny + 0.7}
+              stroke="rgba(15, 23, 42, 0.35)"
+              strokeWidth="1.3"
               strokeLinecap="round"
             />
             <line
-              x1={start.x + nx + 0.3}
-              y1={start.y + ny + 0.5}
-              x2={end.x + nx + 0.3}
-              y2={end.y + ny + 0.5}
-              stroke="rgba(15, 23, 42, 0.22)"
-              strokeWidth="1.1"
+              x1={start.x + nx + 0.4}
+              y1={start.y + ny + 0.7}
+              x2={end.x + nx + 0.4}
+              y2={end.y + ny + 0.7}
+              stroke="rgba(15, 23, 42, 0.35)"
+              strokeWidth="1.3"
               strokeLinecap="round"
             />
-            {/* Wooden/Golden Rails */}
+
+            {/* 2. Dark Outline for volume */}
             <line
               x1={start.x - nx}
               y1={start.y - ny}
               x2={end.x - nx}
               y2={end.y - ny}
-              stroke="#d97706"
-              strokeWidth="1.05"
+              stroke="#451a03"
+              strokeWidth="1.45"
               strokeLinecap="round"
             />
             <line
@@ -300,26 +495,72 @@ export function LadderOverlay({ ladders, cells }: LadderOverlayProps) {
               y1={start.y + ny}
               x2={end.x + nx}
               y2={end.y + ny}
-              stroke="#d97706"
-              strokeWidth="1.05"
+              stroke="#451a03"
+              strokeWidth="1.45"
               strokeLinecap="round"
             />
-            {/* Rungs */}
+
+            {/* 3. 3D Golden Bamboo Rails */}
+            <line
+              x1={start.x - nx}
+              y1={start.y - ny}
+              x2={end.x - nx}
+              y2={end.y - ny}
+              stroke="url(#ladder-rail-gold)"
+              strokeWidth="1.15"
+              strokeLinecap="round"
+            />
+            <line
+              x1={start.x + nx}
+              y1={start.y + ny}
+              x2={end.x + nx}
+              y2={end.y + ny}
+              stroke="url(#ladder-rail-gold)"
+              strokeWidth="1.15"
+              strokeLinecap="round"
+            />
+
+            {/* 4. 3D Rungs with golden metal brackets */}
             {Array.from({ length: rungs }, (_, i) => i + 1).map((step) => {
               const t = step / (rungs + 1);
               const cx = start.x + dx * t;
               const cy = start.y + dy * t;
               return (
-                <line
-                  key={step}
-                  x1={cx - nx}
-                  y1={cy - ny}
-                  x2={cx + nx}
-                  y2={cy + ny}
-                  stroke="#f59e0b"
-                  strokeWidth="0.85"
-                  strokeLinecap="round"
-                />
+                <g key={step}>
+                  {/* Rung Shadow */}
+                  <line
+                    x1={cx - nx + 0.2}
+                    y1={cy - ny + 0.5}
+                    x2={cx + nx + 0.2}
+                    y2={cy + ny + 0.5}
+                    stroke="rgba(15, 23, 42, 0.3)"
+                    strokeWidth="1.1"
+                    strokeLinecap="round"
+                  />
+                  {/* Rung Outline */}
+                  <line
+                    x1={cx - nx}
+                    y1={cy - ny}
+                    x2={cx + nx}
+                    y2={cy + ny}
+                    stroke="#451a03"
+                    strokeWidth="1.25"
+                    strokeLinecap="round"
+                  />
+                  {/* 3D Golden Rung */}
+                  <line
+                    x1={cx - nx}
+                    y1={cy - ny}
+                    x2={cx + nx}
+                    y2={cy + ny}
+                    stroke="url(#ladder-rung-gold)"
+                    strokeWidth="0.95"
+                    strokeLinecap="round"
+                  />
+                  {/* Metal joint bolts */}
+                  <circle cx={cx - nx} cy={cy - ny} r="0.45" fill="#fef08a" stroke="#78350f" strokeWidth="0.2" />
+                  <circle cx={cx + nx} cy={cy + ny} r="0.45" fill="#fef08a" stroke="#78350f" strokeWidth="0.2" />
+                </g>
               );
             })}
           </g>

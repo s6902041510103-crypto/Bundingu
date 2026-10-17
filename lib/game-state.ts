@@ -40,10 +40,11 @@ export function isSpecialEnabled(
 }
 
 export function normalizeSpecialsArray(enabledSpecials: Set<string> | string[] | undefined): string[] {
-  if (!enabledSpecials) return ["star", "gift", "boost"];
+  const defaultSpecials = ["star", "gift", "boost", "shield", "gem", "rocket", "magnet"];
+  if (!enabledSpecials) return defaultSpecials;
   if (enabledSpecials instanceof Set) return Array.from(enabledSpecials);
   if (Array.isArray(enabledSpecials)) return enabledSpecials;
-  return ["star", "gift", "boost"];
+  return defaultSpecials;
 }
 
 /* ------------------------------------------------------------------ *
@@ -62,6 +63,7 @@ export function computeLeaderboard(players: Player[]): LeaderboardEntry[] {
   return sorted.map((player, index) => {
     const answered = player.answeredCount ?? 0;
     const correct = player.correctCount ?? 0;
+    const wrong = player.wrongCount ?? Math.max(0, answered - correct);
     const accuracyPercent = answered > 0 ? Math.round((correct / answered) * 100) : null;
 
     return {
@@ -75,8 +77,10 @@ export function computeLeaderboard(players: Player[]): LeaderboardEntry[] {
       laddersClimbed: player.laddersClimbed ?? 0,
       snakesBitten: player.snakesBitten ?? 0,
       correctCount: correct,
+      wrongCount: wrong,
       answeredCount: answered,
       accuracyPercent,
+      shield: player.shield,
     };
   });
 }
@@ -120,10 +124,18 @@ export function resolveBoardEffect(
   snakes: SnakeLink[] = SNAKES,
   ladders: LadderLink[] = LADDERS,
   specialCells: SpecialCell[] = SPECIAL_CELLS,
-  enabledSpecials: Set<string> | string[] = ["star", "gift", "boost"],
+  enabledSpecials: Set<string> | string[] = [
+    "star",
+    "gift",
+    "boost",
+    "shield",
+    "gem",
+    "rocket",
+    "magnet",
+  ],
 ): {
   kind: "snake" | "ladder" | "special";
-  specialKind?: "star" | "gift" | "boost";
+  specialKind?: "star" | "gift" | "boost" | "shield" | "gem" | "rocket" | "magnet";
   from: number;
   to: number;
   label: string;
@@ -154,14 +166,23 @@ export function resolveBoardEffect(
   const special = specialCells.find(
     (s) =>
       s.at === position &&
-      (s.kind === "star" || s.kind === "gift" || s.kind === "boost") &&
+      s.kind !== "start" &&
+      s.kind !== "finish" &&
       isSpecialEnabled(enabledSpecials, s.kind),
   );
-  if (special && (special.kind === "star" || special.kind === "gift" || special.kind === "boost")) {
-    const to = special.kind === "gift" ? Math.min(FINISH_AT, position + 3) : position;
+  if (special) {
+    let to = position;
+    if (special.kind === "gift") {
+      to = Math.min(FINISH_AT, position + 3);
+    } else if (special.kind === "rocket") {
+      to = Math.min(FINISH_AT, position + 5);
+    } else if (special.kind === "magnet") {
+      to = 61; // Magnet pulls directly to the base of the ladder at 61!
+    }
+
     return {
       kind: "special",
-      specialKind: special.kind,
+      specialKind: special.kind as any,
       from: position,
       to,
       label: `${special.emoji} ${special.label} (ช่อง ${position})`,

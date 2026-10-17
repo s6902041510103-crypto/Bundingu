@@ -165,7 +165,9 @@ function ReportsContent() {
                   <th className="py-3 px-4">ตำแหน่ง/โบนัสเส้นชัย</th>
                   <th className="py-3 px-4 text-center">บันได 🪜</th>
                   <th className="py-3 px-4 text-center">งู 🐍</th>
-                  <th className="py-3 px-4 text-right">ความแม่นยำ (ตอบถูก)</th>
+                  <th className="py-3 px-4 text-center text-emerald-700">ตอบถูก ✓</th>
+                  <th className="py-3 px-4 text-center text-rose-600">ตอบผิด ✗</th>
+                  <th className="py-3 px-4 text-right">ความแม่นยำ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
@@ -201,16 +203,22 @@ function ReportsContent() {
                     <td className="py-3.5 px-4 text-center font-mono text-red-600 font-semibold">
                       {row.snakesBitten}
                     </td>
+                    <td className="py-3.5 px-4 text-center font-mono font-bold text-emerald-600">
+                      {row.correctCount}
+                    </td>
+                    <td className="py-3.5 px-4 text-center font-mono font-bold text-rose-600">
+                      {row.wrongCount ?? Math.max(0, row.answeredCount - row.correctCount)}
+                    </td>
                     <td className="py-3.5 px-4 text-right">
                       {/* Never fabricate fake accuracy when answeredCount === 0 */}
                       {row.accuracyPercent !== null && row.answeredCount > 0 ? (
                         <span className="inline-flex items-center gap-1.5 font-mono font-bold text-slate-900">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          {row.accuracyPercent}% ({row.correctCount}/{row.answeredCount})
+                          {row.accuracyPercent}%
                         </span>
                       ) : (
                         <Badge variant="default" size="sm">
-                          ยังไม่มีข้อมูลการตอบ
+                          ยังไม่มีข้อมูล
                         </Badge>
                       )}
                     </td>

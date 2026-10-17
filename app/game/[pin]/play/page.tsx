@@ -321,7 +321,8 @@ export default function StudentGameplayPage() {
             {viewerPlayer && (
               <div className="hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-xs font-display font-bold text-emerald-200">
                 <Avatar avatarId={viewerPlayer.avatarId} size="xs" />
-                <span>คุณ: {viewerPlayer.name} (ช่อง {viewerPlayer.position})</span>
+                <span>คุณ: {viewerPlayer.name} (ช่อง {viewerPlayer.position} · ✓{viewerPlayer.correctCount ?? 0} ✗{viewerPlayer.wrongCount ?? 0} · {viewerPlayer.score} คะแนน)</span>
+                {viewerPlayer.shield && <span title="มีโล่ป้องกันงู">🛡️</span>}
               </div>
             )}
           </div>
@@ -357,7 +358,41 @@ export default function StudentGameplayPage() {
       {/* Main Responsive Gameplay Layout:
           On Mobile: Board is ALWAYS visible at the top, followed immediately by Question & Dice controls below.
           On Desktop (lg): 12-column split with large Board on left (col-span-7) and Question + Dice on right (col-span-5). */}
-      <main className="flex-1 mx-auto max-w-7xl w-full p-2.5 sm:p-5 lg:p-6">
+      <main className="flex-1 mx-auto max-w-7xl w-full p-2.5 sm:p-5 lg:p-6 space-y-4">
+        {viewerPlayer && (
+          <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-blue-950/80 via-slate-900/90 to-indigo-950/80 border border-blue-400/30 shadow-lg text-xs sm:text-sm">
+            <div className="flex items-center gap-2.5">
+              <Avatar avatarId={viewerPlayer.avatarId} size="xs" ring />
+              <div className="flex items-center gap-2">
+                <span className="font-display font-bold text-white text-sm sm:text-base">
+                  {viewerPlayer.name}
+                </span>
+                <span className="text-blue-300 text-xs">
+                  (ช่อง <b className="text-amber-300 font-mono text-sm">{viewerPlayer.position}</b>)
+                </span>
+                {viewerPlayer.shield && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-cyan-500/25 border border-cyan-400/70 text-cyan-200 text-xs font-bold shadow-sm shadow-cyan-500/30">
+                    🛡️ เกราะเปิดใช้งาน
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1.5 font-mono text-xs">
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-bold">
+                  ✓ ถูก {viewerPlayer.correctCount ?? 0}
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-400/30 font-bold">
+                  ✗ ผิด {viewerPlayer.wrongCount ?? 0}
+                </span>
+              </div>
+              <div className="font-display font-extrabold text-amber-300 bg-amber-400/15 border border-amber-400/40 px-3 py-1 rounded-xl text-sm sm:text-base shadow-sm">
+                {viewerPlayer.score} คะแนน
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start">
           {/* TOP on Mobile / LEFT on Desktop: 10x10 Game Board + Player Strip */}
           <div className="lg:col-span-7 flex flex-col gap-3 w-full">
@@ -393,8 +428,8 @@ export default function StudentGameplayPage() {
                           <span className="font-display font-bold text-white block truncate max-w-[68px]">
                             {entry.name}
                           </span>
-                          <span className="font-mono text-[11px] text-amber-300">
-                            ช่อง {entry.position}
+                          <span className="font-mono text-[10px] text-amber-300">
+                            ช่อง {entry.position} · ✓{entry.correctCount ?? 0}
                           </span>
                         </div>
                       </div>
