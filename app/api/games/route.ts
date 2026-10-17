@@ -79,7 +79,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json();
     const result = createRoomOnServer({
       title: String(body.title ?? ""),
       subject: String(body.subject ?? "คณิตศาสตร์"),
@@ -100,7 +99,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: result.error || "สร้างเกมไม่สำเร็จ" }, { status: 400 });
     }
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       {
         ok: true,
         pin: result.room.pin,
@@ -108,7 +107,14 @@ export async function POST(request: Request) {
       },
       { status: 201 },
     );
-  } catch {
+    response.cookies.set("ks_teacher_token", session.token, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+    return response;
+  } catch (err) {
     return NextResponse.json(
       { error: "ข้อมูลการสร้างเกมไม่ถูกต้อง" },
       { status: 400 },
