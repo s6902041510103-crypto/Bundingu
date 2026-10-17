@@ -156,9 +156,26 @@ export function createProductionTransport(
     command: ServerGameCommand,
   ): Promise<{ ok: boolean; state?: GameState; error?: string }> => {
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (typeof window !== "undefined") {
+        try {
+          const cached =
+            window.localStorage.getItem("ks_teacher_session") ||
+            window.sessionStorage.getItem("ks_teacher_session");
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed.teacherId) headers["x-teacher-id"] = parsed.teacherId;
+            if (parsed.email) headers["x-teacher-email"] = parsed.email;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       const res = await fetch(`/api/games/${encodeURIComponent(pin)}/command`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers,
         body: JSON.stringify(command),
       });
       const data = await res.json();

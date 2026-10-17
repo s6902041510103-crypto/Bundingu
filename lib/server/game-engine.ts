@@ -1,4 +1,6 @@
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import { FINISH_AT, walkPath } from "../board";
 import {
   AVATARS,
@@ -44,6 +46,49 @@ export interface ServerRoom {
   rngSeed: number;
   questionsPool: Question[];
   state: GameState;
+}
+
+const ROOMS_DIR = path.join(process.cwd(), ".data", "rooms");
+
+function ensureRoomsDir(): void {
+  try {
+    if (!fs.existsSync(ROOMS_DIR)) {
+      fs.mkdirSync(ROOMS_DIR, { recursive: true });
+    }
+  } catch {}
+}
+
+export function persistRoomToDisk(room: ServerRoom): void {
+  try {
+    ensureRoomsDir();
+    const filePath = path.join(ROOMS_DIR, `${room.pin.toUpperCase()}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(room, null, 2), "utf-8");
+  } catch {}
+}
+
+export function loadRoomFromDisk(pin: string): ServerRoom | null {
+  try {
+    const normalized = pin.trim().toUpperCase();
+    const filePath = path.join(ROOMS_DIR, `${normalized}.json`);
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, "utf-8");
+      const parsed = JSON.parse(raw) as ServerRoom;
+      if (parsed && parsed.pin && parsed.state) {
+        return parsed;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+export function deleteRoomFromDisk(pin: string): void {
+  try {
+    const normalized = pin.trim().toUpperCase();
+    const filePath = path.join(ROOMS_DIR, `${normalized}.json`);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch {}
 }
 
 const globalForRooms = globalThis as unknown as {
@@ -119,6 +164,7 @@ export function toPublicGameState(room: ServerRoom, viewerPlayerId?: string | nu
 }
 
 function syncRoomToHistory(room: ServerRoom): void {
+  persistRoomToDisk(room);
   const { state } = room;
   const lb = computeLeaderboard(state.players);
   const winner = lb[0] ?? null;
@@ -216,8 +262,14 @@ export function getServerRoom(pin: string): ServerRoom | null {
     return map.get("KS4829") ?? null;
   }
 
-  // If the room was saved in repository (e.g. from a previous session or server restart),
-  // automatically restore it in memory so saved rooms can be opened and played forever!
+  // 1. Try restoring from persistent disk room snapshot (exact live state)
+  const diskRoom = loadRoomFromDisk(normalized);
+  if (diskRoom) {
+    map.set(normalized, diskRoom);
+    return diskRoom;
+  }
+
+  // 2. Try restoring from saved game record in repository (fallback)
   const savedRecord = getGameHistoryByPinOrId(normalized);
   if (savedRecord) {
     const allQuestions = listQuestions();
@@ -290,6 +342,7 @@ export function getServerRoom(pin: string): ServerRoom | null {
     };
 
     map.set(savedRecord.pin.toUpperCase(), restoredRoom);
+    persistRoomToDisk(restoredRoom);
     return restoredRoom;
   }
 
@@ -303,12 +356,30 @@ export function deleteServerRoom(pin: string, teacherId?: string): boolean {
   if (room && (!teacherId || room.teacherId === teacherId)) {
     map.delete(normalized);
   }
+  deleteRoomFromDisk(normalized);
   const deletedFromStore = deleteGameHistoryRecord(normalized, teacherId);
   return Boolean(room || deletedFromStore);
 }
 
 export function listActiveServerRooms(teacherId?: string): ServerRoom[] {
-  const rooms = Array.from(getRoomMap().values());
+  const map = getRoomMap();
+  try {
+    ensureRoomsDir();
+    if (fs.existsSync(ROOMS_DIR)) {
+      const files = fs.readdirSync(ROOMS_DIR);
+      for (const f of files) {
+        if (f.endsWith(".json")) {
+          const pin = f.replace(".json", "").toUpperCase();
+          if (!map.has(pin)) {
+            const r = loadRoomFromDisk(pin);
+            if (r) map.set(pin, r);
+          }
+        }
+      }
+    }
+  } catch {}
+
+  const rooms = Array.from(map.values());
   if (teacherId) {
     return rooms.filter((r) => r.teacherId === teacherId);
   }
