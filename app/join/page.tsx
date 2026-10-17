@@ -88,13 +88,20 @@ function JoinFormContent() {
 
     setIsJoining(true);
     try {
-      // Check if we have an existing playerId for this room to support seamless Reconnect
+      // Check if we have an existing playerId for this room with the SAME nickname to support seamless Reconnect
+      // (If the user duplicated the tab and entered a DIFFERENT nickname for Student 2, create a new player!)
       let existingPlayerId: string | undefined;
       try {
         const existingRoomData = sessionStorage.getItem(`ks-room-${cleanPin}`);
         if (existingRoomData) {
           const parsed = JSON.parse(existingRoomData);
-          if (parsed.playerId) existingPlayerId = parsed.playerId;
+          if (
+            parsed.playerId &&
+            typeof parsed.nickname === "string" &&
+            parsed.nickname.trim().toLowerCase() === cleanName.toLowerCase()
+          ) {
+            existingPlayerId = parsed.playerId;
+          }
         }
       } catch {
         // ignore
@@ -135,10 +142,11 @@ function JoinFormContent() {
       sessionStorage.setItem("ks-player", JSON.stringify(playerRecord));
       sessionStorage.setItem(`ks-room-${cleanPin}`, JSON.stringify(playerRecord));
 
+      const playerQuery = `?playerId=${encodeURIComponent(joinedPlayer.id)}`;
       if (data.state && data.state.gameStatus !== "lobby") {
-        router.push(`/game/${cleanPin}/play`);
+        router.push(`/game/${cleanPin}/play${playerQuery}`);
       } else {
-        router.push(`/game/${cleanPin}`);
+        router.push(`/game/${cleanPin}${playerQuery}`);
       }
     } catch {
       setError("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้ กรุณาลองใหม่อีกครั้ง");

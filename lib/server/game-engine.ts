@@ -643,7 +643,8 @@ export function executeServerGameCommand(
 
     case "SUBMIT_ANSWER": {
       if (
-        (state.gameStatus !== "question" && state.gameStatus !== "answering") ||
+        state.gameStatus === "lobby" ||
+        state.gameStatus === "finished" ||
         !state.question ||
         state.question.revealed
       ) {
@@ -736,9 +737,6 @@ export function executeServerGameCommand(
     }
 
     case "ROLL_DICE": {
-      if (state.activeSpecialEvent && !state.activeSpecialEvent.resolved) {
-        return { error: "กรุณาปิดเหตุการณ์พิเศษก่อนทอยลูกเต๋า" };
-      }
       if (state.rollQueue.length === 0) {
         return { error: "ไม่มีสิทธิ์ทอยลูกเต๋าในรอบนี้" };
       }
@@ -747,6 +745,18 @@ export function executeServerGameCommand(
       if (!isPlayerInQueue && !options.isTeacherAuthenticated) {
         return {
           error: "คุณยังไม่มีสิทธิ์ทอยลูกเต๋าในรอบนี้ (ต้องตอบคำถามให้ถูกต้องก่อน)",
+        };
+      }
+
+      // If a previous player's special event is still unresolved when the next roller rolls,
+      // auto-resolve it so the 2nd/next roller is never blocked from rolling & seeing their animation!
+      if (state.activeSpecialEvent && !state.activeSpecialEvent.resolved) {
+        room.state = {
+          ...state,
+          activeSpecialEvent: {
+            ...state.activeSpecialEvent,
+            resolved: true,
+          },
         };
       }
 
@@ -766,10 +776,15 @@ export function executeServerGameCommand(
         resolved: true,
       };
       const nextQueue = state.rollQueue;
+      const isQuestionStillOpen = Boolean(state.question && !state.question.revealed);
       room.state = {
         ...state,
         activeSpecialEvent: resolvedEvent,
-        gameStatus: nextQueue.length > 0 ? "dice" : "reveal",
+        gameStatus: isQuestionStillOpen
+          ? "answering"
+          : nextQueue.length > 0
+          ? "dice"
+          : "reveal",
         currentPlayerId: nextQueue[0] ?? null,
         lastEvent: `SYSTEM · ดำเนินการต่อหลังเหตุการณ์พิเศษ (${resolvedEvent.title})`,
         updatedAt: Date.now(),
@@ -864,15 +879,27 @@ function revealAnswersOnServer(room: ServerRoom): {
     return { room, publicState: toPublicGameState(room) };
   }
 
-  const correctPlayers = state.players
+  const unrolledCorrectIds = state.players
     .filter((p) => (p.answerState === "correct" || p.bonusNextTurn) && p.lastRoll === null)
-    .sort((a, b) => (a.answeredAt ?? Infinity) - (b.answeredAt ?? Infinity));
+    .sort((a, b) => (a.answeredAt ?? Infinity) - (b.answeredAt ?? Infinity))
+    .map((p) => p.id);
 
-  const queue = correctPlayers.map((p) => p.id);
+  // Preserve anyone already in rollQueue (e.g. bonus roll or not yet rolled) and append newly-correct unrolled players
+  const queue = Array.from(new Set([...state.rollQueue, ...unrolledCorrectIds]));
+
   const updatedPlayers = state.players.map((p) => ({
     ...p,
     bonusNextTurn: false,
   }));
+
+  // If another player is now in queue to roll, auto-resolve any earlier player's special event so it doesn't block them
+  const resolvedSpecialEvent =
+    state.activeSpecialEvent &&
+    !state.activeSpecialEvent.resolved &&
+    queue.length > 0 &&
+    state.activeSpecialEvent.playerId !== queue[0]
+      ? { ...state.activeSpecialEvent, resolved: true }
+      : state.activeSpecialEvent;
 
   room.state = {
     ...state,
@@ -882,9 +909,10 @@ function revealAnswersOnServer(room: ServerRoom): {
     players: updatedPlayers,
     leaderboard: computeLeaderboard(updatedPlayers),
     rollQueue: queue,
+    activeSpecialEvent: resolvedSpecialEvent,
     lastEvent:
       queue.length > 0
-        ? `SYSTEM · เฉลยคำตอบ! มีผู้เล่นตอบถูก ${queue.length} คน ได้สิทธิ์ทอยลูกเต๋า`
+        ? `SYSTEM · เฉลยคำตอบ! มีผู้เล่นรอทอยลูกเต๋า ${queue.length} คน`
         : "SYSTEM · เฉลยคำตอบแล้ว",
     updatedAt: Date.now(),
   };

@@ -100,21 +100,6 @@ export function createProductionTransport(
 
   let disposed = false;
 
-  if (channel) {
-    channel.onmessage = (event) => {
-      if (disposed) return;
-      if (event.data?.type === "STATE_SYNC" && event.data.state) {
-        const incoming = event.data.state as GameState;
-        if (incoming.updatedAt >= store.getState().updatedAt) {
-          store.replaceState({
-            ...incoming,
-            viewerPlayerId: options?.playerId ?? store.getState().viewerPlayerId,
-          });
-        }
-      }
-    };
-  }
-
   const fetchServerState = async () => {
     if (disposed || typeof window === "undefined") return;
     try {
@@ -136,6 +121,27 @@ export function createProductionTransport(
       // Keep current local state on transient network hiccup
     }
   };
+
+  if (channel) {
+    channel.onmessage = (event) => {
+      if (disposed) return;
+      if (event.data?.type === "STATE_SYNC" && event.data.state) {
+        const incoming = event.data.state as GameState;
+        // If this tab represents a specific student and the broadcast came from a different viewer,
+        // fetch our own viewer-scoped state so our personal answerState / correctOptionId is never masked!
+        if (options?.playerId && incoming.viewerPlayerId !== options.playerId) {
+          fetchServerState();
+          return;
+        }
+        if (incoming.updatedAt >= store.getState().updatedAt) {
+          store.replaceState({
+            ...incoming,
+            viewerPlayerId: options?.playerId ?? store.getState().viewerPlayerId,
+          });
+        }
+      }
+    };
+  }
 
   // Initial sync + periodic realtime poll fallback
   if (typeof window !== "undefined") {

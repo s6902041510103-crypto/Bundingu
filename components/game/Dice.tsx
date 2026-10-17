@@ -160,12 +160,6 @@ export function Dice({
 
   const faces = getCubeFaceNumbers(effectiveFrontValue);
 
-  // When rolling, spin rapidly across all 3 axes; when stopped, rest in an isometric 3D showcase pose
-  // where Front face (`effectiveFrontValue`), Top face, and Right face are all clearly visible in 3D!
-  const cubeTransform = rolling
-    ? `rotateX(${spinTick * 145 + 35}deg) rotateY(${spinTick * 195 - 45}deg) rotateZ(${spinTick * 65}deg)`
-    : "rotateX(-18deg) rotateY(-25deg) rotateZ(3deg)";
-
   return (
     <div
       className={cn(
@@ -189,15 +183,24 @@ export function Dice({
       {/* Soft 3D Floor Drop Shadow */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -bottom-4 w-[85%] h-6 rounded-full bg-[#040d26]/65 blur-md"
+        className={cn(
+          "pointer-events-none absolute -bottom-4 w-[85%] h-6 rounded-full bg-[#040d26]/65 blur-md transition-transform duration-300",
+          rolling && "scale-75 opacity-60",
+        )}
       />
 
       {/* True 6-Sided 3D Cube Container */}
       <div
-        className="relative w-full h-full transition-transform duration-150 ease-out"
+        key={rolling ? "rolling-cube" : `landed-cube-${effectiveFrontValue}`}
+        className={cn(
+          "relative w-full h-full",
+          rolling ? "animate-dice-3d-tumble" : "animate-dice-3d-land",
+        )}
         style={{
           transformStyle: "preserve-3d",
-          transform: cubeTransform,
+          transform: rolling
+            ? undefined
+            : "rotateX(-18deg) rotateY(-25deg) rotateZ(3deg)",
         }}
       >
         {/* Inner solid core blocks to fill rounded corner seams in 3D */}

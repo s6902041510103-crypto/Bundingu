@@ -49,12 +49,19 @@ export default function StudentLobbyPage() {
   useEffect(() => {
     let playerId: string | null = null;
     try {
-      const saved =
-        sessionStorage.getItem(`ks-room-${pin}`) ||
-        sessionStorage.getItem("ks-player");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.playerId) playerId = parsed.playerId;
+      if (typeof window !== "undefined") {
+        const urlParams = new URLSearchParams(window.location.search);
+        const queryPid = urlParams.get("playerId");
+        if (queryPid) playerId = queryPid;
+      }
+      if (!playerId) {
+        const saved =
+          sessionStorage.getItem(`ks-room-${pin}`) ||
+          sessionStorage.getItem("ks-player");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.playerId) playerId = parsed.playerId;
+        }
       }
     } catch {
       // ignore
@@ -71,7 +78,8 @@ export default function StudentLobbyPage() {
     const unsubscribe = transport.subscribe((newState) => {
       setState(newState);
       if (newState.gameStatus !== "lobby") {
-        router.push(`/game/${pin}/play`);
+        const query = playerId ? `?playerId=${encodeURIComponent(playerId)}` : "";
+        router.push(`/game/${pin}/play${query}`);
       }
     });
 

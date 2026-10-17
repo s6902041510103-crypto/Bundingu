@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { buildBoardCells } from "@/lib/board";
+import { buildBoardCells, walkPath, FINISH_AT } from "@/lib/board";
 import { SNAKES, LADDERS, SPECIAL_CELLS } from "@/lib/game-data";
 import type { BoardCell, Player } from "@/lib/types";
 import { BoardCellComponent, SnakeOverlay, LadderOverlay } from "./BoardCell";
@@ -28,17 +28,99 @@ export function GameBoard({
   mode = "game",
   className,
 }: GameBoardProps) {
-  // Group players by board square (1..100)
+  const [animatedPositions, setAnimatedPositions] = useState<Record<string, number>>({});
+  const [steppingPlayerIds, setSteppingPlayerIds] = useState<Record<string, boolean>>({});
+  const lastTargetPositionsRef = useRef<Record<string, number>>({});
+  const activeTimersRef = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    const timers = activeTimersRef.current;
+    return () => {
+      Object.values(timers).forEach((t) => window.clearInterval(t));
+    };
+  }, []);
+
+  useEffect(() => {
+    players.forEach((player) => {
+      const targetPos = Math.max(1, Math.min(100, player.position || 1));
+      const prevTarget = lastTargetPositionsRef.current[player.id];
+
+      // First time seeing this player or reset back to 1
+      if (prevTarget === undefined || (targetPos === 1 && prevTarget > 1)) {
+        lastTargetPositionsRef.current[player.id] = targetPos;
+        setAnimatedPositions((prev) => ({ ...prev, [player.id]: targetPos }));
+        return;
+      }
+
+      if (targetPos !== prevTarget) {
+        lastTargetPositionsRef.current[player.id] = targetPos;
+
+        // Build step-by-step path for this player
+        let steps: number[] = [];
+        if (
+          player.id === movingPlayerId &&
+          movementPath &&
+          movementPath.length > 0 &&
+          movementPath[movementPath.length - 1] === targetPos
+        ) {
+          steps = movementPath;
+        } else if (targetPos > prevTarget && targetPos - prevTarget <= 12) {
+          steps = walkPath(prevTarget, targetPos - prevTarget, FINISH_AT);
+        } else {
+          steps = [targetPos];
+        }
+
+        if (activeTimersRef.current[player.id]) {
+          window.clearInterval(activeTimersRef.current[player.id]);
+        }
+
+        let stepIdx = 0;
+        setSteppingPlayerIds((prev) => ({ ...prev, [player.id]: true }));
+        setAnimatedPositions((prev) => ({
+          ...prev,
+          [player.id]: steps[0] ?? targetPos,
+        }));
+
+        if (steps.length <= 1) {
+          window.setTimeout(() => {
+            setSteppingPlayerIds((prev) => ({ ...prev, [player.id]: false }));
+          }, 450);
+          return;
+        }
+
+        const intervalId = window.setInterval(() => {
+          stepIdx += 1;
+          if (stepIdx >= steps.length) {
+            window.clearInterval(intervalId);
+            delete activeTimersRef.current[player.id];
+            setAnimatedPositions((prev) => ({ ...prev, [player.id]: targetPos }));
+            setSteppingPlayerIds((prev) => ({ ...prev, [player.id]: false }));
+            return;
+          }
+          const nextSquare = steps[stepIdx] ?? targetPos;
+          setAnimatedPositions((prev) => ({ ...prev, [player.id]: nextSquare }));
+        }, 210);
+
+        activeTimersRef.current[player.id] = intervalId;
+      }
+    });
+  }, [players, movingPlayerId, movementPath]);
+
+  // Group players by board square (1..100) using their animated step position
   const playersByCell = useMemo(() => {
     const map = new Map<number, Array<{ id: string; avatarId: string; name: string }>>();
     players.forEach((player) => {
-      const pos = Math.max(1, Math.min(100, player.position || 1));
+      const rawPos = animatedPositions[player.id] ?? player.position ?? 1;
+      const pos = Math.max(1, Math.min(100, rawPos));
       const existing = map.get(pos) || [];
       existing.push({ id: player.id, avatarId: player.avatarId, name: player.name });
       map.set(pos, existing);
     });
     return map;
-  }, [players]);
+  }, [players, animatedPositions]);
+
+  const effectiveMovingPlayerId =
+    Object.keys(steppingPlayerIds).find((id) => steppingPlayerIds[id]) ?? movingPlayerId;
 
   // Keep visual row order (top row 9 down to bottom row 0) and left-to-right column order (0 to 9).
   // `buildBoardCells` already assigns boustrophedon numbers (1..10, 20..11, ..., 100..91) per (row, col).
@@ -72,7 +154,7 @@ export function GameBoard({
               cell={cell}
               playersOnCell={playersByCell.get(cell.number) || []}
               currentPlayerId={currentPlayerId}
-              movingPlayerId={movingPlayerId}
+              movingPlayerId={effectiveMovingPlayerId}
               highlightCell={highlightCell}
               mode={mode}
             />

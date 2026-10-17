@@ -33,6 +33,7 @@ export default function StudentGameplayPage() {
 
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [rollingAnim, setRollingAnim] = useState(false);
+  const [remoteDiceSpin, setRemoteDiceSpin] = useState(false);
   const [diceOverlayOpen, setDiceOverlayOpen] = useState(false);
   const [rolledResultValue, setRolledResultValue] = useState<number | null>(null);
   const [rollFromPos, setRollFromPos] = useState<number | null>(null);
@@ -55,25 +56,40 @@ export default function StudentGameplayPage() {
   );
 
   const transportRef = useRef<GameStateTransport | null>(null);
+  const localRollInProgressRef = useRef(false);
+  const lastProcessedMoveKeyRef = useRef<string>("");
 
+  // 1. Resolve viewerId from URL ?playerId=... first (for multi-tab isolation), then sessionStorage
   useEffect(() => {
     let playerId: string | null = null;
     try {
-      const saved =
-        sessionStorage.getItem(`ks-room-${pin}`) ||
-        sessionStorage.getItem("ks-player");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.playerId) playerId = parsed.playerId;
+      if (typeof window !== "undefined") {
+        const urlParams = new URLSearchParams(window.location.search);
+        const queryPid = urlParams.get("playerId");
+        if (queryPid) playerId = queryPid;
+      }
+      if (!playerId) {
+        const saved =
+          sessionStorage.getItem(`ks-room-${pin}`) ||
+          sessionStorage.getItem("ks-player");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.playerId) playerId = parsed.playerId;
+        }
       }
     } catch {
       // ignore
     }
-    setViewerId(playerId);
+    if (playerId) {
+      setViewerId(playerId);
+    }
+  }, [pin]);
 
+  // 2. Connect realtime transport scoped to viewerId
+  useEffect(() => {
     const transport = createProductionTransport(pin, state, {
-      playerId,
-      pollIntervalMs: 1000,
+      playerId: viewerId,
+      pollIntervalMs: 900,
     });
     transportRef.current = transport;
 
@@ -85,7 +101,7 @@ export default function StudentGameplayPage() {
       unsubscribe();
       transport.destroy?.();
     };
-  }, [pin]);
+  }, [pin, viewerId]);
 
   const [quickJoinName, setQuickJoinName] = useState("");
   const [quickJoining, setQuickJoining] = useState(false);
@@ -94,14 +110,68 @@ export default function StudentGameplayPage() {
     (viewerId ? state.players.find((p) => p.id === viewerId) : null) ?? null;
 
   const activeViewerId = viewerPlayer?.id ?? null;
+
+  // Never block a player in rollQueue from rolling because of another player's activeSpecialEvent!
   const isMyTurnToRoll =
-    Boolean(activeViewerId) &&
-    state.rollQueue.includes(activeViewerId!) &&
-    !(state.activeSpecialEvent && !state.activeSpecialEvent.resolved);
+    Boolean(activeViewerId) && state.rollQueue.includes(activeViewerId!);
 
   const myQueuePosition = activeViewerId
     ? state.rollQueue.indexOf(activeViewerId) + 1
     : 0;
+
+  // 3. Watch for server-side dice rolls (e.g., if Teacher clicked "ทอยให้" or another player rolled)
+  useEffect(() => {
+    if (!state.movement || !state.dice.rolledBy || state.dice.value === null) {
+      return;
+    }
+    const moveKey = `${state.round}-${state.movement.playerId}-${state.movement.from}-${state.movement.to}-${state.dice.value}`;
+    if (lastProcessedMoveKeyRef.current === moveKey) {
+      return;
+    }
+    lastProcessedMoveKeyRef.current = moveKey;
+
+    // If this roll was for the current viewer and wasn't initiated locally by handleRollDice (e.g. Teacher clicked "ทอยให้"),
+    // play the full-screen 3D Dice Roll Overlay animation for this student!
+    if (
+      activeViewerId &&
+      state.dice.rolledBy === activeViewerId &&
+      !localRollInProgressRef.current &&
+      !diceOverlayOpen
+    ) {
+      const rolledVal = state.dice.value;
+      const fromSq = state.movement.from;
+      const toSq = state.movement.to;
+      const summary = state.dice.lastReason ?? null;
+
+      setRollFromPos(fromSq);
+      setRollToPos(toSq);
+      setRolledResultValue(null);
+      setRollSummaryText(summary);
+      setDiceOverlayOpen(true);
+      setRollingAnim(true);
+
+      window.setTimeout(() => {
+        setRollingAnim(false);
+        setRolledResultValue(rolledVal);
+      }, 850);
+      return;
+    }
+
+    // If another player rolled, spin the panel 3D dice briefly so everyone sees the roll action
+    if (state.dice.rolledBy !== activeViewerId) {
+      setRemoteDiceSpin(true);
+      const t = window.setTimeout(() => setRemoteDiceSpin(false), 700);
+      return () => window.clearTimeout(t);
+    }
+  }, [
+    state.round,
+    state.movement,
+    state.dice.rolledBy,
+    state.dice.value,
+    state.dice.lastReason,
+    activeViewerId,
+    diceOverlayOpen,
+  ]);
 
   const handleQuickJoin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,6 +256,7 @@ export default function StudentGameplayPage() {
   const handleRollDice = async () => {
     if (!activeViewerId || !transportRef.current?.sendCommand || rollingAnim) return;
     const prevPos = viewerPlayer?.position ?? 1;
+    localRollInProgressRef.current = true;
     setRollFromPos(prevPos);
     setRollToPos(null);
     setRolledResultValue(null);
@@ -193,27 +264,38 @@ export default function StudentGameplayPage() {
     setDiceOverlayOpen(true);
     setRollingAnim(true);
 
-    setTimeout(async () => {
-      const res = await transportRef.current?.sendCommand?.({
-        type: "ROLL_DICE",
-        playerId: activeViewerId,
-      });
+    const startTime = Date.now();
+    const res = await transportRef.current.sendCommand({
+      type: "ROLL_DICE",
+      playerId: activeViewerId,
+    });
+
+    const elapsed = Date.now() - startTime;
+    const remainingSpinMs = Math.max(250, 900 - elapsed);
+
+    window.setTimeout(() => {
       setRollingAnim(false);
-      if (res && !res.ok && res.error) {
+      localRollInProgressRef.current = false;
+
+      if (!res.ok && res.error) {
         setDiceOverlayOpen(false);
         addToast({
           title: "ทอยลูกเต๋าไม่สำเร็จ",
           description: res.error,
           variant: "warning",
         });
-      } else if (res?.state) {
-        const rolledVal = res.state.dice.value ?? 1;
+      } else if (res.state) {
         const updatedMe = res.state.players.find((p) => p.id === activeViewerId);
+        const rolledVal = updatedMe?.lastRoll ?? res.state.dice.value ?? 1;
+        const nextPos = updatedMe?.position ?? res.state.movement?.to ?? prevPos;
+        const moveKey = `${res.state.round}-${activeViewerId}-${prevPos}-${nextPos}-${rolledVal}`;
+        lastProcessedMoveKeyRef.current = moveKey;
+
         setRolledResultValue(rolledVal);
-        setRollToPos(updatedMe?.position ?? res.state.movement?.to ?? null);
+        setRollToPos(nextPos);
         setRollSummaryText(res.state.dice.lastReason ?? null);
       }
-    }, 900);
+    }, remainingSpinMs);
   };
 
   const handleResolveSpecialEvent = async () => {
@@ -223,6 +305,15 @@ export default function StudentGameplayPage() {
       playerId: activeViewerId ?? undefined,
     });
   };
+
+  // Hold the rolling viewer's board token at `rollFromPos` while `diceOverlayOpen` is open,
+  // so as soon as they click "ดูการเดินบนกระดาน →", they see their Avatar walk step-by-step on the board!
+  const boardPlayers =
+    diceOverlayOpen && activeViewerId && rollFromPos !== null
+      ? state.players.map((p) =>
+          p.id === activeViewerId ? { ...p, position: rollFromPos } : p,
+        )
+      : state.players;
 
   const timeLeftFormatted = state.question
     ? `00:${String(state.question.timeLeft).padStart(2, "0")}`
@@ -282,7 +373,7 @@ export default function StudentGameplayPage() {
           {/* TOP on Mobile / LEFT on Desktop: 10x10 Game Board + Player Strip */}
           <div className="lg:col-span-7 flex flex-col gap-3 w-full">
             <GameBoardWrapper
-              players={state.players}
+              players={boardPlayers}
               currentPlayerId={state.currentPlayerId ?? activeViewerId}
               movingPlayerId={state.movingPlayerId}
               movementPath={state.movement?.path}
@@ -429,17 +520,28 @@ export default function StudentGameplayPage() {
                   </div>
                 </div>
 
-                {/* 3D-styled Animated Dice */}
-                <div className="flex flex-col items-center gap-1.5 shrink-0">
+                {/* 3D-styled Animated Dice (Clickable when it's your turn!) */}
+                <button
+                  type="button"
+                  disabled={!isMyTurnToRoll || rollingAnim}
+                  onClick={handleRollDice}
+                  className="flex flex-col items-center gap-1.5 shrink-0 disabled:cursor-default cursor-pointer group"
+                  title={isMyTurnToRoll ? "กดเพื่อทอยลูกเต๋า" : "ลูกเต๋า 3 มิติ"}
+                >
                   <Dice
-                    value={state.dice.value}
-                    rolling={rollingAnim || state.dice.rolling}
+                    value={viewerPlayer?.lastRoll ?? state.dice.value}
+                    rolling={rollingAnim || remoteDiceSpin || state.dice.rolling}
                     size="md"
+                    className={
+                      isMyTurnToRoll && !rollingAnim
+                        ? "group-hover:scale-105 transition-transform"
+                        : undefined
+                    }
                   />
                   <span className="font-mono text-xs text-blue-200">
                     รอทอย: {timeLeftFormatted}
                   </span>
-                </div>
+                </button>
               </div>
             </div>
           </div>
@@ -461,12 +563,13 @@ export default function StudentGameplayPage() {
         onClose={() => setDiceOverlayOpen(false)}
       />
 
-      {/* Special Event Modal (Snake / Ladder / Star / Gift / Boost) */}
+      {/* Special Event Modal (Snake / Ladder / Star / Gift / Boost) — only pops up for the player who landed on it */}
       <Modal
         isOpen={Boolean(
           !diceOverlayOpen &&
             state.activeSpecialEvent &&
-            !state.activeSpecialEvent.resolved,
+            !state.activeSpecialEvent.resolved &&
+            (!activeViewerId || state.activeSpecialEvent.playerId === activeViewerId),
         )}
         onClose={handleResolveSpecialEvent}
         title="เหตุการณ์พิเศษบนกระดาน!"
