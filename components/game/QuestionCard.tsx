@@ -3,8 +3,9 @@
 import React, { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import type { ActiveQuestion, QuestionOption } from "@/lib/types";
-import { AlertCircle, Clock, CheckCircle, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle, XCircle, Send } from "lucide-react";
 
 interface AnswerOptionProps {
   option: QuestionOption;
@@ -14,7 +15,6 @@ interface AnswerOptionProps {
   isRevealed: boolean;
   disabled: boolean;
   onSelect: (optionId: string) => void;
-  keyboardShortcut?: string;
   className?: string;
 }
 
@@ -26,31 +26,27 @@ export function AnswerOption({
   isRevealed,
   disabled,
   onSelect,
-  keyboardShortcut,
   className,
 }: AnswerOptionProps) {
   const isWrong = isRevealed && isSelected && !isCorrect;
-  const isCorrectAnswer = isRevealed && isCorrect;
+  const isCorrectAnswer = isRevealed && Boolean(isCorrect);
   const isJustSelected = isSelected && !isRevealed;
-
-  const baseStyles =
-    "relative flex items-center justify-between w-full p-4 rounded-xl border-2 transition-all duration-200 " +
-    "font-body text-base select-none";
+  const letter = String.fromCharCode(65 + index);
 
   const getVariantClasses = () => {
     if (isCorrectAnswer) {
-      return "bg-emerald-500/15 border-emerald-500/50 text-emerald-300 shadow-lg shadow-emerald-500/10";
+      return "bg-emerald-50 border-emerald-500 text-emerald-950 shadow-sm ring-2 ring-emerald-500/20";
     }
     if (isWrong) {
-      return "bg-red-500/15 border-red-500/50 text-red-300 shadow-lg shadow-red-500/10";
+      return "bg-red-50 border-red-500 text-red-950 shadow-sm";
     }
     if (isJustSelected) {
-      return "bg-sky-500/15 border-sky-500/50 text-sky-300 shadow-lg shadow-sky-500/10";
+      return "bg-blue-50 border-blue-600 text-blue-950 shadow-sm ring-2 ring-blue-500/25";
     }
     if (isRevealed && !isSelected) {
-      return "bg-slate-800/50 border-slate-700 text-slate-400 opacity-70";
+      return "bg-slate-50 border-slate-200 text-slate-400 opacity-75";
     }
-    return "bg-slate-800/50 border-slate-700 hover:border-sky-500/50 hover:bg-sky-500/5 text-slate-100";
+    return "bg-white border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 text-slate-800";
   };
 
   return (
@@ -58,53 +54,39 @@ export function AnswerOption({
       type="button"
       onClick={() => !disabled && onSelect(option.id)}
       disabled={disabled}
-      className={cn(baseStyles, getVariantClasses(), className)}
+      className={cn(
+        "relative flex items-center justify-between w-full px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-xl border-2 transition-all duration-150 font-body text-left text-sm sm:text-base select-none cursor-pointer disabled:cursor-default",
+        getVariantClasses(),
+        className,
+      )}
       aria-pressed={isSelected}
       aria-disabled={disabled}
-      aria-label={`ตัวเลือก ${String.fromCharCode(65 + index)}: ${option.text}`}
     >
       <span className="flex items-center gap-3 min-w-0">
         <span
           className={cn(
-            "flex items-center justify-center font-display font-bold rounded-full border-2 flex-shrink-0 transition-all duration-200",
+            "flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 font-display font-bold rounded-full text-xs sm:text-sm shrink-0 transition-colors",
             isCorrectAnswer
-              ? "bg-emerald-500 border-emerald-500 text-white"
+              ? "bg-emerald-600 text-white"
               : isWrong
-              ? "bg-red-500 border-red-500 text-white"
+              ? "bg-red-600 text-white"
               : isJustSelected
-              ? "bg-sky-500 border-sky-500 text-white"
-              : "bg-slate-700 border-slate-600 text-slate-300",
-            keyboardShortcut && "w-10 h-10 text-lg",
-            !keyboardShortcut && "w-8 h-8 text-sm",
+              ? "bg-blue-600 text-white"
+              : "bg-slate-100 text-slate-700 border border-slate-300",
           )}
         >
-          {String.fromCharCode(65 + index)}
+          {letter}
         </span>
-        <span className="truncate pr-2">{option.text}</span>
+        <span className="font-medium leading-snug break-words">{option.text}</span>
       </span>
 
-      {keyboardShortcut && !isRevealed && !disabled && (
-        <kbd className="flex-shrink-0 ml-3 px-2 py-1 text-xs bg-slate-700 rounded text-slate-400 font-mono">
-          {keyboardShortcut}
-        </kbd>
-      )}
-
       {isRevealed && (
-        <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
+        <div className="flex items-center gap-1 shrink-0 ml-2">
           {isCorrectAnswer && (
-            <CheckCircle className="w-5 h-5 text-emerald-400" aria-label="ถูกต้อง" />
+            <CheckCircle className="w-5 h-5 text-emerald-600" aria-label="ถูกต้อง" />
           )}
-          {isWrong && (
-            <XCircle className="w-5 h-5 text-red-400" aria-label="ผิด" />
-          )}
-          {!isSelected && isCorrect && (
-            <CheckCircle className="w-5 h-5 text-emerald-400/50" aria-label="คำตอบที่ถูกต้อง" />
-          )}
+          {isWrong && <XCircle className="w-5 h-5 text-red-600" aria-label="ผิด" />}
         </div>
-      )}
-
-      {isJustSelected && !isRevealed && (
-        <div className="absolute inset-0 rounded-xl bg-sky-500/10 animate-pulse-soft pointer-events-none" aria-hidden="true" />
       )}
     </button>
   );
@@ -115,7 +97,8 @@ interface QuestionCardProps {
   onAnswer?: (optionId: string) => void;
   viewerAnswerState?: "idle" | "selected" | "correct" | "wrong";
   viewerSelectedOptionId?: string | null;
-  showKeyboardShortcuts?: boolean;
+  readOnly?: boolean;
+  requireConfirmButton?: boolean;
   className?: string;
 }
 
@@ -124,180 +107,171 @@ export function QuestionCard({
   onAnswer,
   viewerAnswerState = "idle",
   viewerSelectedOptionId,
-  showKeyboardShortcuts = true,
+  readOnly = false,
+  requireConfirmButton = true,
   className,
 }: QuestionCardProps) {
-  const [timeLeft, setTimeLeft] = useState(question?.timeLeft ?? 0);
-  const [progress, setProgress] = useState(1);
+  const [draftOptionId, setDraftOptionId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!question) return;
-    setTimeLeft(question.timeLeft);
-    setProgress(question.timeLeft / question.timeLimit);
-  }, [question]);
-
-  useEffect(() => {
-    if (!question || question.revealed || timeLeft <= 0) return;
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        const next = Math.max(0, prev - 1);
-        setProgress(next / question.timeLimit);
-        return next;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [question, timeLeft]);
+    setDraftOptionId(null);
+  }, [question?.id, question?.number]);
 
   if (!question) {
     return (
-      <div className={cn("p-6 rounded-2xl bg-slate-800/50 border border-slate-700 text-center", className)}>
-        <div className="text-slate-400">รอคำถาม...</div>
+      <div
+        className={cn(
+          "p-6 rounded-2xl bg-white border border-slate-200 text-center shadow-md",
+          className,
+        )}
+      >
+        <p className="font-display font-semibold text-slate-700">รอครูเริ่มคำถามข้อถัดไป...</p>
+        <p className="text-xs text-slate-500 mt-1">เตรียมตัวให้พร้อมบนกระดาน!</p>
       </div>
     );
   }
 
-  const isAnswered = viewerAnswerState !== "idle";
-  const isRevealed = question.revealed;
-  const disabled = isAnswered || isRevealed;
+  const isSubmitted = viewerAnswerState !== "idle" || Boolean(viewerSelectedOptionId);
+  const isRevealed = Boolean(question.revealed);
+  const disabled = readOnly || isSubmitted || isRevealed;
+
+  const activeChoice = isSubmitted ? viewerSelectedOptionId : draftOptionId;
+
+  const handleOptionClick = (optId: string) => {
+    if (disabled) return;
+    if (requireConfirmButton) {
+      setDraftOptionId(optId);
+    } else {
+      onAnswer?.(optId);
+    }
+  };
+
+  const handleConfirmSubmit = () => {
+    if (!draftOptionId || disabled) return;
+    onAnswer?.(draftOptionId);
+  };
 
   return (
-    <div className={cn("space-y-4", className)}>
+    <div
+      className={cn(
+        "p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 text-slate-900 shadow-lg space-y-3.5",
+        className,
+      )}
+    >
       {/* Question Header */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Badge variant="gold" size="sm">
-            ข้อ {question.number} / {question.total}
-          </Badge>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-display font-bold text-blue-700 text-sm sm:text-base">
+            คำถามข้อที่ {question.number}/{question.total}
+          </span>
           {question.subject && (
-            <Badge variant="info" size="sm">
+            <Badge variant="primary" size="sm">
               {question.subject}
             </Badge>
           )}
         </div>
-        <Countdown timeLeft={timeLeft} timeLimit={question.timeLimit} progress={progress} isRevealed={isRevealed} />
+        {isRevealed ? (
+          <Badge variant="success" size="sm">
+            เฉลยแล้ว
+          </Badge>
+        ) : (
+          <Badge
+            variant={question.timeLeft <= 5 ? "danger" : "warning"}
+            size="sm"
+          >
+            ⏱ {question.timeLeft} วินาที
+          </Badge>
+        )}
       </div>
 
-      {/* Question Text */}
-      <div className="p-5 rounded-xl bg-slate-800/50 border border-slate-700">
-        <p className="font-display text-lg font-medium text-white leading-relaxed">{question.prompt}</p>
+      {/* Prompt */}
+      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
+        <p className="font-display font-bold text-slate-900 text-base sm:text-lg leading-snug">
+          {question.prompt}
+        </p>
         {question.hint && (
-          <p className="mt-2 text-sm text-slate-400 flex items-center gap-1.5">
-            <AlertCircle className="w-4 h-4" />
+          <p className="mt-1.5 text-xs text-slate-500 flex items-center gap-1">
+            <AlertCircle className="w-3.5 h-3.5" />
             <span>คำใบ้: {question.hint}</span>
           </p>
         )}
       </div>
 
-      {/* Options Grid */}
-      <div
-        className="grid gap-3"
-        style={{ gridTemplateColumns: "repeat(2, 1fr)" }}
-        role="group"
-        aria-label="ตัวเลือกคำตอบ"
-      >
+      {/* 4 Options */}
+      <div className="space-y-2" role="group" aria-label="ตัวเลือกคำตอบ 4 ข้อ">
         {question.options.map((option, index) => (
           <AnswerOption
             key={option.id}
             option={option}
             index={index}
-            isSelected={viewerSelectedOptionId === option.id}
-            isCorrect={option.id === question.correctOptionId}
+            isSelected={activeChoice === option.id}
+            isCorrect={
+              isRevealed &&
+              Boolean(question.correctOptionId) &&
+              option.id === question.correctOptionId
+            }
             isRevealed={isRevealed}
             disabled={disabled}
-            onSelect={onAnswer ?? (() => {})}
-            keyboardShortcut={showKeyboardShortcuts ? String.fromCharCode(65 + index) : undefined}
+            onSelect={handleOptionClick}
           />
         ))}
       </div>
 
-      {/* Explanation after reveal */}
-      {isRevealed && question.explanation && (
-        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 animate-fade-in">
-          <div className="flex items-start gap-2">
-            <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium text-emerald-300">คำอธิบาย</p>
-              <p className="text-sm text-slate-300 mt-1">{question.explanation}</p>
+      {/* Submit Button / Answer Status for Student */}
+      {!readOnly && !isRevealed && (
+        <div className="pt-1">
+          {!isSubmitted ? (
+            requireConfirmButton && (
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                fullWidth
+                disabled={!draftOptionId}
+                onClick={handleConfirmSubmit}
+                iconLeft={<Send className="w-4 h-4" />}
+              >
+                ส่งคำตอบ
+              </Button>
+            )
+          ) : (
+            <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-center text-blue-800 text-sm font-display font-semibold">
+              ✓ ส่งคำตอบเรียบร้อยแล้ว รอครูเฉลยคำตอบ...
             </div>
-          </div>
+          )}
         </div>
       )}
-    </div>
-  );
-}
 
-interface CountdownProps {
-  timeLeft: number;
-  timeLimit: number;
-  progress: number;
-  isRevealed: boolean;
-}
+      {/* Post-Reveal Feedback & Explanation */}
+      {isRevealed && (
+        <div className="space-y-2 pt-1 animate-fade-in">
+          {!readOnly && (
+            <div
+              className={cn(
+                "p-2.5 rounded-xl text-sm font-display font-bold text-center border",
+                viewerAnswerState === "correct"
+                  ? "bg-emerald-50 border-emerald-300 text-emerald-800"
+                  : viewerAnswerState === "wrong"
+                  ? "bg-red-50 border-red-300 text-red-800"
+                  : "bg-slate-100 border-slate-200 text-slate-700",
+              )}
+            >
+              {viewerAnswerState === "correct"
+                ? "🎉 ตอบถูกต้อง! คุณได้รับสิทธิ์เข้าคิวทอยลูกเต๋า"
+                : viewerAnswerState === "wrong"
+                ? "❌ ตอบไม่ถูกต้อง รอแก้มือในข้อถัดไปนะ!"
+                : "⏰ หมดเวลาตอบสำหรับข้อนี้"}
+            </div>
+          )}
 
-function Countdown({ timeLeft, timeLimit, progress, isRevealed }: CountdownProps) {
-  const isWarning = timeLeft <= 5 && timeLeft > 0 && !isRevealed;
-  const isCritical = timeLeft <= 3 && timeLeft > 0 && !isRevealed;
-
-  return (
-    <div className="flex items-center gap-3 flex-shrink-0" role="timer" aria-live={isWarning ? "assertive" : "polite"}>
-      <div className="relative w-12 h-12 flex-shrink-0">
-        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-          <circle
-            cx="50"
-            cy="50"
-            r="45"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="8"
-            className="text-slate-700"
-          />
-          <circle
-            cx="50"
-            cy="50"
-            r="45"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="8"
-            strokeLinecap="round"
-            strokeDasharray={283}
-            strokeDashoffset={283 * (1 - progress)}
-            className={cn(
-              "transition-all duration-300",
-              isCritical ? "text-red-500" : isWarning ? "text-amber-500" : "text-sky-500",
-            )}
-            style={{ filter: isCritical ? "drop-shadow(0 0 4px currentColor)" : "none" }}
-          />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span
-            className={cn(
-              "font-display font-bold tabular-nums transition-colors duration-200",
-              isCritical ? "text-red-400 animate-pulse-soft" : isWarning ? "text-amber-400" : "text-white",
-            )}
-          >
-            {timeLeft}
-          </span>
+          {question.explanation && (
+            <div className="p-3 rounded-xl bg-emerald-50/80 border border-emerald-200 text-xs sm:text-sm text-emerald-950">
+              <span className="font-display font-bold text-emerald-800">คำอธิบาย: </span>
+              {question.explanation}
+            </div>
+          )}
         </div>
-      </div>
-      <div className="hidden sm:block text-right">
-        <div className="text-xs text-slate-500 font-mono">
-          {timeLeft}s / {timeLimit}s
-        </div>
-        <div
-          className="w-24 h-1.5 bg-slate-700 rounded-full overflow-hidden mt-1"
-          role="progressbar"
-          aria-valuenow={Math.round(progress * 100)}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        >
-          <div
-            className={cn(
-              "h-full rounded-full transition-all duration-300 ease-out",
-              isCritical ? "bg-red-500" : isWarning ? "bg-amber-500" : "bg-sky-500",
-            )}
-            style={{ width: `${progress * 100}%` }}
-          />
-        </div>
-      </div>
+      )}
     </div>
   );
 }

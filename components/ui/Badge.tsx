@@ -3,35 +3,54 @@
 import React, { forwardRef } from "react";
 import { cn } from "@/lib/utils";
 
-interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  variant?: "default" | "primary" | "success" | "warning" | "danger" | "info" | "gold";
+export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
+  variant?:
+    | "default"
+    | "primary"
+    | "success"
+    | "warning"
+    | "danger"
+    | "info"
+    | "gold"
+    | "dark";
   size?: "sm" | "md" | "lg";
   dot?: boolean;
 }
 
 const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
   ({ className, variant = "default", size = "md", dot, children, ...props }, ref) => {
-    const baseStyles = "inline-flex items-center gap-1.5 font-medium rounded-full border";
+    const baseStyles =
+      "inline-flex items-center gap-1.5 font-display font-medium rounded-full border";
 
     const variants = {
-      default: "bg-slate-700 text-slate-200 border-slate-600",
-      primary: "bg-blue-500/20 text-blue-300 border-blue-500/30",
-      success: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-      warning: "bg-amber-500/20 text-amber-300 border-amber-500/30",
-      danger: "bg-red-500/20 text-red-300 border-red-500/30",
-      info: "bg-sky-500/20 text-sky-300 border-sky-500/30",
-      gold: "bg-gradient-to-r from-amber-400 to-amber-600 text-slate-950 border-amber-400",
+      default: "bg-slate-100 text-slate-700 border-slate-200",
+      primary: "bg-blue-50 text-blue-700 border-blue-200",
+      success: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      warning: "bg-amber-50 text-amber-700 border-amber-200",
+      danger: "bg-red-50 text-red-700 border-red-200",
+      info: "bg-sky-50 text-sky-700 border-sky-200",
+      gold: "bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 border-amber-300 font-semibold",
+      dark: "bg-slate-800/90 text-slate-200 border-slate-700",
     };
 
     const sizes = {
-      sm: "px-2 py-0.5 text-xs",
-      md: "px-3 py-1 text-sm",
-      lg: "px-4 py-1.5 text-base",
+      sm: "px-2.5 py-0.5 text-xs",
+      md: "px-3 py-1 text-xs sm:text-sm",
+      lg: "px-4 py-1.5 text-sm sm:text-base",
     };
 
     return (
-      <span ref={ref} className={cn(baseStyles, variants[variant], sizes[size], className)} {...props}>
-        {dot && <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" aria-hidden="true" />}
+      <span
+        ref={ref}
+        className={cn(baseStyles, variants[variant], sizes[size], className)}
+        {...props}
+      >
+        {dot && (
+          <span
+            className="w-2 h-2 rounded-full bg-current opacity-90 shrink-0"
+            aria-hidden="true"
+          />
+        )}
         {children}
       </span>
     );
