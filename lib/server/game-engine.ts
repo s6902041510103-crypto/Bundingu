@@ -62,8 +62,24 @@ function ensureRoomsDir(): void {
 export function persistRoomToDisk(room: ServerRoom): void {
   try {
     ensureRoomsDir();
-    const filePath = path.join(ROOMS_DIR, `${room.pin.toUpperCase()}.json`);
-    fs.writeFileSync(filePath, JSON.stringify(room, null, 2), "utf-8");
+    const pin = room.pin.toUpperCase();
+    const filePath = path.join(ROOMS_DIR, `${pin}.json`);
+    const tempPath = path.join(
+      ROOMS_DIR,
+      `${pin}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`,
+    );
+    const content = JSON.stringify(room, null, 2);
+    fs.writeFileSync(tempPath, content, "utf-8");
+    try {
+      fs.renameSync(tempPath, filePath);
+    } catch {
+      try {
+        fs.copyFileSync(tempPath, filePath);
+      } catch {}
+      try {
+        fs.unlinkSync(tempPath);
+      } catch {}
+    }
   } catch {}
 }
 
@@ -71,12 +87,23 @@ export function loadRoomFromDisk(pin: string): ServerRoom | null {
   try {
     const normalized = pin.trim().toUpperCase();
     const filePath = path.join(ROOMS_DIR, `${normalized}.json`);
-    if (fs.existsSync(filePath)) {
-      const raw = fs.readFileSync(filePath, "utf-8");
-      const parsed = JSON.parse(raw) as ServerRoom;
-      if (parsed && parsed.pin && parsed.state) {
-        return parsed;
+    if (!fs.existsSync(filePath)) return null;
+
+    // Retry loop with brief delay in case Windows file handle is momentarily in transition
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const raw = fs.readFileSync(filePath, "utf-8");
+        if (raw && raw.trim().length > 0) {
+          const parsed = JSON.parse(raw) as ServerRoom;
+          if (parsed && parsed.pin && parsed.state) {
+            return parsed;
+          }
+        }
+      } catch {
+        // file lock or parse collision, wait briefly and retry
       }
+      const start = Date.now();
+      while (Date.now() - start < 15) {}
     }
   } catch {}
   return null;
@@ -87,7 +114,9 @@ export function deleteRoomFromDisk(pin: string): void {
     const normalized = pin.trim().toUpperCase();
     const filePath = path.join(ROOMS_DIR, `${normalized}.json`);
     if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+      try {
+        fs.unlinkSync(filePath);
+      } catch {}
     }
   } catch {}
 }
@@ -166,65 +195,79 @@ export function toPublicGameState(room: ServerRoom, viewerPlayerId?: string | nu
 
 function syncRoomToHistory(room: ServerRoom): void {
   persistRoomToDisk(room);
-  const { state } = room;
-  const lb = computeLeaderboard(state.players);
-  const winner = lb[0] ?? null;
-  const playerResults: PlayerReportRow[] = lb.map((entry) => {
-    const p = state.players.find((pl) => pl.id === entry.playerId);
-    const finishRank = p?.finishRank ?? null;
-    const finishBonus = finishRank ? (state.settings.finishBonuses[finishRank - 1] ?? 0) : 0;
-    const answered = p?.answeredCount ?? 0;
-    const correct = p?.correctCount ?? 0;
-    const wrong = p?.wrongCount ?? Math.max(0, answered - correct);
-    return {
-      rank: entry.rank,
-      playerId: entry.playerId,
-      name: entry.name,
-      avatarId: entry.avatarId,
-      score: entry.score,
-      position: entry.position,
-      isFinished: entry.isFinished,
-      finishRank,
-      finishBonus,
-      laddersClimbed: p?.laddersClimbed ?? 0,
-      snakesBitten: p?.snakesBitten ?? 0,
-      correctCount: correct,
-      wrongCount: wrong,
-      answeredCount: answered,
-      accuracyPercent: answered > 0 ? Math.round((correct / answered) * 100) : null,
+  try {
+    const { state } = room;
+    // Only write to heavy store.json on meaningful state milestones, avoiding disk thrashing
+    const isMajorMilestone =
+      state.gameStatus === "finished" ||
+      state.gameStatus === "lobby" ||
+      state.gameStatus === "reveal" ||
+      state.gameStatus === "question" ||
+      Boolean(state.movement && state.movement.step >= state.movement.path.length);
+
+    if (!isMajorMilestone) {
+      return;
+    }
+
+    const lb = computeLeaderboard(state.players);
+    const winner = lb[0] ?? null;
+    const playerResults: PlayerReportRow[] = lb.map((entry) => {
+      const p = state.players.find((pl) => pl.id === entry.playerId);
+      const finishRank = p?.finishRank ?? null;
+      const finishBonus = finishRank ? (state.settings.finishBonuses[finishRank - 1] ?? 0) : 0;
+      const answered = p?.answeredCount ?? 0;
+      const correct = p?.correctCount ?? 0;
+      const wrong = p?.wrongCount ?? Math.max(0, answered - correct);
+      return {
+        rank: entry.rank,
+        playerId: entry.playerId,
+        name: entry.name,
+        avatarId: entry.avatarId,
+        score: entry.score,
+        position: entry.position,
+        isFinished: entry.isFinished,
+        finishRank,
+        finishBonus,
+        laddersClimbed: p?.laddersClimbed ?? 0,
+        snakesBitten: p?.snakesBitten ?? 0,
+        correctCount: correct,
+        wrongCount: wrong,
+        answeredCount: answered,
+        accuracyPercent: answered > 0 ? Math.round((correct / answered) * 100) : null,
+      };
+    });
+
+    const record: GameHistoryRecord = {
+      id: state.game.id,
+      pin: room.pin,
+      teacherId: room.teacherId,
+      title: state.game.title,
+      subject: state.game.subject,
+      grade: state.game.grade,
+      hostName: state.game.hostName,
+      createdAt: state.game.createdAt ?? Date.now(),
+      finishedAt: state.gameStatus === "finished" ? Date.now() : null,
+      status:
+        state.gameStatus === "finished"
+          ? "completed"
+          : state.gameStatus === "lobby"
+          ? "lobby"
+          : "playing",
+      totalRounds: state.totalRounds,
+      roundsPlayed: state.round,
+      questionTimeLimit: state.settings.questionTimeLimit,
+      playersCount: state.players.length,
+      maxPlayers: state.settings.maxPlayers,
+      questionIds: room.questionsPool.map((q) => q.id),
+      enabledSpecials: normalizeSpecialsArray(state.enabledSpecials),
+      winnerName: winner?.name ?? null,
+      winnerAvatarId: winner?.avatarId ?? null,
+      winnerScore: winner?.score ?? null,
+      playerResults,
     };
-  });
 
-  const record: GameHistoryRecord = {
-    id: state.game.id,
-    pin: room.pin,
-    teacherId: room.teacherId,
-    title: state.game.title,
-    subject: state.game.subject,
-    grade: state.game.grade,
-    hostName: state.game.hostName,
-    createdAt: state.game.createdAt ?? Date.now(),
-    finishedAt: state.gameStatus === "finished" ? Date.now() : null,
-    status:
-      state.gameStatus === "finished"
-        ? "completed"
-        : state.gameStatus === "lobby"
-        ? "lobby"
-        : "playing",
-    totalRounds: state.totalRounds,
-    roundsPlayed: state.round,
-    questionTimeLimit: state.settings.questionTimeLimit,
-    playersCount: state.players.length,
-    maxPlayers: state.settings.maxPlayers,
-    questionIds: room.questionsPool.map((q) => q.id),
-    enabledSpecials: normalizeSpecialsArray(state.enabledSpecials),
-    winnerName: winner?.name ?? null,
-    winnerAvatarId: winner?.avatarId ?? null,
-    winnerScore: winner?.score ?? null,
-    playerResults,
-  };
-
-  upsertGameHistory(record);
+    upsertGameHistory(record);
+  } catch {}
 }
 
 const KEY_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -323,9 +366,8 @@ function getOrCreateDemoRoom(): ServerRoom {
 export function getServerRoom(pin: string): ServerRoom | null {
   const map = getRoomMap();
   const normalized = String(pin ?? "").trim().toUpperCase();
-  if (map.has(normalized)) {
-    return map.get(normalized) ?? null;
-  }
+  const inMemory = map.get(normalized) ?? null;
+
   if (normalized === "123456" || normalized === "482915") {
     return getServerRoom("KS4829");
   }
@@ -333,8 +375,15 @@ export function getServerRoom(pin: string): ServerRoom | null {
   // 1. Try restoring from persistent disk room snapshot (exact live state)
   const diskRoom = loadRoomFromDisk(normalized);
   if (diskRoom) {
-    map.set(normalized, diskRoom);
-    return diskRoom;
+    if (!inMemory || (diskRoom.state.updatedAt ?? 0) > (inMemory.state.updatedAt ?? 0)) {
+      map.set(normalized, diskRoom);
+      return diskRoom;
+    }
+  }
+
+  // If in-memory room exists and disk was not newer, always return in-memory!
+  if (inMemory) {
+    return inMemory;
   }
 
   // 2. Try restoring from saved game record in repository (fallback)

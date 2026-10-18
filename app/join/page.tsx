@@ -120,7 +120,7 @@ function JoinFormContent() {
         // ignore
       }
 
-      const res = await fetch(`/api/games/${encodeURIComponent(cleanPin)}/command`, {
+      let res = await fetch(`/api/games/${encodeURIComponent(cleanPin)}/command`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -131,7 +131,37 @@ function JoinFormContent() {
         }),
       });
 
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
+
+      if (!res.ok || data.error) {
+        // Fast retry after 200ms in case room snapshot was momentarily syncing
+        await new Promise((r) => setTimeout(r, 200));
+        try {
+          const retryRes = await fetch(`/api/games/${encodeURIComponent(cleanPin)}/command`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "JOIN_GAME",
+              nickname: cleanName,
+              avatarId,
+              playerId: existingPlayerId,
+            }),
+          });
+          const retryData = await retryRes.json();
+          if (retryRes.ok && !retryData.error) {
+            res = retryRes;
+            data = retryData;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       if (!res.ok || data.error) {
         setError(data.error || `ไม่พบห้องเกมคีย์ ${cleanPin}`);
         setIsJoining(false);

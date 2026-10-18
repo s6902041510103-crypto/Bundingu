@@ -172,13 +172,39 @@ export function createProductionTransport(
         }
       }
 
-      const res = await fetch(`/api/games/${encodeURIComponent(pin)}/command`, {
+      let res = await fetch(`/api/games/${encodeURIComponent(pin)}/command`, {
         method: "POST",
         credentials: "include",
         headers,
         body: JSON.stringify(command),
       });
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
+
+      // If transient "ไม่พบห้อง" or network glitch occurred, quickly retry once after 200ms
+      if (!res.ok || (typeof data.error === "string" && data.error.includes("ไม่พบห้อง"))) {
+        await new Promise((r) => setTimeout(r, 200));
+        try {
+          const retryRes = await fetch(`/api/games/${encodeURIComponent(pin)}/command`, {
+            method: "POST",
+            credentials: "include",
+            headers,
+            body: JSON.stringify(command),
+          });
+          const retryData = await retryRes.json();
+          if (retryRes.ok && !retryData.error) {
+            res = retryRes;
+            data = retryData;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       if (!res.ok || data.error) {
         return { ok: false, error: data.error || "คำสั่งไม่สำเร็จ" };
       }

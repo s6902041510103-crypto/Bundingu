@@ -172,39 +172,38 @@ export default function StudentGameplayPage() {
     if (!cleanName || !transportRef.current?.sendCommand) return;
     setQuickJoining(true);
     try {
-      const res = await fetch(`/api/games/${encodeURIComponent(pin)}/command`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "JOIN_GAME",
-          nickname: cleanName,
-          avatarId: "panda",
-        }),
+      const res = await transportRef.current.sendCommand({
+        type: "JOIN_GAME",
+        nickname: cleanName,
+        avatarId: "panda",
       });
-      const data = await res.json();
-      if (res.ok && data.joinedPlayer) {
-        const record = {
-          pin,
-          nickname: data.joinedPlayer.name,
-          avatarId: data.joinedPlayer.avatarId,
-          playerId: data.joinedPlayer.id,
-          joinedAt: Date.now(),
-        };
-        sessionStorage.setItem("ks-player", JSON.stringify(record));
-        sessionStorage.setItem(`ks-room-${pin}`, JSON.stringify(record));
-        setViewerId(data.joinedPlayer.id);
-        if (data.state) setState(data.state);
-        addToast({
-          title: `เข้าร่วมห้องในชื่อ "${data.joinedPlayer.name}" สำเร็จ!`,
-          variant: "success",
-        });
-      } else {
-        addToast({
-          title: "ไม่สามารถเข้าร่วมได้",
-          description: data.error || "ไม่พบห้องเกมนี้",
-          variant: "warning",
-        });
+      if (res.ok && res.state) {
+        const myPlayer = res.state.players.find(
+          (p) => p.name.toLowerCase() === cleanName.toLowerCase(),
+        );
+        if (myPlayer) {
+          const record = {
+            pin,
+            nickname: myPlayer.name,
+            avatarId: myPlayer.avatarId,
+            playerId: myPlayer.id,
+            joinedAt: Date.now(),
+          };
+          sessionStorage.setItem("ks-player", JSON.stringify(record));
+          sessionStorage.setItem(`ks-room-${pin}`, JSON.stringify(record));
+          setViewerId(myPlayer.id);
+          addToast({
+            title: `เข้าร่วมห้องในชื่อ "${myPlayer.name}" สำเร็จ!`,
+            variant: "success",
+          });
+          return;
+        }
       }
+      addToast({
+        title: "ไม่สามารถเข้าร่วมได้",
+        description: res.error || "ไม่พบห้องเกมนี้",
+        variant: "warning",
+      });
     } finally {
       setQuickJoining(false);
     }
