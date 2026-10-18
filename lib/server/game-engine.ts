@@ -362,28 +362,25 @@ function getOrCreateDemoRoom(): ServerRoom {
   persistRoomToDisk(demoRoom);
   return demoRoom;
 }
-
 export function getServerRoom(pin: string): ServerRoom | null {
   const map = getRoomMap();
   const normalized = String(pin ?? "").trim().toUpperCase();
-  const inMemory = map.get(normalized) ?? null;
 
   if (normalized === "123456" || normalized === "482915") {
     return getServerRoom("KS4829");
   }
 
-  // 1. Try restoring from persistent disk room snapshot (exact live state)
-  const diskRoom = loadRoomFromDisk(normalized);
-  if (diskRoom) {
-    if (!inMemory || (diskRoom.state.updatedAt ?? 0) > (inMemory.state.updatedAt ?? 0)) {
-      map.set(normalized, diskRoom);
-      return diskRoom;
-    }
-  }
-
-  // If in-memory room exists and disk was not newer, always return in-memory!
+  // 1. Primary fast lookup: In-memory store (RAM)
+  const inMemory = map.get(normalized) ?? null;
   if (inMemory) {
     return inMemory;
+  }
+
+  // 2. Try restoring from persistent disk room snapshot (exact live state)
+  const diskRoom = loadRoomFromDisk(normalized);
+  if (diskRoom) {
+    map.set(normalized, diskRoom);
+    return diskRoom;
   }
 
   // 2. Try restoring from saved game record in repository (fallback)
@@ -750,7 +747,17 @@ export function executeServerGameCommand(
         return { error: "กรุณาระบุชื่อเล่น (1–20 ตัวอักษร)" };
       }
       if (state.gameStatus === "finished") {
-        return { error: "เกมนี้สิ้นสุดลงแล้ว ไม่สามารถเข้าร่วมได้" };
+        // Automatically reset finished room to lobby so students and teachers can start a new game round smoothly
+        state.gameStatus = "lobby";
+        state.round = 0;
+        state.question = null;
+        state.players = [];
+        state.leaderboard = [];
+        state.rollQueue = [];
+        state.activeSpecialEvent = null;
+        state.movement = null;
+        state.movingPlayerId = null;
+        state.lastEvent = `SYSTEM · เปิดห้องเกม ${room.pin} รอบใหม่พร้อมรับนักเรียน`;
       }
       const validAvatar = AVATARS.some((a) => a.id === command.avatarId)
         ? command.avatarId
