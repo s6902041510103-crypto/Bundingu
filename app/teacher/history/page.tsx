@@ -28,7 +28,14 @@ export default function TeacherSavedRoomsPage() {
   useEffect(() => {
     const loadSavedRooms = async () => {
       try {
-        const res = await fetch("/api/history", { cache: "no-store" });
+        const headers: Record<string, string> = {};
+        if (teacher?.teacherId) headers["x-teacher-id"] = teacher.teacherId;
+        if (teacher?.email) headers["x-teacher-email"] = teacher.email;
+        const res = await fetch("/api/history", {
+          cache: "no-store",
+          credentials: "include",
+          headers,
+        });
         if (!res.ok) return;
         const data = await res.json();
         setSavedRooms(Array.isArray(data.history) ? data.history : []);
@@ -39,15 +46,20 @@ export default function TeacherSavedRoomsPage() {
       }
     };
     loadSavedRooms();
-  }, []);
+  }, [teacher?.teacherId, teacher?.email]);
 
   const handleOpenSavedRoom = async (room: GameHistoryRecord, forceReset = false) => {
     setBusyPin(room.pin);
     try {
-      if (forceReset || room.status === "completed") {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (teacher?.teacherId) headers["x-teacher-id"] = teacher.teacherId;
+      if (teacher?.email) headers["x-teacher-email"] = teacher.email;
+
+      if (forceReset || (room.status as string) === "completed" || (room.status as string) === "finished") {
         const res = await fetch(`/api/games/${encodeURIComponent(room.pin)}/command`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          headers,
           body: JSON.stringify({ type: "RESET_ROOM" }),
         });
         const data = await res.json();
@@ -74,8 +86,13 @@ export default function TeacherSavedRoomsPage() {
   const handleDeleteRoom = async (room: GameHistoryRecord) => {
     setBusyPin(room.pin);
     try {
+      const headers: Record<string, string> = {};
+      if (teacher?.teacherId) headers["x-teacher-id"] = teacher.teacherId;
+      if (teacher?.email) headers["x-teacher-email"] = teacher.email;
       const res = await fetch(`/api/history?pin=${encodeURIComponent(room.pin)}`, {
         method: "DELETE",
+        credentials: "include",
+        headers,
       });
       const data = await res.json();
       if (!res.ok || data.error) {

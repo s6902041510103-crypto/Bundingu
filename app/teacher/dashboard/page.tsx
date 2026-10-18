@@ -37,10 +37,37 @@ export default function TeacherDashboardPage() {
   const [questionsCount, setQuestionsCount] = useState<number>(0);
   const [loadingData, setLoadingData] = useState(true);
   const [busyPin, setBusyPin] = useState<string | null>(null);
+  const [originUrl, setOriginUrl] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setOriginUrl(window.location.origin);
+      if (
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1"
+      ) {
+        fetch("/api/network")
+          .then((r) => r.json())
+          .then((data) => {
+            if (data?.lanUrl) {
+              setOriginUrl(data.lanUrl);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, []);
 
   const fetchDashboardData = useCallback(async () => {
     try {
-      const res = await fetch("/api/games", { cache: "no-store" });
+      const headers: Record<string, string> = {};
+      if (teacher?.teacherId) headers["x-teacher-id"] = teacher.teacherId;
+      if (teacher?.email) headers["x-teacher-email"] = teacher.email;
+      const res = await fetch("/api/games", {
+        cache: "no-store",
+        credentials: "include",
+        headers,
+      });
       if (!res.ok) return;
       const data = await res.json();
       setActiveRooms(Array.isArray(data.activeRooms) ? data.activeRooms : []);
@@ -51,7 +78,7 @@ export default function TeacherDashboardPage() {
     } finally {
       setLoadingData(false);
     }
-  }, []);
+  }, [teacher?.teacherId, teacher?.email]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -61,9 +88,13 @@ export default function TeacherDashboardPage() {
 
   const handleEndGame = async (pin: string) => {
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (teacher?.teacherId) headers["x-teacher-id"] = teacher.teacherId;
+      if (teacher?.email) headers["x-teacher-email"] = teacher.email;
       const res = await fetch(`/api/games/${encodeURIComponent(pin)}/command`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers,
         body: JSON.stringify({ type: "END_GAME" }),
       });
       const data = await res.json();
@@ -92,10 +123,15 @@ export default function TeacherDashboardPage() {
   const handleOpenSavedRoom = async (room: GameHistoryRecord, forceReset = false) => {
     setBusyPin(room.pin);
     try {
-      if (forceReset || room.status === "completed") {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (teacher?.teacherId) headers["x-teacher-id"] = teacher.teacherId;
+      if (teacher?.email) headers["x-teacher-email"] = teacher.email;
+
+      if (forceReset || (room.status as string) === "completed" || (room.status as string) === "finished") {
         const res = await fetch(`/api/games/${encodeURIComponent(room.pin)}/command`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          headers,
           body: JSON.stringify({ type: "RESET_ROOM" }),
         });
         const data = await res.json();
@@ -122,8 +158,13 @@ export default function TeacherDashboardPage() {
   const handleDeleteSavedRoom = async (room: GameHistoryRecord) => {
     setBusyPin(room.pin);
     try {
+      const headers: Record<string, string> = {};
+      if (teacher?.teacherId) headers["x-teacher-id"] = teacher.teacherId;
+      if (teacher?.email) headers["x-teacher-email"] = teacher.email;
       const res = await fetch(`/api/games?pin=${encodeURIComponent(room.pin)}`, {
         method: "DELETE",
+        credentials: "include",
+        headers,
       });
       const data = await res.json();
       if (!res.ok || data.error) {
@@ -269,7 +310,7 @@ export default function TeacherDashboardPage() {
               {/* Real QR Code for Joining */}
               <div className="flex flex-col items-center justify-center p-3 rounded-2xl bg-slate-50 border border-slate-200 self-center md:self-auto">
                 <QRCodeSVG
-                  value={`/join?pin=${currentActiveRoom.game.pin}`}
+                  value={`${originUrl || ""}/join?pin=${currentActiveRoom.game.pin}`}
                   size={112}
                 />
                 <span className="text-xs font-display font-semibold text-slate-600 mt-2">

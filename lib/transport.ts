@@ -160,6 +160,8 @@ export function createProductionTransport(
       if (typeof window !== "undefined") {
         try {
           const cached =
+            window.sessionStorage.getItem("ks-teacher") ||
+            window.localStorage.getItem("ks-teacher-remember") ||
             window.localStorage.getItem("ks_teacher_session") ||
             window.sessionStorage.getItem("ks_teacher_session");
           if (cached) {
