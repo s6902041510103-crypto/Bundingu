@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import os from "os";
 import { QUESTIONS, MOCK_PLAYERS } from "../game-data";
 import type {
   AvatarId,
@@ -41,7 +42,7 @@ export interface StorageAdapter {
   write(data: StorageSchema): void;
 }
 
-const DATA_DIR = path.join(process.cwd(), ".data");
+const DATA_DIR = process.env.DATA_DIR || (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || (process.env.NODE_ENV === "production" && !fs.existsSync(path.join(process.cwd(), ".data"))) ? path.join(os.tmpdir(), "knowledge-snake-data") : path.join(process.cwd(), ".data"));
 const DATA_FILE = path.join(DATA_DIR, "store.json");
 
 export function hashTeacherPassword(password: string): string {
@@ -128,7 +129,21 @@ class FileStorageAdapter implements StorageAdapter {
       if (!fs.existsSync(DATA_DIR)) {
         fs.mkdirSync(DATA_DIR, { recursive: true });
       }
-      fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
+      const tempFile = path.join(
+        DATA_DIR,
+        `store.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`
+      );
+      fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), "utf-8");
+      try {
+        fs.renameSync(tempFile, DATA_FILE);
+      } catch {
+        try {
+          fs.copyFileSync(tempFile, DATA_FILE);
+        } catch {}
+        try {
+          fs.unlinkSync(tempFile);
+        } catch {}
+      }
     } catch {
       // In read-only serverless environments, memoryFallback persists for the instance lifetime
     }
