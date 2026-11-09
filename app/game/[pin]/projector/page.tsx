@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { createInitialGameState } from "@/lib/game-state";
 import { createProductionTransport } from "@/lib/transport";
 import { Badge } from "@/components/ui/Badge";
+import { Modal } from "@/components/ui/Modal";
 import { KnowledgeSnakeLogo } from "@/components/ui/Logo";
 import { QRCodeSVG } from "@/components/ui/QRCode";
 import { Avatar } from "@/components/game/Avatar";

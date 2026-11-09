@@ -17,6 +17,8 @@ import { Avatar } from "@/components/game/Avatar";
 import { GameBoardWrapper } from "@/components/game/GameBoard";
 import { Leaderboard } from "@/components/game/Leaderboard";
 import { SoundToggle } from "@/components/game/SoundToggle";
+import { Modal } from "@/components/ui/Modal";
+import { ConfettiCanvas } from "@/components/game/ConfettiEffect";
 import type { GameState, ServerGameCommand } from "@/lib/types";
 import {
   Play,
@@ -77,6 +79,14 @@ export default function TeacherLiveControllerPage() {
     }),
   );
   const [commandBusy, setCommandBusy] = useState(false);
+  const [showSummaryModal, setShowSummaryModal] = useState(true);
+
+  // Auto open summary modal when game finishes
+  useEffect(() => {
+    if (state.gameStatus === "finished") {
+      setShowSummaryModal(true);
+    }
+  }, [state.gameStatus]);
   const transportRef = useRef<GameStateTransport | null>(null);
 
   useEffect(() => {
@@ -728,6 +738,83 @@ export default function TeacherLiveControllerPage() {
           </div>
         </main>
       )}
+
+            {/* Game Finished / Results Celebration Modal for Teacher (หน้าสรุปผลขึ้นเหมือนเด็ก) */}
+      <Modal
+        isOpen={state.gameStatus === "finished" && showSummaryModal}
+        onClose={() => setShowSummaryModal(false)}
+        title="🏁 จบการแข่งขัน! สรุปผลผู้พิชิตความรู้"
+        description={`ห้องเรียน: ${state.game.title} (PIN: ${pin}) · วิชา ${state.game.subject}`}
+        theme="light"
+        size="xl"
+        showClose={true}
+      >
+        <div className="space-y-6">
+          <ConfettiCanvas
+            active={state.gameStatus === "finished" && showSummaryModal}
+            count={120}
+            durationMs={4500}
+          />
+
+          {/* Podium Top 3 */}
+          <div className="p-4 sm:p-6 rounded-3xl bg-gradient-to-b from-amber-50/90 via-blue-50/60 to-white border border-amber-200/90 shadow-sm text-center">
+            <h3 className="font-display font-extrabold text-lg sm:text-xl text-slate-850 mb-1">
+              🏆 โพเดียมผู้ชนะสูงสุด (Top 3)
+            </h3>
+            <p className="text-xs text-slate-500 mb-2">
+              ยินดีด้วยกับนักเรียนที่มีคะแนนรวมและอันดับสูงสุดในการแข่งขัน!
+            </p>
+            <Leaderboard
+              entries={state.leaderboard}
+              mode="podium"
+              theme="light"
+            />
+          </div>
+
+          {/* Full Leaderboard Table */}
+          <div className="space-y-2">
+            <h4 className="font-display font-bold text-sm text-slate-700 flex items-center justify-between">
+              <span>📊 สรุปอันดับและคะแนนนักเรียนทุกคน ({state.players.length} คน)</span>
+              <span className="text-xs font-normal text-slate-500">
+                คะแนนคำนวณจาก: ตำแหน่งช่อง + จำนวนข้อที่ตอบถูก + โบนัสเข้าเส้นชัย
+              </span>
+            </h4>
+            <div className="max-h-[340px] overflow-y-auto pr-1">
+              <Leaderboard
+                entries={state.leaderboard}
+                mode="full"
+                theme="light"
+              />
+            </div>
+          </div>
+
+          {/* Bottom Action Buttons */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={() => setShowSummaryModal(false)}
+              className="text-xs font-semibold text-slate-500 hover:text-slate-800 underline cursor-pointer"
+            >
+              👀 ซ่อนหน้าต่างเพื่อดูตำแหน่งบนกระดานเกม
+            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="gold"
+                size="md"
+                disabled={commandBusy}
+                onClick={() => sendTeacherCommand({ type: "RESET_ROOM" })}
+              >
+                🔄 เปิดใช้ห้องนี้อีกครั้ง (รอนักเรียนกลุ่มใหม่)
+              </Button>
+              <Link href="/teacher/dashboard">
+                <Button variant="secondary" size="md">
+                  กลับหน้าแดชบอร์ด
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </Modal>
 
       <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
