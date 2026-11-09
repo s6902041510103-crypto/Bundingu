@@ -474,7 +474,7 @@ export function getServerRoom(pin: string): ServerRoom | null {
   // If a valid 6-character room PIN is accessed (e.g. from teacher controller or student join on a new serverless container),
   // automatically instantiate a live room ready in lobby rather than returning 404!
   if (/^[A-Z0-9]{6}$/.test(normalized)) {
-    const allQuestions = listQuestions();
+    const allQuestions = listQuestions().length > 0 ? listQuestions() : QUESTIONS;
     const fallbackRoom: ServerRoom = {
       pin: normalized,
       teacherId: "teacher-default",
@@ -922,8 +922,8 @@ export function executeServerGameCommand(
       if (state.players.length === 0) {
         return { error: "ต้องมีผู้เล่นในห้องอย่างน้อย 1 คนก่อนเริ่มเกม" };
       }
-      const pool = room.questionsPool.length > 0 ? room.questionsPool : listQuestions();
-      const firstQuestion = pool[0];
+      const pool = room.questionsPool.length > 0 ? room.questionsPool : (listQuestions().length > 0 ? listQuestions() : QUESTIONS);
+      const firstQuestion = pool[0] || QUESTIONS[0];
       // Reset all players to Start square 1 when starting from lobby
       const playersAtStart = state.players.map((p) => ({
         ...p,
@@ -982,9 +982,9 @@ export function executeServerGameCommand(
       }
 
       const nextRound = Math.min(state.totalRounds, state.round + 1);
-      const pool = room.questionsPool.length > 0 ? room.questionsPool : listQuestions();
-      const qIndex = command.questionIndex ?? (nextRound - 1) % pool.length;
-      const nextQuestion = pool[qIndex % pool.length];
+      const pool = room.questionsPool.length > 0 ? room.questionsPool : (listQuestions().length > 0 ? listQuestions() : QUESTIONS);
+      const qIndex = command.questionIndex ?? (nextRound - 1) % Math.max(1, pool.length);
+      const nextQuestion = pool[qIndex % Math.max(1, pool.length)] || QUESTIONS[0];
       const resetPlayers = resetQuestionStates(state.players);
 
       room.state = {

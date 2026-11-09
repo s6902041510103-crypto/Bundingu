@@ -75,7 +75,7 @@ class FileStorageAdapter implements StorageAdapter {
   private ensureInitial(): StorageSchema {
     if (this.memoryFallback) return this.memoryFallback;
     const initial: StorageSchema = {
-      questions: [],
+      questions: QUESTIONS.map((q) => ({ ...q })),
       history: buildInitialHistory(),
       sessions: [],
       teachers: buildInitialTeachers(),
