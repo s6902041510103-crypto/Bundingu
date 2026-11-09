@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { executeServerGameCommand } from "@/lib/server/game-engine";
+import { executeServerGameCommand, syncRoomWithRedis } from "@/lib/server/game-engine";
 import { resolveTeacherSession } from "@/lib/server/repository";
 import type { ServerGameCommand } from "@/lib/types";
 
