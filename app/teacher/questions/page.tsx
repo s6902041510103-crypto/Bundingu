@@ -389,17 +389,23 @@ export default function QuestionBankPage() {
               <label className="block font-display text-sm font-bold text-slate-700 mb-1">
                 หมวดหมู่วิชา <span className="text-red-500">*</span>
               </label>
-              <select
+              <input
+                type="text"
+                list="teacher-q-subjects"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
+                placeholder="พิมพ์ชื่อวิชา เช่น คณิตศาสตร์, วิทยาศาสตร์..."
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
-              >
+              />
+              <datalist id="teacher-q-subjects">
                 {SUBJECTS.map((subj) => (
-                  <option key={subj} value={subj}>
-                    {subj}
-                  </option>
+                  <option key={subj} value={subj} />
                 ))}
-              </select>
+                <option value="ประวัติศาสตร์" />
+                <option value="สุขศึกษา" />
+                <option value="ศิลปะ" />
+                <option value="คอมพิวเตอร์" />
+              </datalist>
             </div>
 
             <div>
