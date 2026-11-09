@@ -588,8 +588,8 @@ export function createRoomOnServer(input: CreateGameInput): {
   if (!input.subject || !input.subject.trim()) {
     return { error: "กรุณาเลือกรายวิชา" };
   }
-  if (input.totalRounds < 1 || input.totalRounds > 30) {
-    return { error: "จำนวนรอบต้องอยู่ระหว่าง 1 ถึง 30 รอบ" };
+  if (input.totalRounds < 1 || input.totalRounds > 50) {
+    return { error: "จำนวนรอบต้องอยู่ระหว่าง 1 ถึง 50 รอบ" };
   }
   if (input.questionTimeLimit < 5 || input.questionTimeLimit > 120) {
     return { error: "เวลาตอบต้องอยู่ระหว่าง 5 ถึง 120 วินาที" };
@@ -971,6 +971,17 @@ export function executeServerGameCommand(
       if (state.gameStatus === "lobby") {
         return executeServerGameCommand(pin, { type: "START_GAME" }, options);
       }
+            if (state.players.length > 0 && state.players.every((p) => p.finishRank !== null)) {
+        room.state = {
+          ...state,
+          gameStatus: "finished",
+          lastEvent: "🏁 ผู้เล่นทุกคนเข้าเส้นชัยช่อง 100 ครบแล้ว! จบการแข่งขัน",
+          updatedAt: Date.now(),
+        };
+        syncRoomToHistory(room);
+        return { room, publicState: toPublicGameState(room) };
+      }
+
       if (state.round >= state.totalRounds && (state.gameStatus === "reveal" || state.gameStatus === "finished")) {
         room.state = {
           ...state,

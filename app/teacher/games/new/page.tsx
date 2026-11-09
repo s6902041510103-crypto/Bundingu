@@ -47,7 +47,7 @@ function CreateGameContent() {
   const [step, setStep] = useState<number>(1);
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState<string>("คณิตศาสตร์");
-  const [totalRounds, setTotalRounds] = useState<number>(5);
+  const [totalRounds, setTotalRounds] = useState<number>(15);
   const [questionTimeLimit, setQuestionTimeLimit] = useState<number>(30);
   const [enableSpecials, setEnableSpecials] = useState<boolean>(true);
 
@@ -329,8 +329,8 @@ function CreateGameContent() {
     if (!subject.trim()) {
       return "กรุณาเลือกรายวิชา";
     }
-    if (!Number.isFinite(totalRounds) || totalRounds < 1 || totalRounds > 30) {
-      return "จำนวนรอบต้องอยู่ระหว่าง 1 ถึง 30 รอบ";
+    if (!Number.isFinite(totalRounds) || totalRounds < 1 || totalRounds > 50) {
+      return "จำนวนรอบต้องอยู่ระหว่าง 1 ถึง 50 รอบ";
     }
     if (
       !Number.isFinite(questionTimeLimit) ||
@@ -600,6 +600,24 @@ function CreateGameContent() {
                     <p className="text-xs text-slate-500 mt-1">
                       แนะนำให้ระบุห้องเรียนด้วย เช่น &ldquo;เรื่องเศษส่วน ม.1/1&rdquo; เมื่อเด็กเปลี่ยนห้องเป็น ม.1/2 จะได้กดเปิดห้องใหม่จากชุดเดิมได้สะดวก
                     </p>
+                  </div>
+
+
+                  {/* Smart Rounds & Finish Line Calculator Banner */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50/60 to-emerald-50/70 border border-blue-200 text-xs space-y-2">
+                    <div className="flex items-center gap-2 font-display font-bold text-sm text-blue-900">
+                      <Sparkles className="w-4 h-4 text-amber-500 fill-amber-400" />
+                      <span>ระบบคำนวณจำนวนรอบให้เหมาะสมกับกระดาน 100 ช่อง:</span>
+                    </div>
+                    <p className="text-slate-600 leading-relaxed">
+                      บนกระดาน 100 ช่อง นักเรียนจะทอยเต๋าเฉลี่ยได้ตาละ 3.5 แต้ม (+ขึ้นบันได) จึงต้องใช้ประมาณ <strong>15–20 รอบ</strong> เพื่อเปิดโอกาสให้นักเรียนมีเวลาเดินถึงเส้นชัย (ช่อง 100) ได้หลายคน
+                    </p>
+                    <div className="flex items-start gap-2 text-emerald-800 font-medium bg-white/70 p-2.5 rounded-xl border border-emerald-200/80">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <span>
+                        <strong>หากครูใส่คำถามน้อย (เช่น 3, 5 หรือ 10 ข้อ):</strong> ไม่ต้องกังวล! ระบบจะนำคำถามมา <strong>วนซ้ำให้อัตโนมัติ</strong> เพื่อฝึกทบทวนความแม่นยำและช่วยให้เด็กๆ เดินพิชิตเส้นชัยช่อง 100 ได้ครบทุกคนตามเป้าหมายครับ
+                      </span>
+                    </div>
                   </div>
 
                   <div className="grid sm:grid-cols-3 gap-4">
