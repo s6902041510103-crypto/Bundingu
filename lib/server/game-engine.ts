@@ -470,6 +470,59 @@ export function getServerRoom(pin: string): ServerRoom | null {
     return getOrCreateDemoRoom();
   }
 
+  // 4. Serverless Auto-Provisioning Fallback:
+  // If a valid 6-character room PIN is accessed (e.g. from teacher controller or student join on a new serverless container),
+  // automatically instantiate a live room ready in lobby rather than returning 404!
+  if (/^[A-Z0-9]{6}$/.test(normalized)) {
+    const allQuestions = listQuestions();
+    const fallbackRoom: ServerRoom = {
+      pin: normalized,
+      teacherId: "teacher-default",
+      rngSeed: crypto.randomInt(100000, 999999999),
+      questionsPool: allQuestions.slice(0, 10),
+      state: {
+        game: {
+          id: `game-${normalized}`,
+          pin: normalized,
+          title: "ห้องเรียนบันไดงู",
+          subject: "คณิตศาสตร์",
+          grade: "มัธยมศึกษาปีที่ 1",
+          hostName: "ครูผู้สอน",
+          school: MOCK_GAME.school,
+          createdAt: Date.now(),
+        },
+        gameStatus: "lobby",
+        round: 0,
+        totalRounds: 5,
+        question: null,
+        players: [],
+        currentPlayerId: null,
+        dice: { value: null, rolling: false, rolledBy: null, lastReason: null },
+        board: BOARD_CONFIG,
+        specialCells: SPECIAL_CELLS,
+        enabledSpecials: ["star", "gift", "boost"],
+        settings: {
+          ...GAME_SETTINGS,
+          maxPlayers: 40,
+          questionTimeLimit: 20,
+        },
+        leaderboard: [],
+        viewerPlayerId: null,
+        movingPlayerId: null,
+        movement: null,
+        activeSpecialEvent: null,
+        rollQueue: [],
+        pacingMode: "auto",
+        lastEvent: `SYSTEM · ห้องเกม ${normalized} พร้อมรับผู้เล่น`,
+        updatedAt: Date.now(),
+      },
+    };
+    map.set(normalized, fallbackRoom);
+    persistRoomToDisk(fallbackRoom);
+    syncRoomToHistory(fallbackRoom);
+    return fallbackRoom;
+  }
+
   return null;
 }
 
