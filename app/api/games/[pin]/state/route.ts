@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerRoom, toPublicGameState } from "@/lib/server/game-engine";
+import { getServerRoom, syncRoomWithRedis, toPublicGameState } from "@/lib/server/game-engine";
 
 export async function GET(
   request: Request,
@@ -9,6 +9,7 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const playerId = searchParams.get("playerId");
 
+  await syncRoomWithRedis(pin);
   const room = getServerRoom(pin);
   if (!room) {
     return NextResponse.json(

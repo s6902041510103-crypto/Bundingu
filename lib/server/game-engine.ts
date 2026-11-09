@@ -2,6 +2,7 @@ import crypto from "crypto";
 import os from "os";
 import fs from "fs";
 import path from "path";
+import { saveRoomToRedis, getRoomFromRedis, deleteRoomFromRedis } from "./redis";
 import { FINISH_AT, walkPath } from "../board";
 import {
   AVATARS,
@@ -1476,4 +1477,22 @@ function performServerDiceRollAndMove(
 
   syncRoomToHistory(room);
   return { room, publicState: toPublicGameState(room, player.id) };
+}
+
+/**
+ * Asynchronously fetch room from Upstash Redis and update in-memory cache if newer
+ */
+export async function syncRoomWithRedis(pin: string): Promise<ServerRoom | null> {
+  const normalized = String(pin ?? "").trim().toUpperCase();
+  if (!normalized) return null;
+  const redisRoom = await getRoomFromRedis(normalized);
+  if (redisRoom) {
+    const map = getRoomMap();
+    const current = map.get(normalized);
+    if (!current || (redisRoom.state.updatedAt ?? 0) >= (current.state.updatedAt ?? 0)) {
+      map.set(normalized, redisRoom);
+      return redisRoom;
+    }
+  }
+  return null;
 }
