@@ -623,24 +623,47 @@ function CreateGameContent() {
                   <div className="grid sm:grid-cols-3 gap-4">
                     <div>
                       <label
-                        htmlFor="subject-select"
+                        htmlFor="subject-input"
                         className="block font-display text-sm font-bold text-slate-700 mb-1.5"
                       >
-                        รายวิชา <span className="text-red-500">*</span>
+                        รายวิชา (พิมพ์ชื่อวิชาได้อิสระ) <span className="text-red-500">*</span>
                       </label>
-                      <select
-                        id="subject-select"
+                      <input
+                        id="subject-input"
+                        type="text"
+                        list="subject-suggestions"
                         value={subject}
                         onChange={(e) => setSubject(e.target.value)}
-                        className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-slate-50/70 text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none"
-                      >
+                        placeholder="พิมพ์ชื่อวิชา เช่น คณิตศาสตร์, ภาษาไทย, ประวัติศาสตร์..."
+                        className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-slate-50/70 text-slate-900 font-display font-medium focus:bg-white focus:border-blue-600 focus:outline-none"
+                      />
+                      <datalist id="subject-suggestions">
                         {SUBJECTS.map((subj) => (
-                          <option key={subj} value={subj}>
-                            {subj}
-                          </option>
+                          <option key={subj} value={subj} />
                         ))}
-                        <option value="ทั้งหมด">รวมทุกวิชา</option>
-                      </select>
+                        <option value="ประวัติศาสตร์" />
+                        <option value="สุขศึกษาและพลศึกษา" />
+                        <option value="ศิลปะและดนตรี" />
+                        <option value="การงานอาชีพ" />
+                        <option value="วิทยาการคำนวณ" />
+                        <option value="หน้าที่พลเมือง" />
+                      </datalist>
+                      <div className="flex flex-wrap gap-1.5 pt-1.5">
+                        {["คณิตศาสตร์", "วิทยาศาสตร์", "ภาษาไทย", "ภาษาอังกฤษ", "สังคมศึกษา", "คอมพิวเตอร์", "ประวัติศาสตร์"].map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => setSubject(tag)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                              subject === tag
+                                ? "bg-blue-600 text-white shadow-2xs font-bold"
+                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            }`}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     <div>
