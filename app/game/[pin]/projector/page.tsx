@@ -28,6 +28,19 @@ export default function ProjectorViewPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       setOriginUrl(window.location.origin);
+      if (
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1"
+      ) {
+        fetch("/api/network")
+          .then((r) => r.json())
+          .then((data) => {
+            if (data?.lanUrl) {
+              setOriginUrl(data.lanUrl);
+            }
+          })
+          .catch(() => {});
+      }
     }
   }, []);
 

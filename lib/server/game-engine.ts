@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import os from "os";
 import fs from "fs";
 import path from "path";
 import { FINISH_AT, walkPath } from "../board";
@@ -49,7 +50,7 @@ export interface ServerRoom {
   state: GameState;
 }
 
-const ROOMS_DIR = path.join(process.cwd(), ".data", "rooms");
+const ROOMS_DIR = process.env.DATA_DIR ? path.join(process.env.DATA_DIR, "rooms") : (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || (process.env.NODE_ENV === "production" && !fs.existsSync(path.join(process.cwd(), ".data"))) ? path.join(os.tmpdir(), "knowledge-snake-data", "rooms") : path.join(process.cwd(), ".data", "rooms"));
 
 function ensureRoomsDir(): void {
   try {
@@ -370,17 +371,21 @@ export function getServerRoom(pin: string): ServerRoom | null {
     return getServerRoom("KS4829");
   }
 
-  // 1. Primary fast lookup: In-memory store (RAM)
+  // 1. In-memory check: if present and newer or equal to disk, return immediately
   const inMemory = map.get(normalized) ?? null;
-  if (inMemory) {
-    return inMemory;
+  const diskRoom = loadRoomFromDisk(normalized);
+
+  if (diskRoom) {
+    // If disk has newer state (from another cluster/serverless worker), update memory
+    if (!inMemory || (diskRoom.state.updatedAt ?? 0) > (inMemory.state.updatedAt ?? 0)) {
+      map.set(normalized, diskRoom);
+      return diskRoom;
+    }
   }
 
-  // 2. Try restoring from persistent disk room snapshot (exact live state)
-  const diskRoom = loadRoomFromDisk(normalized);
-  if (diskRoom) {
-    map.set(normalized, diskRoom);
-    return diskRoom;
+  // 2. Return in-memory room (authoritative for this process)
+  if (inMemory) {
+    return inMemory;
   }
 
   // 2. Try restoring from saved game record in repository (fallback)
