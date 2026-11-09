@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { executeServerGameCommand, syncRoomWithRedis } from "@/lib/server/game-engine";
+import { saveRoomToRedis } from "@/lib/server/redis";
 import { resolveTeacherSession } from "@/lib/server/repository";
 import type { ServerGameCommand } from "@/lib/types";
 
@@ -21,6 +22,7 @@ export async function POST(
   });
 
   try {
+    await syncRoomWithRedis(pin);
     const command = (await request.json()) as ServerGameCommand;
     const result = executeServerGameCommand(pin, command, {
       isTeacherAuthenticated: Boolean(session),
@@ -28,6 +30,10 @@ export async function POST(
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 400 });
+    } 
+
+    if (result.room) {
+      await saveRoomToRedis(result.room);
     }
 
     const response = NextResponse.json({

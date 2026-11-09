@@ -1,3 +1,4 @@
+import { deleteRoomFromRedis, saveRoomToRedis } from "@/lib/server/redis";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
@@ -99,6 +100,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: result.error || "สร้างเกมไม่สำเร็จ" }, { status: 400 });
     }
 
+    await saveRoomToRedis(result.room);
+
     const response = NextResponse.json(
       {
         ok: true,
@@ -156,7 +159,9 @@ export async function DELETE(request: Request) {
       { error: "ไม่พบห้องเกมที่ต้องการลบ หรือไม่มีสิทธิ์ลบห้องนี้" },
       { status: 404 },
     );
-  }
+  } 
+
+  await deleteRoomFromRedis(pinOrId);
 
   const response = NextResponse.json({ success: true, ok: true, deleted: true });
   response.cookies.set("ks_teacher_token", session.token, {
