@@ -822,23 +822,39 @@ export function executeServerGameCommand(
         ? command.avatarId
         : ("fox" as AvatarId);
 
-      // Reconnect if same playerId or same nickname already in room
-      const existing = state.players.find(
-        (p) =>
-          (command.playerId && p.id === command.playerId) ||
-          p.name.toLowerCase() === cleanName.toLowerCase(),
+      // Reconnect if same playerId already in room
+      const existingByPlayerId = command.playerId
+        ? state.players.find((p) => p.id === command.playerId)
+        : undefined;
+
+      const existingByName = state.players.find(
+        (p) => p.name.toLowerCase() === cleanName.toLowerCase(),
       );
 
-      if (existing) {
+      if (existingByPlayerId) {
+        // If changing name, ensure no other player has it
+        if (existingByName && existingByName.id !== existingByPlayerId.id) {
+          return { error: `ชื่อเล่น "${cleanName}" มีผู้เล่นคนอื่นในห้องใช้แล้ว กรุณาตั้งชื่ออื่น` };
+        }
+        // If changing avatar, ensure no other player has it
+        const avatarTaken = state.players.find(
+          (p) => p.id !== existingByPlayerId.id && p.avatarId === validAvatar,
+        );
+        if (avatarTaken) {
+          return {
+            error: `ตัวละครนี้มีเพื่อนในห้องเลือกแล้ว (${avatarTaken.name}) กรุณาเลือกตัวละครอื่น`,
+          };
+        }
+
         const updatedPlayer: Player = {
-          ...existing,
+          ...existingByPlayerId,
           name: cleanName,
           avatarId: validAvatar,
           connected: true,
           isReady: true,
         };
         const updatedPlayers = state.players.map((p) =>
-          p.id === existing.id ? updatedPlayer : p,
+          p.id === existingByPlayerId.id ? updatedPlayer : p,
         );
         room.state = {
           ...state,
@@ -852,6 +868,19 @@ export function executeServerGameCommand(
           room,
           publicState: toPublicGameState(room, updatedPlayer.id),
           joinedPlayer: updatedPlayer,
+        };
+      }
+
+      // If not reconnecting with valid playerId, duplicate nickname is rejected
+      if (existingByName) {
+        return { error: `ชื่อเล่น "${cleanName}" มีผู้เล่นในห้องใช้แล้ว กรุณาตั้งชื่ออื่น` };
+      }
+
+      // Character / Avatar must not duplicate with anyone in room
+      const avatarTaken = state.players.find((p) => p.avatarId === validAvatar);
+      if (avatarTaken) {
+        return {
+          error: `ตัวละครนี้มีเพื่อนในห้องเลือกแล้ว (${avatarTaken.name}) กรุณาเลือกตัวละครอื่น`,
         };
       }
 

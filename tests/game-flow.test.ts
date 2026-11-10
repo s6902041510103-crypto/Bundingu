@@ -104,6 +104,24 @@ describe("Knowledge Snake — End-to-End Game Engine, Security & Board Tests", (
       view1.players.map((p) => ({ id: p.id, name: p.name, pos: p.position })),
       view2.players.map((p) => ({ id: p.id, name: p.name, pos: p.position })),
     );
+
+    // Duplicate nickname check: Joining with existing nickname "น้องมิน" must fail
+    const dupName = executeServerGameCommand(pin, {
+      type: "JOIN_GAME",
+      nickname: "น้องมิน",
+      avatarId: "frog",
+    });
+    assert.ok(dupName.error, "Duplicate nickname must be rejected");
+    assert.match(dupName.error!, /มีผู้เล่นในห้องใช้แล้ว/);
+
+    // Duplicate avatar check: Joining with existing avatar "panda" (used by น้องมิน) must fail
+    const dupAvatar = executeServerGameCommand(pin, {
+      type: "JOIN_GAME",
+      nickname: "สายฟ้า",
+      avatarId: "panda",
+    });
+    assert.ok(dupAvatar.error, "Duplicate avatar must be rejected");
+    assert.match(dupAvatar.error!, /มีเพื่อนในห้องเลือกแล้ว/);
   });
 
   it("3. Security: Server blocks unauthenticated teacher commands and strips correctOptionId before reveal", () => {

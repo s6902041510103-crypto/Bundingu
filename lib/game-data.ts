@@ -28,6 +28,18 @@ export const AVATARS: Avatar[] = [
   { id: "koala", emoji: "🐨", label: "Koala", labelTh: "โคอาลา", primary: "#cbd5e1", secondary: "#f1f5f9", accent: "#475569", ring: "#cbd5e1" },
   { id: "monkey", emoji: "🐵", label: "Monkey", labelTh: "ลิง", primary: "#fdba74", secondary: "#fef3c7", accent: "#9a3412", ring: "#fdba74" },
   { id: "dog", emoji: "🐶", label: "Dog", labelTh: "สุนัข", primary: "#fcd34d", secondary: "#fffbeb", accent: "#a16207", ring: "#fcd34d" },
+  { id: "elephant", emoji: "🐘", label: "Elephant", labelTh: "ช้าง", primary: "#94a3b8", secondary: "#f8fafc", accent: "#334155", ring: "#64748b" },
+  { id: "owl", emoji: "🦉", label: "Owl", labelTh: "นกฮูก", primary: "#b45309", secondary: "#fef3c7", accent: "#78350f", ring: "#d97706" },
+  { id: "duck", emoji: "🦆", label: "Duck", labelTh: "เป็ด", primary: "#eab308", secondary: "#fef9c3", accent: "#854d0e", ring: "#facc15" },
+  { id: "chick", emoji: "🐥", label: "Chick", labelTh: "ลูกเจี๊ยบ", primary: "#fde047", secondary: "#fefce8", accent: "#ca8a04", ring: "#facc15" },
+  { id: "pig", emoji: "🐷", label: "Pig", labelTh: "หมู", primary: "#f472b6", secondary: "#fdf2f8", accent: "#db2777", ring: "#f472b6" },
+  { id: "mouse", emoji: "🐭", label: "Mouse", labelTh: "หนู", primary: "#94a3b8", secondary: "#f1f5f9", accent: "#475569", ring: "#94a3b8" },
+  { id: "whale", emoji: "🐳", label: "Whale", labelTh: "วาฬ", primary: "#60a5fa", secondary: "#eff6ff", accent: "#1d4ed8", ring: "#3b82f6" },
+  { id: "dolphin", emoji: "🐬", label: "Dolphin", labelTh: "โลมา", primary: "#38bdf8", secondary: "#f0f9ff", accent: "#0284c7", ring: "#0ea5e9" },
+  { id: "octopus", emoji: "🐙", label: "Octopus", labelTh: "ปลาหมึก", primary: "#fb7185", secondary: "#fff1f2", accent: "#be123c", ring: "#f43f5e" },
+  { id: "turtle", emoji: "🐢", label: "Turtle", labelTh: "เต่า", primary: "#86efac", secondary: "#f0fdf4", accent: "#15803d", ring: "#22c55e" },
+  { id: "dino", emoji: "🦖", label: "Dino", labelTh: "ไดโนเสาร์", primary: "#4ade80", secondary: "#f0fdf4", accent: "#166534", ring: "#16a34a" },
+  { id: "unicorn", emoji: "🦄", label: "Unicorn", labelTh: "ยูนิคอร์น", primary: "#e879f9", secondary: "#fdf4ff", accent: "#c026d3", ring: "#d946ef" },
 ];
 
 export const AVATAR_MAP: Record<string, Avatar> = Object.fromEntries(

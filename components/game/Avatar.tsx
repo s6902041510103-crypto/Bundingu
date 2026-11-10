@@ -62,6 +62,8 @@ interface AvatarPickerProps {
   size?: "sm" | "md" | "lg";
   columns?: 4 | 6;
   className?: string;
+  disabledIds?: string[];
+  takenMap?: Record<string, string>;
 }
 
 export function AvatarPicker({
@@ -70,6 +72,8 @@ export function AvatarPicker({
   size = "md",
   columns = 6,
   className,
+  disabledIds = [],
+  takenMap = {},
 }: AvatarPickerProps) {
   return (
     <div
@@ -83,31 +87,58 @@ export function AvatarPicker({
     >
       {AVATARS.map((avatar) => {
         const isSelected = avatar.id === selectedId;
+        const isTaken = disabledIds.includes(avatar.id);
+        const takenByName = takenMap[avatar.id];
+
         return (
           <button
             key={avatar.id}
             type="button"
             role="radio"
             aria-checked={isSelected}
-            aria-label={avatar.labelTh}
-            onClick={() => onSelect(avatar.id)}
+            aria-disabled={isTaken}
+            disabled={isTaken}
+            aria-label={`${avatar.labelTh}${isTaken ? ` (มีคนเลือกแล้วโดย ${takenByName || "ผู้เล่นอื่น"})` : ""}`}
+            title={isTaken ? `ตัวละครนี้ถูกเลือกแล้วโดย ${takenByName || "ผู้เล่นในห้อง"}` : avatar.labelTh}
+            onClick={() => {
+              if (!isTaken) {
+                onSelect(avatar.id);
+              }
+            }}
             className={cn(
-              "relative flex flex-col items-center justify-center gap-1 p-2 rounded-2xl border-2 transition-all duration-150 cursor-pointer",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
-              isSelected
-                ? "border-blue-600 bg-blue-50/90 shadow-md shadow-blue-500/15 scale-105"
-                : "border-slate-200 bg-slate-50/70 hover:border-blue-300 hover:bg-white",
+              "relative flex flex-col items-center justify-center gap-1 p-2 rounded-2xl border-2 transition-all duration-150",
+              isTaken
+                ? "border-dashed border-slate-300 bg-slate-100/80 opacity-55 cursor-not-allowed select-none"
+                : isSelected
+                ? "border-blue-600 bg-blue-50/90 shadow-md shadow-blue-500/15 scale-105 cursor-pointer ring-2 ring-blue-500/30"
+                : "border-slate-200 bg-slate-50/70 hover:border-blue-300 hover:bg-white cursor-pointer",
             )}
           >
-            <Avatar avatarId={avatar.id} size={size} ring={isSelected} />
+            <div className="relative">
+              <Avatar avatarId={avatar.id} size={size} ring={isSelected && !isTaken} />
+              {isTaken && (
+                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-500 text-[9px] text-white shadow-xs">
+                  🔒
+                </span>
+              )}
+            </div>
             <span
               className={cn(
                 "text-[11px] font-display font-medium truncate max-w-[68px]",
-                isSelected ? "text-blue-700 font-bold" : "text-slate-600",
+                isTaken
+                  ? "text-slate-400 line-through"
+                  : isSelected
+                  ? "text-blue-700 font-bold"
+                  : "text-slate-600",
               )}
             >
               {avatar.labelTh}
             </span>
+            {isTaken && (
+              <span className="text-[9px] font-display font-medium text-amber-700 bg-amber-100/90 px-1 py-0.2 rounded-full truncate max-w-[64px]">
+                {takenByName ? `${takenByName}` : "เลือกแล้ว"}
+              </span>
+            )}
           </button>
         );
       })}
