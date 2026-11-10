@@ -30,7 +30,19 @@ export type AvatarId =
   | "lion"
   | "koala"
   | "monkey"
-  | "dog";
+  | "dog"
+  | "elephant"
+  | "owl"
+  | "duck"
+  | "chick"
+  | "pig"
+  | "mouse"
+  | "whale"
+  | "dolphin"
+  | "octopus"
+  | "turtle"
+  | "dino"
+  | "unicorn";
 
 export interface Avatar {
   id: AvatarId;
