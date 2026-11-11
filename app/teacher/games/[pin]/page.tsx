@@ -92,6 +92,13 @@ export default function TeacherLiveControllerPage() {
   const [showEndConfirmModal, setShowEndConfirmModal] = useState(false);
   const [targetGrade, setTargetGrade] = useState<number>(10);
 
+  // Sync targetGrade with room settings configured at game creation
+  useEffect(() => {
+    if (state.settings?.targetGrade && state.settings.targetGrade > 0) {
+      setTargetGrade(state.settings.targetGrade);
+    }
+  }, [state.settings?.targetGrade]);
+
   // Auto open summary modal when game finishes
   useEffect(() => {
     if (state.gameStatus === "finished") {

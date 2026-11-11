@@ -49,6 +49,7 @@ function CreateGameContent() {
   const [subject, setSubject] = useState<string>("คณิตศาสตร์");
   const [totalRounds, setTotalRounds] = useState<number>(15);
   const [questionTimeLimit, setQuestionTimeLimit] = useState<number>(30);
+  const [targetGrade, setTargetGrade] = useState<number>(10);
   const [enableSpecials, setEnableSpecials] = useState<boolean>(true);
 
   const [allQuestions, setAllQuestions] = useState<Question[]>([]);
@@ -101,6 +102,7 @@ function CreateGameContent() {
     setSubject(game.subject || "คณิตศาสตร์");
     setTotalRounds(game.totalRounds || 5);
     setQuestionTimeLimit(game.questionTimeLimit || 30);
+    setTargetGrade(game.targetGrade || 10);
     if (Array.isArray(game.enabledSpecials)) {
       setEnableSpecials(game.enabledSpecials.length > 0);
     }
@@ -204,6 +206,7 @@ function CreateGameContent() {
               setSubject(matched.subject || "คณิตศาสตร์");
               setTotalRounds(matched.totalRounds || 5);
               setQuestionTimeLimit(matched.questionTimeLimit || 30);
+              setTargetGrade(matched.targetGrade || 10);
               if (Array.isArray(matched.questionIds) && matched.questionIds.length > 0) {
                 setSelectedQuestionIds(matched.questionIds);
               } else {
@@ -339,6 +342,9 @@ function CreateGameContent() {
     ) {
       return "เวลาตอบคำถามต้องอยู่ระหว่าง 5 ถึง 120 วินาที";
     }
+    if (!Number.isFinite(targetGrade) || targetGrade < 1 || targetGrade > 1000) {
+      return "คะแนนเก็บเต็มต้องอยู่ระหว่าง 1 ถึง 1,000 คะแนน";
+    }
     return null;
   };
 
@@ -385,6 +391,7 @@ function CreateGameContent() {
           subject,
           totalRounds,
           questionTimeLimit,
+          targetGrade,
           maxPlayers: 40,
           questionIds: selectedQuestionIds,
           enabledSpecials: enableSpecials ? ["star", "gift", "boost"] : [],
@@ -701,6 +708,46 @@ function CreateGameContent() {
                         className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-slate-50/70 text-slate-900 font-display font-bold focus:bg-white focus:border-blue-600 focus:outline-none"
                       />
                     </div>
+
+                    <div className="sm:col-span-2">
+                      <label
+                        htmlFor="target-grade-input"
+                        className="block font-display text-sm font-bold text-slate-700 mb-1.5"
+                      >
+                        คะแนนเก็บเต็มที่จะเก็บ (คะแนน) <span className="text-red-500">*</span>
+                      </label>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
+                        <input
+                          id="target-grade-input"
+                          type="number"
+                          min={1}
+                          max={1000}
+                          value={targetGrade}
+                          onChange={(e) => setTargetGrade(Number(e.target.value))}
+                          placeholder="เช่น 10 คะแนน"
+                          className="w-full sm:w-44 px-4 py-3 rounded-xl border-2 border-emerald-200 bg-emerald-50/50 text-emerald-950 font-display font-bold focus:bg-white focus:border-emerald-600 focus:outline-none"
+                        />
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {[5, 10, 15, 20, 100].map((pts) => (
+                            <button
+                              key={pts}
+                              type="button"
+                              onClick={() => setTargetGrade(pts)}
+                              className={`px-3 py-2 rounded-xl font-display text-xs font-bold transition-colors cursor-pointer ${
+                                targetGrade === pts
+                                  ? "bg-emerald-600 text-white shadow-sm"
+                                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                              }`}
+                            >
+                              เก็บ {pts} คะแนน
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1.5">
+                        ระบบจะคำนวณเกรดสุทธิให้อัตโนมัติตามสัดส่วนข้อที่เล่นจริง (นักเรียนที่ตอบถูกครบทุกข้อจะได้เต็ม {targetGrade} คะแนน)
+                      </p>
+                    </div>
                   </div>
 
                   <div className="pt-2 space-y-2.5 border-t border-slate-100">
@@ -975,6 +1022,14 @@ function CreateGameContent() {
                         {totalRounds} รอบ · {questionTimeLimit} วินาที/ข้อ
                       </span>
                     </div>
+                    <div className="col-span-2 pt-2 border-t border-slate-200">
+                      <span className="text-slate-500 block text-xs">
+                        คะแนนเก็บเต็ม (Target Grade)
+                      </span>
+                      <span className="font-display font-bold text-emerald-700">
+                        เต็ม {targetGrade} คะแนน (ตอบถูกครบทุกข้อได้เต็ม {targetGrade} คะแนน)
+                      </span>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1042,6 +1097,12 @@ function CreateGameContent() {
                   จำนวนรอบ: <strong>{totalRounds} รอบ</strong> · เวลาตอบ{" "}
                   <strong>{questionTimeLimit} วินาที/ข้อ</strong>
                 </p>
+                <p>
+                  คะแนนเก็บเต็ม:{" "}
+                  <strong className="text-emerald-700">
+                    {targetGrade} คะแนน
+                  </strong>
+                </p>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-xs text-emerald-900 space-y-1">
@@ -1090,7 +1151,8 @@ function CreateGameContent() {
               </h2>
               <p className="text-sm text-slate-500 mt-1">
                 รายวิชา: {subject} · คำถาม {selectedQuestionIds.length} ข้อ ·{" "}
-                {totalRounds} รอบ · เวลาตอบ {questionTimeLimit} วินาที
+                {totalRounds} รอบ · เวลาตอบ {questionTimeLimit} วินาที · เก็บ{" "}
+                {targetGrade} คะแนน
               </p>
             </div>
 

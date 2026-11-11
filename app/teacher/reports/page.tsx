@@ -58,6 +58,12 @@ function ReportsContent() {
     history[0] ??
     null;
 
+  useEffect(() => {
+    if (activeRecord?.targetGrade && activeRecord.targetGrade > 0) {
+      setTargetGrade(activeRecord.targetGrade);
+    }
+  }, [activeRecord?.pin, activeRecord?.targetGrade]);
+
   const podiumEntries: LeaderboardEntry[] = (
     activeRecord?.playerResults ?? []
   ).map((r) => ({

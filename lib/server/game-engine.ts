@@ -268,6 +268,7 @@ function syncRoomToHistory(room: ServerRoom): void {
       totalRounds: state.totalRounds,
       roundsPlayed: state.round,
       questionTimeLimit: state.settings.questionTimeLimit,
+      targetGrade: state.settings.targetGrade ?? 10,
       playersCount: state.players.length,
       maxPlayers: state.settings.maxPlayers,
       questionIds: room.questionsPool.map((q) => q.id),
@@ -452,6 +453,7 @@ export function getServerRoom(pin: string): ServerRoom | null {
         ...GAME_SETTINGS,
         maxPlayers: savedRecord.maxPlayers || 40,
         questionTimeLimit: savedRecord.questionTimeLimit || 20,
+        targetGrade: savedRecord.targetGrade || 10,
       },
       leaderboard: [],
       viewerPlayerId: null,
@@ -583,6 +585,7 @@ export interface CreateGameInput {
   grade?: string;
   totalRounds: number;
   questionTimeLimit: number;
+  targetGrade?: number;
   maxPlayers?: number;
   questionIds?: string[];
   enabledSpecials?: string[];
@@ -695,6 +698,7 @@ export function createRoomOnServer(input: CreateGameInput): {
       ...GAME_SETTINGS,
       maxPlayers: input.maxPlayers ?? 40,
       questionTimeLimit: input.questionTimeLimit,
+      targetGrade: input.targetGrade && input.targetGrade > 0 ? input.targetGrade : 10,
     },
     leaderboard: computeLeaderboard(initialPlayers),
     viewerPlayerId: null,

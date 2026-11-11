@@ -104,6 +104,7 @@ export async function POST(request: Request) {
       grade: String(body.grade ?? "มัธยมศึกษาปีที่ 1"),
       totalRounds: Number(body.totalRounds ?? 5),
       questionTimeLimit: Number(body.questionTimeLimit ?? 20),
+      targetGrade: Number(body.targetGrade ?? 10),
       maxPlayers: Number(body.maxPlayers ?? 40),
       questionIds: Array.isArray(body.questionIds) ? body.questionIds : undefined,
       enabledSpecials: Array.isArray(body.enabledSpecials)

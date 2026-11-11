@@ -191,6 +191,7 @@ export interface LeaderboardEntry {
 export interface GameSettings {
   maxPlayers: number;
   questionTimeLimit: number;
+  targetGrade?: number;
   diceMin: number;
   diceMax: number;
   finishBonuses: number[];
@@ -397,6 +398,7 @@ export interface GameHistoryRecord {
   totalRounds: number;
   roundsPlayed: number;
   questionTimeLimit: number;
+  targetGrade?: number;
   playersCount: number;
   maxPlayers: number;
   questionIds?: string[];

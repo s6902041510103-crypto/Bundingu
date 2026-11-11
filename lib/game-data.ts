@@ -89,6 +89,7 @@ export const SPECIAL_CELLS: SpecialCell[] = [
 export const GAME_SETTINGS: GameSettings = {
   maxPlayers: 40,
   questionTimeLimit: 20,
+  targetGrade: 10,
   diceMin: 1,
   diceMax: 6,
   finishBonuses: [10, 5, 3],
