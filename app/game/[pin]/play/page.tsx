@@ -233,7 +233,7 @@ export default function StudentGameplayPage() {
       if (myUpdated?.answerState === "correct") {
         addToast({
           title: "🎉 ตอบถูกต้อง! ได้รับสิทธิ์ทอยลูกเต๋าทันที",
-          description: "กดปุ่มทอยลูกเต๋าเพื่อลุ้นแต้มและเดินบนกระดานได้เลย!",
+          description: "กดทอยลูกเต๋าใน 3 วินาที (หรือระบบจะทอยให้อัตโนมัติ!)",
           variant: "success",
         });
       } else {
@@ -245,8 +245,11 @@ export default function StudentGameplayPage() {
     }
   };
 
+  const [autoRollCountdown, setAutoRollCountdown] = useState<number | null>(null);
+
   const handleRollDice = async () => {
-    if (!activeViewerId || !transportRef.current?.sendCommand || rollingAnim) return;
+    if (!activeViewerId || !transportRef.current?.sendCommand || rollingAnim || localRollInProgressRef.current) return;
+    setAutoRollCountdown(null);
     const prevPos = viewerPlayer?.position ?? 1;
     localRollInProgressRef.current = true;
     setRollFromPos(prevPos);
@@ -290,6 +293,44 @@ export default function StudentGameplayPage() {
     }, remainingSpinMs);
   };
 
+  // Auto-roll dice after 3 seconds if the student who answered correctly hasn't pressed Roll
+  const handleRollDiceRef = useRef(handleRollDice);
+  handleRollDiceRef.current = handleRollDice;
+
+  useEffect(() => {
+    if (!isMyTurnToRoll || rollingAnim || diceOverlayOpen || localRollInProgressRef.current) {
+      setAutoRollCountdown(null);
+      return;
+    }
+
+    setAutoRollCountdown(3);
+
+    const intervalId = window.setInterval(() => {
+      setAutoRollCountdown((prev) => (prev !== null && prev > 1 ? prev - 1 : prev));
+    }, 1000);
+
+    const timeoutId = window.setTimeout(() => {
+      setAutoRollCountdown(null);
+      handleRollDiceRef.current();
+    }, 3000);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [isMyTurnToRoll, rollingAnim, diceOverlayOpen, state.round, viewerPlayer?.position]);
+
+  // Auto-close DiceRollOverlayModal ~2.2s after showing result so the board token walks automatically
+  useEffect(() => {
+    if (!diceOverlayOpen || rollingAnim || rolledResultValue === null) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setDiceOverlayOpen(false);
+    }, 2200);
+    return () => window.clearTimeout(timer);
+  }, [diceOverlayOpen, rollingAnim, rolledResultValue]);
+
   const handleResolveSpecialEvent = async () => {
     if (!transportRef.current?.sendCommand) return;
     await transportRef.current.sendCommand({
@@ -297,6 +338,27 @@ export default function StudentGameplayPage() {
       playerId: activeViewerId ?? undefined,
     });
   };
+
+  // Auto-resolve SpecialEventModal after 3s if student doesn't close it manually
+  useEffect(() => {
+    const isMyEventOpen = Boolean(
+      !diceOverlayOpen &&
+        state.activeSpecialEvent &&
+        !state.activeSpecialEvent.resolved &&
+        (!activeViewerId || state.activeSpecialEvent.playerId === activeViewerId),
+    );
+    if (!isMyEventOpen) return;
+    const timer = window.setTimeout(() => {
+      handleResolveSpecialEvent();
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [
+    diceOverlayOpen,
+    state.activeSpecialEvent?.id,
+    state.activeSpecialEvent?.resolved,
+     state.activeSpecialEvent?.playerId,
+    activeViewerId,
+  ]);
 
   // Hold the rolling viewer's board token at `rollFromPos` while `diceOverlayOpen` is open,
   // so as soon as they click "ดูการเดินบนกระดาน →", they see their Avatar walk step-by-step on the board!
@@ -522,7 +584,7 @@ export default function StudentGameplayPage() {
 
                   <p className="text-xs sm:text-sm text-blue-200 leading-relaxed">
                     {isMyTurnToRoll
-                      ? "กดปุ่มทอยลูกเต๋าด้านล่างเพื่อเดินตัวละครของคุณบนกระดาน!"
+                      ? `กดปุ่มทอยลูกเต๋าด้านล่างได้เลย! (หากไม่กด ระบบจะทอยให้อัตโนมัติใน ${autoRollCountdown ?? 3} วินาที)`
                       : state.dice.lastReason
                       ? state.dice.lastReason
                       : "ผู้เล่นที่ตอบคำถามถูกต้องจะได้รับสิทธิ์ทอยลูกเต๋าตามลำดับความเร็ว"}
@@ -541,7 +603,7 @@ export default function StudentGameplayPage() {
                       {rollingAnim
                         ? "กำลังทอยลูกเต๋า..."
                         : isMyTurnToRoll
-                        ? "🎲 กดทอยลูกเต๋าเดี๋ยวนี้!"
+                        ? `🎲 กดทอยลูกเต๋าเดี๋ยวนี้! (${autoRollCountdown ?? 3}s)`
                         : state.dice.value
                         ? `ผลลูกเต๋าล่าสุด: ${state.dice.value}`
                         : "รอสิทธิ์ทอยลูกเต๋า"}
@@ -568,7 +630,9 @@ export default function StudentGameplayPage() {
                     }
                   />
                   <span className="font-mono text-xs text-blue-200">
-                    รอทอย: {timeLeftFormatted}
+                    {isMyTurnToRoll
+                      ? `ทอยอัตโนมัติใน ${autoRollCountdown ?? 3} วิ`
+                      : `รอทอย: ${timeLeftFormatted}`}
                   </span>
                 </button>
               </div>

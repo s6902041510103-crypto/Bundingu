@@ -135,6 +135,37 @@ export default function TeacherLiveControllerPage() {
     }
   };
 
+  // Fallback auto-roll on Teacher controller: if a student in rollQueue hasn't rolled within ~3.8s
+  // (e.g., phone screen locked or network lag after their 3s client auto-roll), roll automatically for them.
+  const firstRollerId = state.rollQueue[0] ?? null;
+  const firstRollerPos = state.players.find((p) => p.id === firstRollerId)?.position ?? null;
+  const activeEventId =
+    state.activeSpecialEvent && !state.activeSpecialEvent.resolved
+      ? state.activeSpecialEvent.id
+      : null;
+
+  useEffect(() => {
+    if (!firstRollerId || activeEventId) return;
+    const timer = window.setTimeout(() => {
+      transportRef.current?.sendCommand?.({
+        type: "ROLL_DICE",
+        playerId: firstRollerId,
+      });
+    }, 3800);
+    return () => window.clearTimeout(timer);
+  }, [firstRollerId, firstRollerPos, state.round, activeEventId]);
+
+  // Auto-resolve unresolved special events after 3.5s so auto-rolls never stall the game
+  useEffect(() => {
+    if (!activeEventId) return;
+    const timer = window.setTimeout(() => {
+      transportRef.current?.sendCommand?.({
+        type: "RESOLVE_SPECIAL_EVENT",
+      });
+    }, 3500);
+    return () => window.clearTimeout(timer);
+  }, [activeEventId]);
+
   const handleCopyPin = () => {
     navigator.clipboard?.writeText(pin);
     addToast({
