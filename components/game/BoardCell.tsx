@@ -4,6 +4,7 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import type { AvatarId, BoardCell } from "@/lib/types";
 import { Avatar } from "./Avatar";
+import { AntiGravityParticles } from "./AntiGravityParticles";
 
 interface BoardCellProps {
   cell: BoardCell;
@@ -80,13 +81,38 @@ export function BoardCellComponent({
     }
   }
 
-  const visiblePlayers = playersOnCell.slice(0, 3);
-  const overflowCount = Math.max(0, playersOnCell.length - visiblePlayers.length);
+  // Adaptive Avatar Stacking Logic:
+  // - 1 player: centered medium avatar
+  // - 2 players: side-by-side pair
+  // - 3..4 players: 2x2 micro-grid
+  // - 5+ players: 3 avatars + "+N" counter badge in a 2x2 micro-grid
+  const totalHere = playersOnCell.length;
+  const maxVisible = totalHere > 4 ? 3 : 4;
+  const visiblePlayers = playersOnCell.slice(0, maxVisible);
+  const overflowCount = Math.max(0, totalHere - visiblePlayers.length);
+
+  const stackContainerClass =
+    totalHere === 1
+      ? "flex items-center justify-center"
+      : totalHere === 2
+      ? "flex items-center justify-center gap-0.5"
+      : "grid grid-cols-2 gap-0.5 place-items-center";
+
+  const avatarSizeClasses =
+    totalHere === 1
+      ? "w-5 h-5 sm:w-7 sm:h-7 text-[11px] sm:text-sm"
+      : totalHere === 2
+      ? "w-4 h-4 sm:w-5 sm:h-5 text-[9px] sm:text-xs"
+      : "w-3.5 h-3.5 sm:w-4 sm:h-4 text-[8px] sm:text-[10px]";
+
+  const showAntiGravityParticles =
+    Boolean(cell.special) &&
+    (playersOnCell.length > 0 || isHighlighted || isMovingHere);
 
   return (
     <div
       className={cn(
-        "relative flex flex-col justify-between p-0.5 sm:p-1 select-none",
+        "relative flex flex-col justify-between p-0.5 sm:p-1 select-none aspect-square min-w-0 min-h-0",
         "border transition-transform duration-150 overflow-visible",
         colorClass,
         isHighlighted && "ring-2 ring-amber-400 z-20 scale-[1.03]",
@@ -94,8 +120,17 @@ export function BoardCellComponent({
         isMovingHere && "ring-2 ring-emerald-400 z-20 scale-105",
       )}
       data-cell={cell.number}
-      title={`ช่อง ${cell.number}${cell.special ? ` — ${cell.special.label}: ${cell.special.description}` : ""}${cell.snake ? ` (งู ${cell.snake.from}→${cell.snake.to})` : ""}${cell.ladder ? ` (บันได ${cell.ladder.from}→${cell.ladder.to})` : ""}`}
+      title={`ช่อง ${cell.number}${cell.special ? ` — ${cell.special.label}: ${cell.special.description}` : ""}${cell.snake ? ` (งู ${cell.snake.from}→${cell.snake.to})` : ""}${cell.ladder ? ` (บันได ${cell.ladder.from}→${cell.ladder.to})` : ""}${totalHere > 0 ? ` | ผู้เล่น (${totalHere}): ${playersOnCell.map((p) => p.name).join(", ")}` : ""}`}
     >
+      {/* Anti-Gravity Floating Particle Emitter for Special Boost Cells */}
+      {cell.special && showAntiGravityParticles && (
+        <AntiGravityParticles
+          kind={cell.special.kind}
+          active={true}
+          count={isMovingHere ? 12 : 7}
+        />
+      )}
+
       {/* Top Row: Square Number & Special Item Emblem */}
       <div className="flex items-start justify-between w-full leading-none z-10">
         <span
@@ -156,18 +191,13 @@ export function BoardCellComponent({
         </span>
       )}
 
-      {/* Players on this Square */}
-      {playersOnCell.length > 0 && (
+      {/* Players on this Square (Adaptive Stacking Grid) */}
+      {totalHere > 0 && (
         <div
-          className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none p-0.5"
+          className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none p-0.5 pt-2.5 sm:pt-3"
           aria-label={`ผู้เล่นบนช่องที่ ${cell.number}: ${playersOnCell.map((p) => p.name).join(", ")}`}
         >
-          <div
-            className={cn(
-              "flex items-center justify-center flex-wrap gap-0.5",
-              playersOnCell.length === 1 ? "scale-100" : " -space-x-1.5",
-            )}
-          >
+          <div className={cn("max-w-full max-h-full", stackContainerClass)}>
             {visiblePlayers.map((player) => {
               const isMoving = player.id === movingPlayerId;
               return (
@@ -175,7 +205,8 @@ export function BoardCellComponent({
                   key={player.id}
                   className={cn(
                     "relative rounded-full transition-transform duration-300",
-                    isMoving && "scale-125 z-40 animate-bounce drop-shadow-[0_4px_12px_rgba(245,158,11,0.9)]",
+                    isMoving &&
+                      "scale-125 z-40 animate-bounce drop-shadow-[0_4px_12px_rgba(245,158,11,0.9)]",
                   )}
                 >
                   {isMoving && (
@@ -185,7 +216,8 @@ export function BoardCellComponent({
                     avatarId={player.avatarId as AvatarId}
                     size="xs"
                     className={cn(
-                      "w-4 h-4 sm:w-6 sm:h-6 text-[10px] sm:text-xs border border-white shadow-md",
+                      avatarSizeClasses,
+                      "border border-white shadow-md shrink-0",
                       player.id === currentPlayerId && "ring-2 ring-amber-400",
                     )}
                   />
@@ -193,7 +225,12 @@ export function BoardCellComponent({
               );
             })}
             {overflowCount > 0 && (
-              <span className="inline-flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-slate-900 text-amber-300 font-display font-bold text-[8px] sm:text-[10px] border border-white shadow">
+              <span
+                className={cn(
+                  avatarSizeClasses,
+                  "inline-flex items-center justify-center rounded-full bg-slate-900/95 text-amber-300 font-display font-black border border-white shadow-md shrink-0",
+                )}
+              >
                 +{overflowCount}
               </span>
             )}

@@ -99,6 +99,38 @@ export function createProductionTransport(
       : null;
 
   let disposed = false;
+  let isReconnecting = false;
+
+  const attemptAutoRejoinIfMissing = async (serverState: GameState) => {
+    if (!options?.playerId || isReconnecting || typeof window === "undefined") return;
+    const stillInRoom = serverState.players?.some((p) => p.id === options.playerId);
+    if (stillInRoom) return;
+
+    try {
+      const savedRaw =
+        window.sessionStorage.getItem(`ks-room-${pin}`) ||
+        window.sessionStorage.getItem("ks-player");
+      if (!savedRaw) return;
+      const saved = JSON.parse(savedRaw);
+      if (!saved?.nickname || !saved?.avatarId) return;
+
+      isReconnecting = true;
+      await fetch(`/api/games/${encodeURIComponent(pin)}/command`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "JOIN_GAME",
+          playerId: options.playerId,
+          nickname: saved.nickname,
+          avatarId: saved.avatarId,
+        }),
+      });
+    } catch {
+      // ignore
+    } finally {
+      isReconnecting = false;
+    }
+  };
 
   const fetchServerState = async () => {
     if (disposed || typeof window === "undefined") return;
@@ -112,6 +144,7 @@ export function createProductionTransport(
       if (!res.ok) return;
       const data = await res.json();
       if (data?.state && !disposed) {
+        await attemptAutoRejoinIfMissing(data.state);
         store.replaceState({
           ...data.state,
           viewerPlayerId: options?.playerId ?? data.state.viewerPlayerId ?? null,
@@ -143,9 +176,17 @@ export function createProductionTransport(
     };
   }
 
-  // Initial sync + periodic realtime poll fallback
+  // Initial sync + periodic realtime poll fallback + instant resume on online/visibilitychange
+  const handleOnlineOrVisible = () => {
+    if (disposed) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    fetchServerState();
+  };
+
   if (typeof window !== "undefined") {
     fetchServerState();
+    window.addEventListener("online", handleOnlineOrVisible);
+    document.addEventListener("visibilitychange", handleOnlineOrVisible);
   }
   const interval =
     typeof window !== "undefined"
@@ -239,8 +280,12 @@ export function createProductionTransport(
     sendCommand,
     destroy: () => {
       disposed = true;
-      if (interval !== null && typeof window !== "undefined") {
-        window.clearInterval(interval);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("online", handleOnlineOrVisible);
+        document.removeEventListener("visibilitychange", handleOnlineOrVisible);
+        if (interval !== null) {
+          window.clearInterval(interval);
+        }
       }
       channel?.close();
     },
