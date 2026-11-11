@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
+import QRCode from "qrcode";
 import { cn } from "@/lib/utils";
 
 interface QRCodeSVGProps {
@@ -11,64 +12,37 @@ interface QRCodeSVGProps {
 }
 
 /**
- * Renders a crisp, deterministic QR-style matrix SVG from real room data (PIN / URL).
- * Never renders if `value` is empty.
+ * Renders an authentic ISO/IEC 18004 standard QR Code SVG that can be scanned
+ * by LINE, iOS/Android native cameras, and our in-app QR scanner.
+ * Includes a 2-module quiet zone around the matrix so mobile scanners read it instantly.
  */
 export function QRCodeSVG({ value, size = 128, label, className }: QRCodeSVGProps) {
-  const grid = useMemo(() => {
+  const qrData = useMemo(() => {
     if (!value) return null;
-    const dim = 21; // Version 1 QR 21x21 modules
-    const matrix: boolean[][] = Array.from({ length: dim }, () =>
-      Array.from({ length: dim }, () => false),
-    );
-
-    const drawFinder = (r0: number, c0: number) => {
-      for (let r = 0; r < 7; r++) {
-        for (let c = 0; c < 7; c++) {
-          const isBorder = r === 0 || r === 6 || c === 0 || c === 6;
-          const isInner = r >= 2 && r <= 4 && c >= 2 && c <= 4;
-          matrix[r0 + r][c0 + c] = isBorder || isInner;
+    try {
+      const qr = QRCode.create(value, {
+        errorCorrectionLevel: "M",
+      });
+      const moduleCount = qr.modules.size;
+      const matrix: boolean[][] = [];
+      for (let r = 0; r < moduleCount; r++) {
+        const row: boolean[] = [];
+        for (let c = 0; c < moduleCount; c++) {
+          row.push(Boolean(qr.modules.get(r, c)));
         }
+        matrix.push(row);
       }
-    };
-
-    drawFinder(0, 0);
-    drawFinder(0, dim - 7);
-    drawFinder(dim - 7, 0);
-
-    // Timing patterns
-    for (let i = 8; i < dim - 8; i++) {
-      matrix[6][i] = i % 2 === 0;
-      matrix[i][6] = i % 2 === 0;
+      return { matrix, moduleCount };
+    } catch {
+      return null;
     }
-
-    // Deterministic hash stream from `value`
-    let seed = 2166136261;
-    for (let i = 0; i < value.length; i++) {
-      seed ^= value.charCodeAt(i);
-      seed = Math.imul(seed, 16777619);
-    }
-
-    for (let r = 0; r < dim; r++) {
-      for (let c = 0; c < dim; c++) {
-        const inTopLeft = r < 8 && c < 8;
-        const inTopRight = r < 8 && c >= dim - 8;
-        const inBottomLeft = r >= dim - 8 && c < 8;
-        const isTiming = r === 6 || c === 6;
-        if (inTopLeft || inTopRight || inBottomLeft || isTiming) continue;
-
-        seed ^= (r * 31 + c * 17) & 0xff;
-        seed = Math.imul(seed, 16777619);
-        matrix[r][c] = ((seed >>> 3) & 1) === 1;
-      }
-    }
-
-    return matrix;
   }, [value]);
 
-  if (!grid || !value) return null;
+  if (!qrData || !value) return null;
 
-  const dim = grid.length;
+  const { matrix, moduleCount } = qrData;
+  const quietZone = 2;
+  const totalViewBox = moduleCount + quietZone * 2;
 
   return (
     <div
@@ -81,19 +55,19 @@ export function QRCodeSVG({ value, size = 128, label, className }: QRCodeSVGProp
       <svg
         width={size}
         height={size}
-        viewBox={`0 0 ${dim} ${dim}`}
+        viewBox={`0 0 ${totalViewBox} ${totalViewBox}`}
         shapeRendering="crispEdges"
         role="img"
         aria-label={`QR Code สำหรับเข้าร่วมห้อง ${value}`}
       >
-        <rect width={dim} height={dim} fill="#ffffff" />
-        {grid.map((row, rIdx) =>
+        <rect width={totalViewBox} height={totalViewBox} fill="#ffffff" />
+        {matrix.map((row, rIdx) =>
           row.map((cell, cIdx) =>
             cell ? (
               <rect
                 key={`${rIdx}-${cIdx}`}
-                x={cIdx}
-                y={rIdx}
+                x={cIdx + quietZone}
+                y={rIdx + quietZone}
                 width={1}
                 height={1}
                 fill="#0f172a"

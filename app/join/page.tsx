@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { KnowledgeSnakeLogo } from "@/components/ui/Logo";
 import { AvatarPicker } from "@/components/game/Avatar";
+import { QRScannerModal } from "@/components/ui/QRScannerModal";
 import { AVATARS } from "@/lib/game-data";
 import type { AvatarId } from "@/lib/types";
 import {
@@ -21,8 +22,8 @@ import {
   KeyRound,
   Users,
   CheckCircle2,
-  RefreshCw,
   Lock,
+  QrCode,
 } from "lucide-react";
 
 const ROOM_KEY_PATTERN = /^[A-Z0-9]{6}$/;
@@ -56,9 +57,11 @@ function JoinFormContent() {
   const [avatarId, setAvatarId] = useState<AvatarId>("panda");
   const [error, setError] = useState("");
   const [isJoining, setIsJoining] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [originUrl, setOriginUrl] = useState("http://localhost:3000");
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const autoCheckedPinRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -153,12 +156,12 @@ function JoinFormContent() {
     }
   }, [step, roomInfo?.pin]);
 
-  // Step 1: Submit room PIN to connect to teacher's room
-  const handleCheckRoom = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Core room check logic (used by form submit, QR scanner, and URL ?pin=... auto-join)
+  const checkAndEnterRoom = async (rawTargetPin: string) => {
     setError("");
+    const cleanPin = sanitizeRoomKey(rawTargetPin);
+    setPin(cleanPin);
 
-    const cleanPin = sanitizeRoomKey(pin);
     if (!ROOM_KEY_PATTERN.test(cleanPin)) {
       setError("กรุณากรอกรหัสห้องเกม (Room PIN) 6 หลัก ตัวอักษรผสมตัวเลข (เช่น KS4829)");
       return;
@@ -177,13 +180,13 @@ function JoinFormContent() {
 
       // Check current taken avatars in room
       const existingPid = getExistingPlayerId(cleanPin);
-      const takenAvatarIds = info.players
+      const takenAvatarIdsInRoom = info.players
         .filter((p) => p.id !== existingPid)
         .map((p) => p.avatarId);
 
       // If current avatarId is already taken, auto-select first available one
-      if (takenAvatarIds.includes(avatarId)) {
-        const firstAvailable = AVATARS.find((a) => !takenAvatarIds.includes(a.id));
+      if (takenAvatarIdsInRoom.includes(avatarId)) {
+        const firstAvailable = AVATARS.find((a) => !takenAvatarIdsInRoom.includes(a.id));
         if (firstAvailable) {
           setAvatarId(firstAvailable.id);
         }
@@ -195,7 +198,7 @@ function JoinFormContent() {
         if (savedRoom) {
           const parsed = JSON.parse(savedRoom);
           if (parsed.nickname) setNickname(parsed.nickname);
-          if (parsed.avatarId && !takenAvatarIds.includes(parsed.avatarId)) {
+          if (parsed.avatarId && !takenAvatarIdsInRoom.includes(parsed.avatarId)) {
             setAvatarId(parsed.avatarId);
           }
         }
@@ -209,6 +212,24 @@ function JoinFormContent() {
       setError("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้ กรุณาลองใหม่อีกครั้ง");
       setIsCheckingRoom(false);
     }
+  };
+
+  // Auto-validate room when user arrives via QR Code URL (/join?pin=XXXXXX)
+  useEffect(() => {
+    const queryPin = searchParams.get("pin");
+    if (queryPin) {
+      const cleaned = sanitizeRoomKey(queryPin);
+      if (ROOM_KEY_PATTERN.test(cleaned) && autoCheckedPinRef.current !== cleaned) {
+        autoCheckedPinRef.current = cleaned;
+        checkAndEnterRoom(cleaned);
+      }
+    }
+  }, [searchParams]);
+
+  // Step 1: Submit room PIN to connect to teacher's room
+  const handleCheckRoom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await checkAndEnterRoom(pin);
   };
 
   // Calculate taken names & avatars in current room
@@ -458,8 +479,48 @@ function JoinFormContent() {
           >
             {isCheckingRoom ? "กำลังตรวจสอบห้องเกม..." : "ตรวจสอบห้อง & ไปต่อ"}
           </Button>
+
+          {/* Divider */}
+          <div className="relative flex items-center py-1">
+            <div className="flex-grow border-t border-slate-200" />
+            <span className="shrink-0 mx-3 text-xs font-display font-semibold text-slate-400">
+              หรือเข้าห้องด้วย QR Code
+            </span>
+            <div className="flex-grow border-t border-slate-200" />
+          </div>
+
+          {/* Scan QR Button */}
+          <Button
+            type="button"
+            variant="secondary"
+            size="lg"
+            fullWidth
+            disabled={isCheckingRoom}
+            onClick={() => {
+              setError("");
+              setIsScannerOpen(true);
+            }}
+            iconLeft={<QrCode className="w-5 h-5 text-blue-600" />}
+            className="py-3.5 text-base rounded-2xl border-2 border-blue-200 bg-white hover:bg-blue-50/70 text-[#0f2547] font-display font-bold shadow-xs"
+          >
+            สแกน QR Code เข้าห้องเกม
+          </Button>
+
+          <p className="text-[11px] text-slate-500 text-center">
+            สามารถกดปุ่มด้านบนเพื่อสแกน หรือสแกนผ่านแอป <strong>LINE</strong> / กล้องมือถือได้ทันที
+          </p>
         </form>
       )}
+
+      {/* QR Scanner Modal */}
+      <QRScannerModal
+        open={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onScanSuccess={(scannedPin) => {
+          setIsScannerOpen(false);
+          checkAndEnterRoom(scannedPin);
+        }}
+      />
 
       {/* ================= STEP 2: NICKNAME & CHARACTER ================= */}
       {step === "profile" && roomInfo && (
