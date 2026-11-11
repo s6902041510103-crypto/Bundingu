@@ -330,7 +330,8 @@ function getOrCreateDemoRoom(): ServerRoom {
     players: MOCK_PLAYERS.slice(0, 4).map((p) => ({
       ...p,
       position: 1,
-      score: 1,
+      score: 0,
+      quizPoints: 0,
       laddersClimbed: 0,
       snakesBitten: 0,
       specialsTriggered: 0,
@@ -657,7 +658,8 @@ export function createRoomOnServer(input: CreateGameInput): {
     ? MOCK_PLAYERS.slice(0, 6).map((p) => ({
         ...p,
         position: 1,
-        score: 1,
+        score: 0,
+        quizPoints: 0,
         laddersClimbed: 0,
         snakesBitten: 0,
         correctCount: 0,
@@ -905,7 +907,8 @@ export function executeServerGameCommand(
         name: cleanName,
         avatarId: validAvatar,
         position: 1,
-        score: 1,
+        score: 0,
+        quizPoints: 0,
         isReady: true,
         isHost: false,
         isBot: false,
@@ -925,7 +928,7 @@ export function executeServerGameCommand(
       // If default room was in lobby with mock positions > 1, normalize positions to 1 when first real student joins in lobby
       const normalizedExisting =
         state.gameStatus === "lobby"
-          ? state.players.map((p) => ({ ...p, position: 1, score: 1 }))
+          ? state.players.map((p) => ({ ...p, position: 1, score: 0, quizPoints: 0 }))
           : state.players;
 
       const updatedPlayers = [newPlayer, ...normalizedExisting];
@@ -970,7 +973,8 @@ export function executeServerGameCommand(
       const playersAtStart = state.players.map((p) => ({
         ...p,
         position: state.round === 0 ? 1 : p.position,
-        score: state.round === 0 ? 1 : p.score,
+        score: state.round === 0 ? 0 : p.score,
+        quizPoints: state.round === 0 ? 0 : (p.quizPoints ?? 0),
         answerState: "idle" as const,
         selectedOptionId: null,
         answeredAt: null,
@@ -1133,7 +1137,7 @@ export function executeServerGameCommand(
             : nextFinishRank
             ? (state.settings.finishBonuses[nextFinishRank - 1] ?? 0)
             : 0;
-        const newScore = roundToTwo(nextPos + newQuizPoints + finishBonus);
+        const newScore = roundToTwo(newQuizPoints + finishBonus);
 
         return {
           ...p,
@@ -1428,7 +1432,7 @@ function revealAnswersOnServer(room: ServerRoom): {
         : nextFinishRank
         ? (state.settings.finishBonuses[nextFinishRank - 1] ?? 0)
         : 0;
-    const newScore = roundToTwo(nextPos + (p.quizPoints ?? 0) + finishBonus);
+    const newScore = roundToTwo((p.quizPoints ?? 0) + finishBonus);
 
     return {
       ...p,
@@ -1597,7 +1601,7 @@ function performServerDiceRollAndMove(
   const updatedPlayers = state.players.map((p) => {
     if (p.id !== player.id) return p;
     const accumulatedQuizPts = roundToTwo((p.quizPoints ?? 0) + gemPointsAwarded);
-    const newScore = roundToTwo(finalPos + finishBonus + accumulatedQuizPts);
+    const newScore = roundToTwo(accumulatedQuizPts + finishBonus);
 
     return {
       ...p,

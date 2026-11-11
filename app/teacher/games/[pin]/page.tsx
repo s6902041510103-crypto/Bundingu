@@ -978,9 +978,9 @@ export default function TeacherLiveControllerPage() {
                     <thead>
                       <tr className="bg-slate-100 border-b border-slate-200 font-display font-bold text-slate-600">
                         <th className="py-2 px-3">ชื่อนักเรียน</th>
-                        <th className="py-2 px-3 text-right">คะแนนคำถาม</th>
-                        <th className="py-2 px-3 text-right">ตำแหน่งช่อง</th>
-                        <th className="py-2 px-3 text-right">โบนัสเส้นชัย</th>
+                        <th className="py-2 px-3 text-right">คะแนนคำถาม (+ไฟความเร็ว)</th>
+                        <th className="py-2 px-3 text-right">ช่องที่ยืน (ไม่คิดคะแนน)</th>
+                        <th className="py-2 px-3 text-right">โบนัสอันดับ/เส้นชัย</th>
                         <th className="py-2 px-3 text-right">คะแนนดิบรวม</th>
                         <th className="py-2 px-3 text-right text-blue-700">
                           เกรดสุทธิ (/{targetGrade})
@@ -999,8 +999,8 @@ export default function TeacherLiveControllerPage() {
                             <td className="py-2 px-3 text-right font-mono text-slate-700">
                               {g.quizScore.toFixed(2)}
                             </td>
-                            <td className="py-2 px-3 text-right font-mono text-slate-700">
-                              {g.boardPositionScore}
+                            <td className="py-2 px-3 text-right font-mono text-slate-400">
+                              ช่อง {entry.position}
                             </td>
                             <td className="py-2 px-3 text-right font-mono text-emerald-600 font-bold">
                               +{g.finishBonus}

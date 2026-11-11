@@ -414,7 +414,7 @@ describe("Knowledge Snake — End-to-End Game Engine, Security & Board Tests", (
     const correctId = room.state.question!.correctOptionId;
     const wrongId = room.state.question!.options.find((o) => o.id !== correctId)!.id;
 
-    // P2 answers wrong -> should auto-advance from 1 to 2
+    // P2 answers wrong -> should auto-advance from 1 to 2, and score MUST remain 0 (position is NOT added to score)
     executeServerGameCommand(pin, {
       type: "SUBMIT_ANSWER",
       playerId: p2.id,
@@ -422,6 +422,7 @@ describe("Knowledge Snake — End-to-End Game Engine, Security & Board Tests", (
     });
     const p2AfterWrong = room.state.players.find((p) => p.id === p2.id)!;
     assert.equal(p2AfterWrong.position, 2);
+    assert.equal(p2AfterWrong.score, 0);
 
     // Place P1 at 99, answer correctly, and roll D6 -> reaches/exceeds 100 -> immediate Game Over + +10 bonus
     room.state.players = room.state.players.map((p) =>
@@ -451,6 +452,7 @@ describe("Knowledge Snake — End-to-End Game Engine, Security & Board Tests", (
     const winner = finishRoll.publicState?.players.find((p) => p.id === p1.id)!;
     assert.equal(winner.position, 100);
     assert.equal(winner.finishRank, 1);
+    assert.equal(winner.score, Number(((winner.quizPoints ?? 0) + 10).toFixed(2)));
 
     // 4. Dynamic Grade Normalization based on questionsPlayed (2 questions played => 40 base pts = full 10/10 when 2/2 correct)
     const maxRaw = calculateMaxPossibleRawScore({

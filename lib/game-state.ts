@@ -332,13 +332,15 @@ export function computeNormalizedGrades(
         : p.finishRank === 1
         ? finishBonusPts
         : 0;
-    const boardPositionScore = p.position;
+    const boardPositionScore = 0;
     const correctCount = p.correctCount ?? 0;
 
-    // Base quiz score + fiery speed bonus earned by the student
+    // Base quiz score + fiery speed bonus earned by the student (board position is NOT added to score)
     const quizScore =
       typeof p.quizPoints === "number" && p.quizPoints > 0
         ? roundToTwo(p.quizPoints)
+        : p.score > 0
+        ? roundToTwo(Math.max(0, p.score - finishBonus))
         : roundToTwo(correctCount * BASE_CORRECT_POINTS);
 
     // Rank bonus modifier (Rank 1: +10% of full score, Rank 2: +5%, Rank 3: +2.5%)
@@ -678,7 +680,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           updatedAt: Date.now(),
         },
         state.players.map((p) =>
-          p.id === playerId ? { ...p, position, score: position + (p.finishRank ? (GAME_SETTINGS.finishBonuses[p.finishRank - 1] ?? 0) : 0) } : p,
+          p.id === playerId
+            ? {
+                ...p,
+                position,
+                score: roundToTwo(
+                  (p.quizPoints ?? 0) +
+                    (p.finishRank ? (GAME_SETTINGS.finishBonuses[p.finishRank - 1] ?? 0) : 0),
+                ),
+              }
+            : p,
         ),
       );
     }
@@ -704,7 +715,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           return {
             ...p,
             position: finalPos,
-            score: finalPos + (p.finishRank ? (GAME_SETTINGS.finishBonuses[p.finishRank - 1] ?? 0) : 0),
+            score: roundToTwo(
+              (p.quizPoints ?? 0) +
+                (p.finishRank ? (GAME_SETTINGS.finishBonuses[p.finishRank - 1] ?? 0) : 0),
+            ),
             snakesBitten: (p.snakesBitten ?? 0) + (effect.kind === "snake" ? 1 : 0),
             laddersClimbed: (p.laddersClimbed ?? 0) + (effect.kind === "ladder" ? 1 : 0),
             specialEventsTriggered: (p.specialEventsTriggered ?? 0) + (effect.kind === "special" ? 1 : 0),
@@ -758,7 +772,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         const nextQueue = state.rollQueue.filter((id) => id !== player.id);
         const updatedPlayers = state.players.map((p) =>
           p.id === player.id
-            ? { ...p, position: FINISH_AT, finishRank: finishedCount, score: FINISH_AT + bonus }
+            ? {
+                ...p,
+                position: FINISH_AT,
+                finishRank: finishedCount,
+                score: roundToTwo((p.quizPoints ?? 0) + bonus),
+              }
             : p,
         );
         return withLeaderboard(
@@ -783,7 +802,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           ? {
               ...p,
               position: landedPos,
-              score: landedPos + (p.finishRank ? (GAME_SETTINGS.finishBonuses[p.finishRank - 1] ?? 0) : 0),
+              score: roundToTwo(
+                (p.quizPoints ?? 0) +
+                  (p.finishRank ? (GAME_SETTINGS.finishBonuses[p.finishRank - 1] ?? 0) : 0),
+              ),
             }
           : p,
       );

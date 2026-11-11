@@ -92,7 +92,7 @@ export const GAME_SETTINGS: GameSettings = {
   diceMin: 1,
   diceMax: 6,
   finishBonuses: [10, 5, 3],
-  scoreRule: "score = quizPoints (20 + Speed Bonus ≤ 5) + position + Finish Bonus (+10)",
+  scoreRule: "score = คะแนนตอบคำถาม (20 + Speed Bonus ≤ 5) + โบนัสเข้าเส้นชัย (+10) (ไม่นำช่องที่ยืนมาบวกคะแนน)",
 };
 
 export const MOCK_GAME: GameInfo = {
