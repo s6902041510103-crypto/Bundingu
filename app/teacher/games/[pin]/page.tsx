@@ -260,20 +260,6 @@ export default function TeacherLiveControllerPage() {
                 : `กำลังแข่งขัน · ข้อที่ ${state.round}/${state.totalRounds}`}
             </Badge>
 
-            <Link
-              href={`/game/${pin}/projector`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button
-                variant="secondary"
-                size="sm"
-                iconLeft={<Monitor className="w-4 h-4 text-blue-600" />}
-              >
-                จอ Projector
-              </Button>
-            </Link>
-
             {!isLobbyPhase && state.gameStatus !== "finished" && (
               <Button
                 variant="destructive"

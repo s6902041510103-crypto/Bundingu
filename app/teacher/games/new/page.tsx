@@ -1131,15 +1131,6 @@ function CreateGameContent() {
                   เปิดหน้าควบคุมเกมสด (Teacher Live Controller)
                 </Button>
               </Link>
-              <Link href={`/game/${createdPin}/projector`}>
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  iconLeft={<Monitor className="w-5 h-5" />}
-                >
-                  เปิด Projector View
-                </Button>
-              </Link>
               <Link href={`/game/${createdPin}`}>
                 <Button
                   variant="outline"

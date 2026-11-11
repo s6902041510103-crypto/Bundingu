@@ -70,9 +70,6 @@ export default function HomePage() {
               <Link href="/teacher/games/new" className="hover:text-amber-300 transition-colors">
                 สร้างเกม
               </Link>
-              <Link href="/game/KS4829/projector" className="hover:text-amber-300 transition-colors">
-                Projector View
-              </Link>
             </nav>
 
             <div className="flex items-center gap-2.5">
@@ -163,10 +160,6 @@ export default function HomePage() {
                   <span className="inline-flex items-center gap-1.5 bg-white/75 px-3 py-1.5 rounded-full border border-white">
                     <Users className="w-4 h-4 text-blue-600" />
                     รองรับสูงสุด 40 คน/ห้อง
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 bg-white/75 px-3 py-1.5 rounded-full border border-white">
-                    <Monitor className="w-4 h-4 text-amber-600" />
-                    พร้อมโหมดฉายขึ้นจอ Projector
                   </span>
                 </div>
               </div>

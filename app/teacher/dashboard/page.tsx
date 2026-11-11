@@ -287,15 +287,6 @@ export default function TeacherDashboardPage() {
                       เข้าหน้าควบคุมห้องเกม
                     </Button>
                   </Link>
-                  <Link href={`/game/${currentActiveRoom.game.pin}/projector`}>
-                    <Button
-                      variant="secondary"
-                      size="md"
-                      iconLeft={<ExternalLink className="w-4 h-4" />}
-                    >
-                      เปิดจอ Projector
-                    </Button>
-                  </Link>
                   <Button
                     variant="destructive"
                     size="md"
