@@ -99,6 +99,8 @@ interface QuestionCardProps {
   onAnswer?: (optionId: string) => void;
   viewerAnswerState?: "idle" | "selected" | "correct" | "wrong";
   viewerSelectedOptionId?: string | null;
+  viewerSpeedBonus?: number;
+  viewerResponseTimeMs?: number | null;
   readOnly?: boolean;
   requireConfirmButton?: boolean;
   className?: string;
@@ -109,6 +111,8 @@ export function QuestionCard({
   onAnswer,
   viewerAnswerState = "idle",
   viewerSelectedOptionId,
+  viewerSpeedBonus = 0,
+  viewerResponseTimeMs = null,
   readOnly = false,
   requireConfirmButton = false,
   className,
@@ -290,29 +294,49 @@ export function QuestionCard({
                 )}
               >
                 {viewerAnswerState === "correct" ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <span className="text-2xl animate-bounce">🎉</span>
-                    <div>
-                      <div className="text-base font-black text-emerald-800">
-                        ถูกต้อง! รับคะแนน <span className="text-emerald-600 font-black">+100</span>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="text-2xl animate-bounce">🎉</span>
+                      <div>
+                        <div className="text-base sm:text-lg font-black text-emerald-800">
+                          ตอบถูกต้อง! ได้รับ{" "}
+                          <span className="text-emerald-600 font-black">
+                            +20 คะแนน
+                          </span>
+                        </div>
+                        <div className="text-xs text-emerald-700 font-semibold">
+                          ได้รับสิทธิ์ทอยลูกเต๋า D6 (1–6) เพื่อเดินตัวละครแล้ว!
+                        </div>
                       </div>
-                      <div className="text-xs text-emerald-700 font-semibold">
-                        ได้รับสิทธิ์ทอยลูกเต๋าเพื่อเดินตัวละครแล้ว!
-                      </div>
+                    </div>
+
+                    {/* Fiery Orange Speed Bonus Pill below +20 pts */}
+                    <div className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-orange-500 via-amber-500 to-red-500 text-white text-xs sm:text-sm font-display font-extrabold shadow-md shadow-orange-500/30 ring-2 ring-orange-300/60">
+                      <span className="text-base leading-none animate-pulse">🔥</span>
+                      <span>
+                        คะแนนเสริมความเร็ว +{(viewerSpeedBonus ?? 0).toFixed(2)} คะแนน
+                      </span>
+                      {typeof viewerResponseTimeMs === "number" && (
+                        <span className="text-orange-100 font-mono text-[11px]">
+                          ({(viewerResponseTimeMs / 1000).toFixed(2)} วินาที)
+                        </span>
+                      )}
                     </div>
                   </div>
                 ) : viewerAnswerState === "wrong" ? (
                   <div className="flex items-center justify-center gap-2">
                     <span className="text-2xl">💪</span>
                     <div>
-                      <div className="text-base font-black text-rose-800">ยังไม่ถูกต้องในข้อนี้</div>
+                      <div className="text-base font-black text-rose-800">
+                        ยังไม่ถูกต้องในข้อนี้ (+0 คะแนน)
+                      </div>
                       <div className="text-xs text-rose-700 font-medium">
-                        อย่าเพิ่งท้อนะ สะสมคะแนนและแก้มือในข้อถัดไป!
+                        ตัวละครเดินหน้าอัตโนมัติ +1 ช่อง · แก้มือในข้อถัดไปนะ!
                       </div>
                     </div>
                   </div>
                 ) : (
-                  "⏰ หมดเวลาตอบสำหรับข้อนี้"
+                  "⏰ หมดเวลาตอบสำหรับข้อนี้ (+0 คะแนน · เดินหน้าอัตโนมัติ +1 ช่อง)"
                 )}
               </div>
             </>

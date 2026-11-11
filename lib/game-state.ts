@@ -283,17 +283,14 @@ export interface GradeNormalizationConfig {
 }
 
 /**
- * Dynamically calculates maxPossibleRawScore based ONLY on `questionsPlayed`:
- * Max Quiz Pts (25 * questionsPlayed) + Max Board Position Pts (min(100, 1 + 6 * questionsPlayed)) + Finish Bonus (10)
+ * Dynamically calculates maxPossibleRawScore based ONLY on `questionsPlayed` base quiz score (20 pts per question).
+ * Answering all questions right (correctCount === questionsPlayed) guarantees 100% full targetGrade!
  */
 export function calculateMaxPossibleRawScore(
   config: GradeNormalizationConfig,
 ): number {
   const effectiveQuestions = Math.max(1, config.questionsPlayed);
-  const finishBonusPts = config.finishBonusPts ?? FIRST_FINISH_BONUS;
-  const maxQuizPts = effectiveQuestions * (BASE_CORRECT_POINTS + MAX_SPEED_BONUS);
-  const maxBoardPositionPts = Math.min(FINISH_AT, 1 + effectiveQuestions * 6);
-  return roundToTwo(maxQuizPts + maxBoardPositionPts + finishBonusPts);
+  return roundToTwo(effectiveQuestions * BASE_CORRECT_POINTS);
 }
 
 export function computeNormalizedGrades(
@@ -303,6 +300,7 @@ export function computeNormalizedGrades(
     avatarId: Player["avatarId"];
     score: number;
     position: number;
+    rank?: number;
     finishRank?: number | null;
     finishBonus?: number;
     quizPoints?: number;
@@ -310,11 +308,24 @@ export function computeNormalizedGrades(
   }>,
   config: GradeNormalizationConfig,
 ): NormalizedGradeRow[] {
+  const effectiveQuestions = Math.max(1, config.questionsPlayed);
   const maxPossibleRawScore = calculateMaxPossibleRawScore(config);
   const targetGrade = Math.max(1, config.targetGrade);
   const finishBonusPts = config.finishBonusPts ?? FIRST_FINISH_BONUS;
 
+  // Sort players by game score & position to determine rank if not explicitly provided
+  const sortedIds = [...players]
+    .sort((a, b) => {
+      if (a.finishRank && b.finishRank) return a.finishRank - b.finishRank;
+      if (a.finishRank) return -1;
+      if (b.finishRank) return 1;
+      if (b.score !== a.score) return b.score - a.score;
+      return b.position - a.position;
+    })
+    .map((p) => p.playerId);
+
   return players.map((p) => {
+    const rank = p.rank ?? sortedIds.indexOf(p.playerId) + 1;
     const finishBonus =
       typeof p.finishBonus === "number"
         ? p.finishBonus
@@ -322,12 +333,36 @@ export function computeNormalizedGrades(
         ? finishBonusPts
         : 0;
     const boardPositionScore = p.position;
+    const correctCount = p.correctCount ?? 0;
+
+    // Base quiz score + fiery speed bonus earned by the student
     const quizScore =
-      typeof p.quizPoints === "number"
+      typeof p.quizPoints === "number" && p.quizPoints > 0
         ? roundToTwo(p.quizPoints)
-        : roundToTwo(Math.max(0, p.score - boardPositionScore - finishBonus));
-    const rawScore = roundToTwo(p.score);
-    const ratio = maxPossibleRawScore > 0 ? rawScore / maxPossibleRawScore : 0;
+        : roundToTwo(correctCount * BASE_CORRECT_POINTS);
+
+    // Rank bonus modifier (Rank 1: +10% of full score, Rank 2: +5%, Rank 3: +2.5%)
+    const rankBonusRaw =
+      rank === 1
+        ? maxPossibleRawScore * 0.1
+        : rank === 2
+        ? maxPossibleRawScore * 0.05
+        : rank === 3
+        ? maxPossibleRawScore * 0.025
+        : 0;
+
+    const effectiveRawForGrade = roundToTwo(
+      Math.min(maxPossibleRawScore, quizScore + rankBonusRaw),
+    );
+
+    // If student answered all played questions correctly, they always get full targetGrade!
+    const isAllCorrect = correctCount >= effectiveQuestions;
+    const ratio = isAllCorrect
+      ? 1
+      : maxPossibleRawScore > 0
+      ? effectiveRawForGrade / maxPossibleRawScore
+      : 0;
+
     const normalizedGrade = roundToTwo(
       Math.min(targetGrade, Math.max(0, ratio * targetGrade)),
     );
@@ -338,8 +373,8 @@ export function computeNormalizedGrades(
       avatarId: p.avatarId,
       quizScore,
       boardPositionScore,
-      finishBonus,
-      rawScore,
+      finishBonus: roundToTwo(finishBonus + rankBonusRaw),
+      rawScore: effectiveRawForGrade,
       maxPossibleRawScore,
       targetGrade,
       normalizedGrade,

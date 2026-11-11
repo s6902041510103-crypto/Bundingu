@@ -452,26 +452,40 @@ describe("Knowledge Snake — End-to-End Game Engine, Security & Board Tests", (
     assert.equal(winner.position, 100);
     assert.equal(winner.finishRank, 1);
 
-    // 4. Dynamic Grade Normalization based ONLY on questionsPlayed (1 question played: 25 + 7 + 10 = 42 max raw)
+    // 4. Dynamic Grade Normalization based on questionsPlayed (2 questions played => 40 base pts = full 10/10 when 2/2 correct)
     const maxRaw = calculateMaxPossibleRawScore({
-      questionsPlayed: 1,
+      questionsPlayed: 2,
       targetGrade: 10,
     });
-    assert.equal(maxRaw, 42);
+    assert.equal(maxRaw, 40);
     const grades = computeNormalizedGrades(
       [
         {
           playerId: p1.id,
           name: p1.name,
           avatarId: p1.avatarId,
-          score: 21, // half of 42
-          position: 7,
+          score: 52,
+          position: 12,
           finishRank: null,
-          quizPoints: 14,
+          quizPoints: 40,
+          correctCount: 2,
+        },
+        {
+          playerId: p2.id,
+          name: p2.name,
+          avatarId: p2.avatarId,
+          score: 25,
+          position: 5,
+          finishRank: null,
+          quizPoints: 20,
+          correctCount: 1,
         },
       ],
-      { questionsPlayed: 1, targetGrade: 10 },
+      { questionsPlayed: 2, targetGrade: 10 },
     );
-    assert.equal(grades[0].normalizedGrade, 5);
+    // Answering 2/2 right MUST yield full 10/10
+    assert.equal(grades[0].normalizedGrade, 10);
+    // Answering 1/2 right in 2nd place gets 5.0 base + 0.5 rank bonus = 5.5
+    assert.equal(grades[1].normalizedGrade, 5.5);
   });
 });

@@ -231,14 +231,15 @@ export default function StudentGameplayPage() {
     } else {
       const myUpdated = res.state?.players.find((p) => p.id === activeViewerId);
       if (myUpdated?.answerState === "correct") {
+        const speedPts = (myUpdated.lastSpeedBonus ?? 0).toFixed(2);
         addToast({
-          title: "🎉 ตอบถูกต้อง! ได้รับสิทธิ์ทอยลูกเต๋าทันที",
+          title: `🎉 ตอบถูกต้อง! รับ +20 คะแนน (🔥 เสริมความเร็ว +${speedPts})`,
           description: "กดทอยลูกเต๋าใน 3 วินาที (หรือระบบจะทอยให้อัตโนมัติ!)",
           variant: "success",
         });
       } else {
         addToast({
-          title: "ส่งคำตอบเรียบร้อยแล้ว",
+          title: "ตอบผิดในข้อนี้ (+0 คะแนน · เดินหน้าอัตโนมัติ +1 ช่อง)",
           variant: "info",
         });
       }
@@ -554,6 +555,8 @@ export default function StudentGameplayPage() {
               onAnswer={handleSubmitAnswer}
               viewerAnswerState={viewerPlayer?.answerState ?? "idle"}
               viewerSelectedOptionId={viewerPlayer?.selectedOptionId}
+              viewerSpeedBonus={viewerPlayer?.lastSpeedBonus ?? 0}
+              viewerResponseTimeMs={viewerPlayer?.lastResponseTimeMs ?? null}
               requireConfirmButton={false}
             />
 
