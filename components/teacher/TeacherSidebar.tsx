@@ -64,29 +64,33 @@ export function TeacherLayoutShell({
   };
 
   const sidebarContent = (
-    <div className="flex flex-col h-full bg-[#0f2547] text-white w-64 shrink-0 select-none">
+    <div className="flex flex-col h-full w-64 bg-gradient-to-b from-[#0a1931] via-[#0f2547] to-[#08152c] text-white shrink-0 select-none border-r border-blue-800/40 shadow-2xl">
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-blue-800/60">
+      <div className="px-5 py-5 border-b border-blue-800/50 bg-[#08152c]/40">
         <KnowledgeSnakeLogo size="sm" theme="dark" showSubtitle />
       </div>
 
       {/* Teacher Profile */}
-      <div className="px-5 py-4 border-b border-blue-800/60 flex items-center gap-3 bg-[#132e59]/60">
+      <div className="px-5 py-4 border-b border-blue-800/50 flex items-center gap-3 bg-gradient-to-r from-[#132e59]/80 to-[#193b73]/50">
         <Avatar avatarId="panda" size="md" ring />
         <div className="min-w-0 flex-1">
           <p className="font-display font-bold text-sm text-white truncate">
             {teacher?.name || "ครูสมชาย ใจดี"}
           </p>
-          <p className="text-xs text-blue-200 truncate">Teacher</p>
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            ครูผู้สอน (Teacher)
+          </span>
         </div>
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 px-3 py-4 space-y-1.5" aria-label="เมนูครูผู้สอน">
+      <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto" aria-label="เมนูครูผู้สอน">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const isActive =
             pathname === href ||
-            (href !== "/teacher/dashboard" && pathname?.startsWith(href));
+            (href !== "/teacher/dashboard" && pathname?.startsWith(href)) ||
+            (href === "/teacher/games/new" && pathname === "/teacher/create");
           return (
             <Link
               key={href}
@@ -95,7 +99,7 @@ export function TeacherLayoutShell({
               className={cn(
                 "flex items-center gap-3 px-4 py-3 rounded-xl font-display text-sm font-medium transition-all duration-150",
                 isActive
-                  ? "bg-gradient-to-r from-[#2573ff] to-[#1554d1] text-white shadow-md shadow-blue-900/40 font-semibold"
+                  ? "bg-gradient-to-r from-[#2573ff] to-[#1554d1] text-white shadow-lg shadow-blue-950/50 font-semibold ring-1 ring-blue-400/40"
                   : "text-blue-100/80 hover:bg-white/10 hover:text-white",
               )}
             >
@@ -107,7 +111,7 @@ export function TeacherLayoutShell({
       </nav>
 
       {/* Logout Button */}
-      <div className="p-4 border-t border-blue-800/60">
+      <div className="p-4 border-t border-blue-800/50 bg-[#08152c]/50">
         <button
           type="button"
           onClick={handleLogout}
@@ -122,8 +126,8 @@ export function TeacherLayoutShell({
 
   return (
     <div className="min-h-screen flex bg-[#f4f7fb] text-slate-900 font-body">
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:block sticky top-0 h-screen no-print">
+      {/* Desktop Sidebar — Fixed full-height so the navy bar never cuts off on long pages */}
+      <aside className="hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:w-64 no-print">
         {sidebarContent}
       </aside>
 
@@ -149,9 +153,9 @@ export function TeacherLayoutShell({
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen lg:pl-64">
         {/* Top Header */}
-        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 sm:px-8 py-4 no-print">
+        <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-8 py-4 shadow-2xs no-print">
           <div className="flex items-center justify-between gap-4 max-w-6xl mx-auto">
             <div className="flex items-center gap-3 min-w-0">
               <button
@@ -163,7 +167,7 @@ export function TeacherLayoutShell({
                 <Menu className="w-5 h-5" />
               </button>
               <div className="min-w-0">
-                <h1 className="font-display text-xl sm:text-2xl font-bold text-[#0f2547] truncate">
+                <h1 className="font-display text-xl sm:text-2xl font-extrabold text-[#0f2547] truncate">
                   {title}
                 </h1>
                 {subtitle && (

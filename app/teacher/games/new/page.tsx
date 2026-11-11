@@ -437,99 +437,14 @@ function CreateGameContent() {
   return (
     <TeacherLayoutShell
       teacher={teacher}
-      title="สร้างห้องเกมใหม่ / จัดการห้องที่สร้างไว้"
-      subtitle="สร้างห้องเกมเก็บไว้เปิดใช้ได้ตลอดเวลาเมื่อสอนนักเรียนห้องถัดไป หรือลบห้องที่ไม่ต้องการได้"
+      title="สร้างห้องเกมใหม่"
+      subtitle="กำหนดชื่อห้องเรียน รายวิชา คะแนนเก็บ และชุดคำถามเพื่อเปิดห้องแข่งขันทันที"
     >
       <div className="space-y-6">
-        {/* Saved Rooms Banner — Open saved room directly or delete */}
-        {step < 4 && savedGames.length > 0 && (
-          <Card
-            variant="default"
-            padding="md"
-            className="border-2 border-blue-200 bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-white"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
-                  <RotateCcw className="w-4 h-4" />
-                </div>
-                <div>
-                  <h2 className="font-display font-bold text-sm sm:text-base text-[#0f2547]">
-                    ห้องเกมที่คุณสร้างเก็บไว้ (กดเปิดใช้งานได้ตลอดเวลา)
-                  </h2>
-                  <p className="text-xs text-slate-600">
-                    กด <strong>&ldquo;เปิดใช้ห้องนี้&rdquo;</strong> เพื่อเข้าห้องเดิมทันที หรือกดปุ่มถังขยะเพื่อลบห้องที่ไม่ใช้แล้ว
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-              {savedGames.map((g) => {
-                const isSelected = activeTemplatePin === g.pin;
-                const isBusy = busyPin === g.pin;
-                const qCount =
-                  g.questionIds?.length ??
-                  allQuestions.filter((q) => q.subject === g.subject).length;
-                return (
-                  <div
-                    key={g.id}
-                    className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
-                      isSelected
-                        ? "bg-blue-50 border-blue-500 shadow-xs"
-                        : "bg-white border-slate-200 hover:border-blue-300"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => applySavedGameTemplate(g)}
-                      className="text-left min-w-0 flex-1 cursor-pointer"
-                    >
-                      <div className="font-display font-bold text-xs sm:text-sm text-slate-900 truncate">
-                        {g.title}{" "}
-                        <span className="font-mono text-xs text-blue-700">
-                          (PIN: {g.pin})
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-500">
-                        {g.subject} · {qCount} คำถาม · {g.totalRounds} รอบ
-                      </div>
-                    </button>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="sm"
-                        loading={isBusy}
-                        onClick={() => handleOpenSavedRoom(g)}
-                        iconLeft={<Play className="w-3.5 h-3.5" />}
-                      >
-                        เปิดใช้ห้องนี้
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        disabled={isBusy}
-                        onClick={() => handleDeleteSavedRoom(g)}
-                        aria-label={`ลบห้อง ${g.title}`}
-                        iconLeft={<Trash2 className="w-3.5 h-3.5" />}
-                      >
-                        ลบ
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        )}
-
-        {/* Stepper Header */}
-        <Card variant="default" padding="md">
-          <div className="grid grid-cols-4 gap-2 max-w-2xl mx-auto">
-            {STEPS.map((s) => {
+        {/* Stepper Header — Sleek, clean progress bar */}
+        <div className="rounded-3xl bg-white border border-slate-200/90 shadow-xs px-4 py-4 sm:px-8">
+          <div className="grid grid-cols-4 gap-2 max-w-3xl mx-auto">
+            {STEPS.map((s, idx) => {
               const isCompleted = step > s.id;
               const isCurrent = step === s.id;
               return (
@@ -539,35 +454,72 @@ function CreateGameContent() {
                   onClick={() => {
                     if (s.id < step) setStep(s.id);
                   }}
-                  className="flex flex-col items-center text-center gap-1.5 cursor-pointer"
+                  className="relative flex flex-col sm:flex-row items-center justify-center gap-2 py-1 cursor-pointer group"
                 >
                   <div
-                    className={`w-9 h-9 rounded-full flex items-center justify-center font-display font-bold text-sm transition-colors ${
+                    className={`w-9 h-9 rounded-2xl flex items-center justify-center font-display font-bold text-sm transition-all shrink-0 ${
                       isCompleted
-                        ? "bg-emerald-500 text-white"
+                        ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30"
                         : isCurrent
-                        ? "bg-[#1d63ec] text-white ring-4 ring-blue-100"
+                        ? "bg-gradient-to-br from-[#2573ff] to-[#1554d1] text-white ring-4 ring-blue-100 shadow-md shadow-blue-600/25"
                         : "bg-slate-100 text-slate-400 border border-slate-200"
                     }`}
                   >
-                    {isCompleted ? <Check className="w-4 h-4" /> : s.id}
+                    {isCompleted ? <Check className="w-4 h-4" /> : idx + 1}
                   </div>
-                  <span
-                    className={`text-xs font-display ${
-                      isCurrent
-                        ? "text-[#1d63ec] font-bold"
-                        : isCompleted
-                        ? "text-emerald-700 font-semibold"
-                        : "text-slate-400"
-                    }`}
-                  >
-                    {s.label}
-                  </span>
+                  <div className="text-center sm:text-left min-w-0">
+                    <span
+                      className={`block text-xs sm:text-sm font-display truncate ${
+                        isCurrent
+                          ? "text-[#0f2547] font-bold"
+                          : isCompleted
+                          ? "text-emerald-700 font-semibold"
+                          : "text-slate-400 font-medium"
+                      }`}
+                    >
+                      {s.label}
+                    </span>
+                  </div>
                 </button>
               );
             })}
           </div>
-        </Card>
+        </div>
+
+        {/* Compact Quick-Template Bar (only if saved rooms exist) */}
+        {step === 1 && savedGames.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-blue-50/70 border border-blue-200/80">
+            <div className="flex items-center gap-2 text-xs sm:text-sm font-display font-semibold text-[#0f2547]">
+              <RotateCcw className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>ดึงตั้งค่าจากห้องเดิมที่เคยสร้าง:</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {savedGames.slice(0, 4).map((g) => {
+                const isSelected = activeTemplatePin === g.pin;
+                return (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => applySavedGameTemplate(g)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-display font-semibold transition-all cursor-pointer border ${
+                      isSelected
+                        ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                        : "bg-white text-slate-700 border-slate-200 hover:border-blue-400"
+                    }`}
+                  >
+                    {g.title} ({g.pin})
+                  </button>
+                );
+              })}
+              <Link
+                href="/teacher/history"
+                className="px-2.5 py-1.5 text-xs font-display font-bold text-blue-700 hover:underline"
+              >
+                ดูห้องทั้งหมด ({savedGames.length}) →
+              </Link>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div
@@ -583,120 +535,175 @@ function CreateGameContent() {
         {step < 4 && (
           <div className="grid lg:grid-cols-12 gap-6 items-start">
             {/* Left Form Column */}
-            <Card variant="elevated" padding="lg" className="lg:col-span-8 space-y-5">
+            <Card variant="elevated" padding="lg" className="lg:col-span-8 space-y-6">
               {step === 1 && (
-                <>
-                  <div>
-                    <label
-                      htmlFor="game-title-input"
-                      className="block font-display text-sm font-bold text-slate-700 mb-1.5"
-                    >
-                      ชื่อเกม / ชื่อห้องเรียน <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="game-title-input"
-                      type="text"
-                      value={title}
-                      onChange={(e) => {
-                        setTitle(e.target.value);
-                        if (error) setError("");
-                      }}
-                      placeholder="เช่น คณิตศาสตร์ ม.1/1, วิทยาศาสตร์ ม.2 ห้อง A"
-                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-slate-50/70 text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none"
-                    />
-                    <p className="text-xs text-slate-500 mt-1">
-                      แนะนำให้ระบุห้องเรียนด้วย เช่น &ldquo;เรื่องเศษส่วน ม.1/1&rdquo; เมื่อเด็กเปลี่ยนห้องเป็น ม.1/2 จะได้กดเปิดห้องใหม่จากชุดเดิมได้สะดวก
-                    </p>
-                  </div>
+                <div className="space-y-6">
+                  {/* Section 1: Room Name & Subject */}
+                  <div className="space-y-4">
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div>
+                        <label
+                          htmlFor="game-title-input"
+                          className="block font-display text-sm font-bold text-slate-800 mb-1.5"
+                        >
+                          ชื่อเกม / ห้องเรียน <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          id="game-title-input"
+                          type="text"
+                          value={title}
+                          onChange={(e) => {
+                            setTitle(e.target.value);
+                            if (error) setError("");
+                          }}
+                          placeholder="เช่น คณิตศาสตร์ ม.1/1"
+                          className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-slate-50/70 text-slate-900 font-display font-semibold focus:bg-white focus:border-blue-600 focus:outline-none transition-colors"
+                        />
+                      </div>
 
-
-                  {/* Smart Rounds & Finish Line Calculator Banner */}
-                  <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50/60 to-emerald-50/70 border border-blue-200 text-xs space-y-2">
-                    <div className="flex items-center gap-2 font-display font-bold text-sm text-blue-900">
-                      <Sparkles className="w-4 h-4 text-amber-500 fill-amber-400" />
-                      <span>ระบบคำนวณจำนวนรอบให้เหมาะสมกับกระดาน 100 ช่อง:</span>
-                    </div>
-                    <p className="text-slate-600 leading-relaxed">
-                      บนกระดาน 100 ช่อง นักเรียนจะทอยเต๋าเฉลี่ยได้ตาละ 3.5 แต้ม (+ขึ้นบันได) จึงต้องใช้ประมาณ <strong>15–20 รอบ</strong> เพื่อเปิดโอกาสให้นักเรียนมีเวลาเดินถึงเส้นชัย (ช่อง 100) ได้หลายคน
-                    </p>
-                    <div className="flex items-start gap-2 text-emerald-800 font-medium bg-white/70 p-2.5 rounded-xl border border-emerald-200/80">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                      <span>
-                        <strong>หากครูใส่คำถามน้อย (เช่น 3, 5 หรือ 10 ข้อ):</strong> ไม่ต้องกังวล! ระบบจะนำคำถามมา <strong>วนซ้ำให้อัตโนมัติ</strong> เพื่อฝึกทบทวนความแม่นยำและช่วยให้เด็กๆ เดินพิชิตเส้นชัยช่อง 100 ได้ครบทุกคนตามเป้าหมายครับ
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid sm:grid-cols-3 gap-4">
-                    <div>
-                      <label
-                        htmlFor="subject-input"
-                        className="block font-display text-sm font-bold text-slate-700 mb-1.5"
-                      >
-                        รายวิชา (พิมพ์ชื่อวิชาได้อิสระ) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        id="subject-input"
-                        type="text"
-                        list="subject-suggestions"
-                        value={subject}
-                        onChange={(e) => setSubject(e.target.value)}
-                        placeholder="พิมพ์ชื่อวิชา เช่น คณิตศาสตร์, ภาษาไทย, ประวัติศาสตร์..."
-                        className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-slate-50/70 text-slate-900 font-display font-medium focus:bg-white focus:border-blue-600 focus:outline-none"
-                      />
-                      <datalist id="subject-suggestions">
-                        {SUBJECTS.map((subj) => (
-                          <option key={subj} value={subj} />
-                        ))}
-                        <option value="ประวัติศาสตร์" />
-                        <option value="สุขศึกษาและพลศึกษา" />
-                        <option value="ศิลปะและดนตรี" />
-                        <option value="การงานอาชีพ" />
-                        <option value="วิทยาการคำนวณ" />
-                        <option value="หน้าที่พลเมือง" />
-                      </datalist>
-                      <div className="flex flex-wrap gap-1.5 pt-1.5">
-                        {["คณิตศาสตร์", "วิทยาศาสตร์", "ภาษาไทย", "ภาษาอังกฤษ", "สังคมศึกษา", "คอมพิวเตอร์", "ประวัติศาสตร์"].map((tag) => (
-                          <button
-                            key={tag}
-                            type="button"
-                            onClick={() => setSubject(tag)}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
-                              subject === tag
-                                ? "bg-blue-600 text-white shadow-2xs font-bold"
-                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                            }`}
-                          >
-                            {tag}
-                          </button>
-                        ))}
+                      <div>
+                        <label
+                          htmlFor="subject-input"
+                          className="block font-display text-sm font-bold text-slate-800 mb-1.5"
+                        >
+                          รายวิชา <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          id="subject-input"
+                          type="text"
+                          list="subject-suggestions"
+                          value={subject}
+                          onChange={(e) => setSubject(e.target.value)}
+                          placeholder="พิมพ์หรือเลือกรายวิชา..."
+                          className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-slate-50/70 text-slate-900 font-display font-semibold focus:bg-white focus:border-blue-600 focus:outline-none transition-colors"
+                        />
+                        <datalist id="subject-suggestions">
+                          {SUBJECTS.map((subj) => (
+                            <option key={subj} value={subj} />
+                          ))}
+                          <option value="ประวัติศาสตร์" />
+                          <option value="สุขศึกษาและพลศึกษา" />
+                          <option value="ศิลปะและดนตรี" />
+                          <option value="วิทยาการคำนวณ" />
+                        </datalist>
                       </div>
                     </div>
 
-                    <div>
+                    {/* Clean single-row subject quick chips */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-display font-semibold text-slate-400 mr-1">
+                        วิชาแนะนำ:
+                      </span>
+                      {[
+                        "คณิตศาสตร์",
+                        "วิทยาศาสตร์",
+                        "ภาษาไทย",
+                        "ภาษาอังกฤษ",
+                        "สังคมศึกษา",
+                        "คอมพิวเตอร์",
+                        "ประวัติศาสตร์",
+                      ].map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => setSubject(tag)}
+                          className={`px-3 py-1 rounded-full text-xs font-display font-semibold cursor-pointer transition-all ${
+                            subject === tag
+                              ? "bg-blue-600 text-white shadow-xs"
+                              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Section 2: 3 Clean Visual Setting Cards (Target Grade, Total Rounds, Time Limit) */}
+                  <div className="grid sm:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
+                    {/* Card 1: Target Grade */}
+                    <div className="p-4 rounded-2xl bg-emerald-50/60 border-2 border-emerald-200/80 space-y-2.5">
+                      <label
+                        htmlFor="target-grade-input"
+                        className="block font-display text-xs font-bold uppercase tracking-wide text-emerald-800"
+                      >
+                        🎯 คะแนนเก็บเต็ม (คะแนน) *
+                      </label>
+                      <input
+                        id="target-grade-input"
+                        type="number"
+                        min={1}
+                        max={1000}
+                        value={targetGrade}
+                        onChange={(e) => setTargetGrade(Number(e.target.value))}
+                        className="w-full px-3.5 py-2.5 rounded-xl border-2 border-emerald-300 bg-white text-emerald-950 font-display text-lg font-black focus:border-emerald-600 focus:outline-none"
+                      />
+                      <div className="flex flex-wrap gap-1">
+                        {[5, 10, 15, 20, 100].map((pts) => (
+                          <button
+                            key={pts}
+                            type="button"
+                            onClick={() => setTargetGrade(pts)}
+                            className={`px-2 py-1 rounded-lg font-display text-[11px] font-bold transition-colors cursor-pointer ${
+                              targetGrade === pts
+                                ? "bg-emerald-600 text-white"
+                                : "bg-white/90 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+                            }`}
+                          >
+                            {pts}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-emerald-800/80 leading-snug">
+                        ตอบถูกครบทุกข้อได้เต็ม {targetGrade} คะแนน
+                      </p>
+                    </div>
+
+                    {/* Card 2: Total Rounds */}
+                    <div className="p-4 rounded-2xl bg-blue-50/60 border-2 border-blue-200/80 space-y-2.5">
                       <label
                         htmlFor="rounds-input"
-                        className="block font-display text-sm font-bold text-slate-700 mb-1.5"
+                        className="block font-display text-xs font-bold uppercase tracking-wide text-blue-800"
                       >
-                        จำนวนรอบคำถาม <span className="text-red-500">*</span>
+                        🎲 จำนวนรอบคำถาม (รอบ) *
                       </label>
                       <input
                         id="rounds-input"
                         type="number"
                         min={1}
-                        max={30}
+                        max={50}
                         value={totalRounds}
                         onChange={(e) => setTotalRounds(Number(e.target.value))}
-                        className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-slate-50/70 text-slate-900 font-display font-bold focus:bg-white focus:border-blue-600 focus:outline-none"
+                        className="w-full px-3.5 py-2.5 rounded-xl border-2 border-blue-200 bg-white text-slate-900 font-display text-lg font-black focus:border-blue-600 focus:outline-none"
                       />
+                      <div className="flex flex-wrap gap-1">
+                        {[5, 10, 15, 20, 30].map((r) => (
+                          <button
+                            key={r}
+                            type="button"
+                            onClick={() => setTotalRounds(r)}
+                            className={`px-2 py-1 rounded-lg font-display text-[11px] font-bold transition-colors cursor-pointer ${
+                              totalRounds === r
+                                ? "bg-blue-600 text-white"
+                                : "bg-white/90 text-blue-800 border border-blue-200 hover:bg-blue-100"
+                            }`}
+                          >
+                            {r} รอบ
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-blue-800/80 leading-snug">
+                        หากคำถามน้อยกว่ารอบ ระบบวนซ้ำให้อัตโนมัติ
+                      </p>
                     </div>
 
-                    <div>
+                    {/* Card 3: Question Time Limit */}
+                    <div className="p-4 rounded-2xl bg-amber-50/60 border-2 border-amber-200/80 space-y-2.5">
                       <label
                         htmlFor="time-limit-input"
-                        className="block font-display text-sm font-bold text-slate-700 mb-1.5"
+                        className="block font-display text-xs font-bold uppercase tracking-wide text-amber-900"
                       >
-                        เวลาตอบต่อข้อ (วินาที) <span className="text-red-500">*</span>
+                        ⏱️ เวลาตอบต่อข้อ (วินาที) *
                       </label>
                       <input
                         id="time-limit-input"
@@ -705,65 +712,53 @@ function CreateGameContent() {
                         max={120}
                         value={questionTimeLimit}
                         onChange={(e) => setQuestionTimeLimit(Number(e.target.value))}
-                        className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-slate-50/70 text-slate-900 font-display font-bold focus:bg-white focus:border-blue-600 focus:outline-none"
+                        className="w-full px-3.5 py-2.5 rounded-xl border-2 border-amber-200 bg-white text-slate-900 font-display text-lg font-black focus:border-amber-500 focus:outline-none"
                       />
-                    </div>
-
-                    <div className="sm:col-span-2">
-                      <label
-                        htmlFor="target-grade-input"
-                        className="block font-display text-sm font-bold text-slate-700 mb-1.5"
-                      >
-                        คะแนนเก็บเต็มที่จะเก็บ (คะแนน) <span className="text-red-500">*</span>
-                      </label>
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
-                        <input
-                          id="target-grade-input"
-                          type="number"
-                          min={1}
-                          max={1000}
-                          value={targetGrade}
-                          onChange={(e) => setTargetGrade(Number(e.target.value))}
-                          placeholder="เช่น 10 คะแนน"
-                          className="w-full sm:w-44 px-4 py-3 rounded-xl border-2 border-emerald-200 bg-emerald-50/50 text-emerald-950 font-display font-bold focus:bg-white focus:border-emerald-600 focus:outline-none"
-                        />
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {[5, 10, 15, 20, 100].map((pts) => (
-                            <button
-                              key={pts}
-                              type="button"
-                              onClick={() => setTargetGrade(pts)}
-                              className={`px-3 py-2 rounded-xl font-display text-xs font-bold transition-colors cursor-pointer ${
-                                targetGrade === pts
-                                  ? "bg-emerald-600 text-white shadow-sm"
-                                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                              }`}
-                            >
-                              เก็บ {pts} คะแนน
-                            </button>
-                          ))}
-                        </div>
+                      <div className="flex flex-wrap gap-1">
+                        {[15, 20, 30, 45, 60].map((sec) => (
+                          <button
+                            key={sec}
+                            type="button"
+                            onClick={() => setQuestionTimeLimit(sec)}
+                            className={`px-2 py-1 rounded-lg font-display text-[11px] font-bold transition-colors cursor-pointer ${
+                              questionTimeLimit === sec
+                                ? "bg-amber-500 text-white"
+                                : "bg-white/90 text-amber-900 border border-amber-200 hover:bg-amber-100"
+                            }`}
+                          >
+                            {sec} วิ
+                          </button>
+                        ))}
                       </div>
-                      <p className="text-xs text-slate-500 mt-1.5">
-                        ระบบจะคำนวณเกรดสุทธิให้อัตโนมัติตามสัดส่วนข้อที่เล่นจริง (นักเรียนที่ตอบถูกครบทุกข้อจะได้เต็ม {targetGrade} คะแนน)
+                      <p className="text-[11px] text-amber-900/80 leading-snug">
+                        ตอบไวรับโบนัสความเร็วสูงสุด +5 คะแนน
                       </p>
                     </div>
                   </div>
 
-                  <div className="pt-2 space-y-2.5 border-t border-slate-100">
-                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  {/* Section 3: Special Cells Toggle */}
+                  <label className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200/90 cursor-pointer hover:bg-slate-100/70 transition-colors select-none">
+                    <div className="flex items-center gap-3">
                       <input
                         type="checkbox"
                         checked={enableSpecials}
                         onChange={(e) => setEnableSpecials(e.target.checked)}
-                        className="w-4 h-4 rounded border-slate-300 text-blue-600"
+                        className="w-5 h-5 rounded-md border-slate-300 text-blue-600"
                       />
-                      <span className="text-sm font-medium text-slate-700">
-                        เปิดใช้งานช่องพิเศษ 3 ช่อง (25 ⭐ BONUS, 50 🎁 GIFT, 75 ✨ BOOST)
-                      </span>
-                    </label>
-                  </div>
-                </>
+                      <div>
+                        <span className="block font-display text-sm font-bold text-slate-800">
+                          เปิดใช้งานช่องโบนัสพิเศษบนกระดาน 100 ช่อง
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          เพิ่มความตื่นเต้นด้วยช่อง 25 ⭐ โบนัส, ช่อง 50 🎁 กล่องปริศนา และช่อง 75 ✨ พุ่งทะยาน
+                        </span>
+                      </div>
+                    </div>
+                    <Badge variant={enableSpecials ? "success" : "default"} size="sm">
+                      {enableSpecials ? "เปิดใช้งาน" : "ปิด"}
+                    </Badge>
+                  </label>
+                </div>
               )}
 
               {step === 2 && (
@@ -1076,58 +1071,79 @@ function CreateGameContent() {
               </div>
             </Card>
 
-            {/* Right Column: Settings Preview Card */}
-            <Card variant="soft" padding="lg" className="lg:col-span-4 space-y-4">
-              <h2 className="font-display text-lg font-bold text-[#0f2547]">
-                สรุปชุดเกมที่จะบันทึก
-              </h2>
-
-              <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2 text-xs text-slate-600">
-                <p className="font-display font-bold text-slate-800 text-sm">
-                  {title || "ยังไม่ได้ระบุชื่อห้องเรียน"}
-                </p>
-                <p>หมวดวิชา: <strong>{subject}</strong></p>
-                <p>
-                  คำถามที่เลือกไว้:{" "}
-                  <strong className="text-emerald-700">
-                    {selectedQuestionIds.length} ข้อ
-                  </strong>
-                </p>
-                <p>
-                  จำนวนรอบ: <strong>{totalRounds} รอบ</strong> · เวลาตอบ{" "}
-                  <strong>{questionTimeLimit} วินาที/ข้อ</strong>
-                </p>
-                <p>
-                  คะแนนเก็บเต็ม:{" "}
-                  <strong className="text-emerald-700">
-                    {targetGrade} คะแนน
-                  </strong>
-                </p>
+            {/* Right Column: Clean Sticky Summary Ticket */}
+            <Card
+              variant="elevated"
+              padding="lg"
+              className="lg:col-span-4 lg:sticky lg:top-24 space-y-4 border-t-4 border-t-blue-600"
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="font-display text-base font-extrabold text-[#0f2547]">
+                  สรุปห้องเกมที่จะเปิด
+                </h2>
+                <Badge variant="primary" size="sm">
+                  {subject}
+                </Badge>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-xs text-emerald-900 space-y-1">
-                <p className="font-display font-bold">
-                  💡 รองรับการสอนหลายห้องเรียน
-                </p>
-                <p>
-                  เมื่อกดสร้างห้องแล้ว ระบบจะเก็บชุดเกมและคำถามชุดนี้ไว้ในบัญชีของคุณ เมื่อนักเรียนเปลี่ยนห้อง สามารถกดปุ่ม{" "}
-                  <strong>&ldquo;เปิดห้องใหม่ (เปลี่ยนห้องเรียน)&rdquo;</strong>{" "}
-                  ที่หน้าหลักเพื่อรับคีย์ห้องใหม่ได้ทันทีโดยไม่ต้องพิมพ์คำถามใหม่
-                </p>
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+                <div>
+                  <span className="text-[11px] font-display font-semibold text-slate-400 uppercase">
+                    ชื่อห้องเรียน
+                  </span>
+                  <p className="font-display font-extrabold text-slate-900 text-base truncate">
+                    {title || "ยังไม่ได้ระบุชื่อห้องเรียน"}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5 pt-2 border-t border-slate-200/70">
+                  <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200/80">
+                    <span className="block text-[11px] text-emerald-700 font-medium">
+                      คะแนนเก็บเต็ม
+                    </span>
+                    <span className="font-display text-lg font-black text-emerald-800">
+                      {targetGrade} คะแนน
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200/80">
+                    <span className="block text-[11px] text-blue-700 font-medium">
+                      คำถามที่เลือก
+                    </span>
+                    <span className="font-display text-lg font-black text-blue-800">
+                      {selectedQuestionIds.length} ข้อ
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white border border-slate-200">
+                    <span className="block text-[11px] text-slate-500 font-medium">
+                      จำนวนรอบ
+                    </span>
+                    <span className="font-display text-sm font-bold text-slate-800">
+                      {totalRounds} รอบ
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white border border-slate-200">
+                    <span className="block text-[11px] text-slate-500 font-medium">
+                      เวลาตอบ/ข้อ
+                    </span>
+                    <span className="font-display text-sm font-bold text-slate-800">
+                      {questionTimeLimit} วินาที
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <ul className="space-y-2.5 text-xs text-slate-600 pt-1">
+              <ul className="space-y-2 text-xs text-slate-600">
                 <li className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                  <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0">
                     ✓
                   </span>
                   <span>กระดาน 100 ช่อง · งู {SNAKES.length} ตัว · บันได {LADDERS.length} ตัว</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                  <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0">
                     ✓
                   </span>
-                  <span>คีย์ห้อง 6 หลัก (ตัวอักษรผสมตัวเลข) + QR Code</span>
+                  <span>บันทึกชุดเกมไว้เปิดซ้ำกับห้องเรียนถัดไปได้ทันที</span>
                 </li>
               </ul>
             </Card>
