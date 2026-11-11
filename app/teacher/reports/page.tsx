@@ -10,6 +10,10 @@ import { Badge } from "@/components/ui/Badge";
 import { Loading } from "@/components/ui/Loading";
 import { Avatar } from "@/components/game/Avatar";
 import { Leaderboard } from "@/components/game/Leaderboard";
+import {
+  calculateMaxPossibleRawScore,
+  computeNormalizedGrades,
+} from "@/lib/game-state";
 import type { GameHistoryRecord, LeaderboardEntry } from "@/lib/types";
 import { Printer, Trophy, Users, Calendar, CheckCircle2 } from "lucide-react";
 
@@ -20,6 +24,7 @@ function ReportsContent() {
 
   const [history, setHistory] = useState<GameHistoryRecord[]>([]);
   const [selectedPin, setSelectedPin] = useState<string>(initialPin);
+  const [targetGrade, setTargetGrade] = useState<number>(10);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -65,6 +70,32 @@ function ReportsContent() {
     isFinished: r.isFinished,
   }));
 
+  const questionsPlayed = Math.max(
+    1,
+    activeRecord?.roundsPlayed || activeRecord?.totalRounds || 1,
+  );
+  const maxPossibleRawScore = calculateMaxPossibleRawScore({
+    questionsPlayed,
+    targetGrade,
+  });
+  const normalizedRows = computeNormalizedGrades(
+    (activeRecord?.playerResults ?? []).map((r) => ({
+      playerId: r.playerId,
+      name: r.name,
+      avatarId: r.avatarId,
+      score: r.score,
+      position: r.position,
+      finishRank: r.finishRank,
+      finishBonus: r.finishBonus,
+      quizPoints: r.quizPoints,
+      correctCount: r.correctCount,
+    })),
+    { questionsPlayed, targetGrade },
+  );
+  const normalizedByPlayerId = new Map(
+    normalizedRows.map((n) => [n.playerId, n]),
+  );
+
   const handlePrintA4 = () => {
     window.print();
   };
@@ -73,9 +104,24 @@ function ReportsContent() {
     <TeacherLayoutShell
       teacher={teacher}
       title="ผลการแข่งขัน / รายงาน A4"
-      subtitle="รายละเอียดคะแนนผู้เล่น อัตราความแม่นยำจริง และพิมพ์หรือส่งออก PDF ขนาด A4"
+      subtitle="รายละเอียดคะแนนผู้เล่น เกรดสุทธิ (Dynamic Grade Normalization) และพิมพ์หรือส่งออก PDF ขนาด A4"
       actions={
-        <div className="flex items-center gap-2.5 no-print">
+        <div className="flex flex-wrap items-center gap-2.5 no-print">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-display font-bold text-slate-700">
+            <label htmlFor="report-target-grade">คะแนนเต็ม (Target Grade):</label>
+            <input
+              id="report-target-grade"
+              type="number"
+              min={1}
+              max={100}
+              value={targetGrade}
+              onChange={(e) =>
+                setTargetGrade(Math.max(1, Number(e.target.value) || 10))
+              }
+              className="w-16 px-2 py-0.5 rounded-lg border border-slate-300 font-mono font-bold text-sm text-blue-700 text-center"
+            />
+          </div>
+
           <select
             value={activeRecord?.pin ?? ""}
             onChange={(e) => setSelectedPin(e.target.value)}
@@ -121,7 +167,9 @@ function ReportsContent() {
                   <strong className="font-mono text-blue-700">
                     {activeRecord.pin}
                   </strong>{" "}
-                  · โฮสต์: {activeRecord.hostName}
+                  · โฮสต์: {activeRecord.hostName} · เล่นจริง{" "}
+                  <strong>{questionsPlayed}</strong> ข้อ (Max Raw Score:{" "}
+                  <strong className="font-mono">{maxPossibleRawScore}</strong>)
                 </p>
               </div>
             </div>
@@ -161,7 +209,10 @@ function ReportsContent() {
                 <tr className="border-b-2 border-slate-200 bg-slate-50 text-xs font-display font-bold text-slate-600">
                   <th className="py-3 px-4">อันดับ</th>
                   <th className="py-3 px-4">ชื่อผู้เล่น</th>
-                  <th className="py-3 px-4">คะแนนสุดท้าย</th>
+                  <th className="py-3 px-4">คะแนนดิบ (Raw)</th>
+                  <th className="py-3 px-4 text-blue-700">
+                    เกรดสุทธิ (/{targetGrade})
+                  </th>
                   <th className="py-3 px-4">ตำแหน่ง/โบนัสเส้นชัย</th>
                   <th className="py-3 px-4 text-center">บันได 🪜</th>
                   <th className="py-3 px-4 text-center">งู 🐍</th>
@@ -171,59 +222,68 @@ function ReportsContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {activeRecord.playerResults.map((row) => (
-                  <tr key={row.playerId} className="hover:bg-slate-50/60">
-                    <td className="py-3.5 px-4 font-display font-extrabold text-[#0f2547]">
-                      {row.rank}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-2.5">
-                        <Avatar avatarId={row.avatarId} size="xs" />
-                        <span className="font-display font-bold text-slate-900">
-                          {row.name}
+                {activeRecord.playerResults.map((row) => {
+                  const norm = normalizedByPlayerId.get(row.playerId);
+                  return (
+                    <tr key={row.playerId} className="hover:bg-slate-50/60">
+                      <td className="py-3.5 px-4 font-display font-extrabold text-[#0f2547]">
+                        {row.rank}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <Avatar avatarId={row.avatarId} size="xs" />
+                          <span className="font-display font-bold text-slate-900">
+                            {row.name}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 font-mono font-bold text-slate-700">
+                        {row.score}{" "}
+                        <span className="text-xs text-slate-400">
+                          / {maxPossibleRawScore}
                         </span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 font-mono font-extrabold text-blue-700">
-                      {row.score}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="text-slate-700 font-medium">
-                        ช่อง {row.position}
-                      </span>
-                      {row.finishBonus > 0 && (
-                        <span className="ml-2 text-xs font-bold text-emerald-600">
-                          (+{row.finishBonus} โบนัส)
+                      </td>
+                      <td className="py-3.5 px-4 font-mono font-extrabold text-blue-700">
+                        {norm ? norm.normalizedGrade.toFixed(2) : "-"}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="text-slate-700 font-medium">
+                          ช่อง {row.position}
                         </span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4 text-center font-mono text-emerald-700 font-semibold">
-                      {row.laddersClimbed}
-                    </td>
-                    <td className="py-3.5 px-4 text-center font-mono text-red-600 font-semibold">
-                      {row.snakesBitten}
-                    </td>
-                    <td className="py-3.5 px-4 text-center font-mono font-bold text-emerald-600">
-                      {row.correctCount}
-                    </td>
-                    <td className="py-3.5 px-4 text-center font-mono font-bold text-rose-600">
-                      {row.wrongCount ?? Math.max(0, row.answeredCount - row.correctCount)}
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      {/* Never fabricate fake accuracy when answeredCount === 0 */}
-                      {row.accuracyPercent !== null && row.answeredCount > 0 ? (
-                        <span className="inline-flex items-center gap-1.5 font-mono font-bold text-slate-900">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          {row.accuracyPercent}%
-                        </span>
-                      ) : (
-                        <Badge variant="default" size="sm">
-                          ยังไม่มีข้อมูล
-                        </Badge>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                        {row.finishBonus > 0 && (
+                          <span className="ml-2 text-xs font-bold text-emerald-600">
+                            (+{row.finishBonus} โบนัส)
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono text-emerald-700 font-semibold">
+                        {row.laddersClimbed}
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono text-red-600 font-semibold">
+                        {row.snakesBitten}
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono font-bold text-emerald-600">
+                        {row.correctCount}
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono font-bold text-rose-600">
+                        {row.wrongCount ?? Math.max(0, row.answeredCount - row.correctCount)}
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        {/* Never fabricate fake accuracy when answeredCount === 0 */}
+                        {row.accuracyPercent !== null && row.answeredCount > 0 ? (
+                          <span className="inline-flex items-center gap-1.5 font-mono font-bold text-slate-900">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            {row.accuracyPercent}%
+                          </span>
+                        ) : (
+                          <Badge variant="default" size="sm">
+                            ยังไม่มีข้อมูล
+                          </Badge>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

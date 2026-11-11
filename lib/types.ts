@@ -80,6 +80,12 @@ export interface Player {
   specialEventsTriggered?: number;
   connected?: boolean;
   bonusNextTurn?: boolean;
+  /** Accumulated quiz points (Base 20 + Speed Bonus up to 5 per correct answer) */
+  quizPoints?: number;
+  /** Speed bonus earned on the current/latest question (0 - 5, rounded to 2 decimals) */
+  lastSpeedBonus?: number;
+  /** Response time in milliseconds on the current/latest question */
+  lastResponseTimeMs?: number | null;
 }
 
 export interface QuestionOption {
@@ -322,8 +328,59 @@ export interface PlayerReportRow {
   correctCount: number;
   wrongCount: number;
   answeredCount: number;
+  quizPoints?: number;
   /** Null when answeredCount === 0 so fake statistics are never fabricated */
   accuracyPercent: number | null;
+}
+
+export type OptionChoiceId = "A" | "B" | "C" | "D";
+
+export interface QuestionSubmissionResult {
+  playerId: string;
+  isCorrect: boolean;
+  basePoints: number;
+  speedBonus: number;
+  pointsEarned: number;
+  stepsToMove: number;
+  msLeft: number;
+  responseTimeMs: number;
+}
+
+export interface RoundDistribution {
+  optionId: OptionChoiceId;
+  rawOptionId: string;
+  label: string;
+  count: number;
+  percentage: number;
+  isCorrect: boolean;
+}
+
+export interface FastestResponder {
+  playerId: string;
+  playerName: string;
+  avatarId: AvatarId;
+  responseTimeMs: number;
+  speedBonus: number;
+}
+
+export interface PostQuestionAnalytics {
+  questionNumber: number;
+  totalResponses: number;
+  distribution: RoundDistribution[];
+  fastestPlayer: FastestResponder | null;
+}
+
+export interface NormalizedGradeRow {
+  playerId: string;
+  playerName: string;
+  avatarId: AvatarId;
+  quizScore: number;
+  boardPositionScore: number;
+  finishBonus: number;
+  rawScore: number;
+  maxPossibleRawScore: number;
+  targetGrade: number;
+  normalizedGrade: number;
 }
 
 export interface GameHistoryRecord {

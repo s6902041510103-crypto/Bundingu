@@ -91,8 +91,8 @@ export const GAME_SETTINGS: GameSettings = {
   questionTimeLimit: 20,
   diceMin: 1,
   diceMax: 6,
-  finishBonuses: [3, 2, 1],
-  scoreRule: "score = finalPosition (+ โบนัสเส้นชัย 3/2/1)",
+  finishBonuses: [10, 5, 3],
+  scoreRule: "score = quizPoints (20 + Speed Bonus ≤ 5) + position + Finish Bonus (+10)",
 };
 
 export const MOCK_GAME: GameInfo = {

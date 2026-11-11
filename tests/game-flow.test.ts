@@ -9,6 +9,12 @@ import {
 } from "../lib/board";
 import { SNAKES, LADDERS, SPECIAL_CELLS } from "../lib/game-data";
 import {
+  evaluateQuestionSubmission,
+  computePostQuestionAnalytics,
+  calculateMaxPossibleRawScore,
+  computeNormalizedGrades,
+} from "../lib/game-state";
+import {
   createRoomOnServer,
   executeServerGameCommand,
   getServerRoom,
@@ -345,5 +351,127 @@ describe("Knowledge Snake — End-to-End Game Engine, Security & Board Tests", (
     const deleted = deleteQuestionRecord(created.question!.id);
     assert.equal(deleted.deleted, true);
     assert.equal(listQuestions().length, beforeCount);
+  });
+
+  it("6. Refactored Scoring (20 + Speed Bonus <= 5), Wrong Auto-Move +1, Analytics, Immediate Finish at 100 (+10 Bonus), and Dynamic Grade Normalization", () => {
+    // 1. Speed bonus calculation (half time left => +2.50 speed bonus => 22.50 total pts)
+    const correctEval = evaluateQuestionSubmission({
+      playerId: "p1",
+      selectedOptionId: "opt-b",
+      correctOptionId: "opt-b",
+      questionStartedAtMs: 1000,
+      submittedAtMs: 11000, // 10s elapsed out of 20s
+      questionTimeLimitSec: 20,
+      rngD6: () => 4,
+    });
+    assert.equal(correctEval.isCorrect, true);
+    assert.equal(correctEval.basePoints, 20);
+    assert.equal(correctEval.speedBonus, 2.5);
+    assert.equal(correctEval.pointsEarned, 22.5);
+    assert.equal(correctEval.stepsToMove, 4);
+
+    // 2. Wrong answer => 0 pts, auto-move 1 space forward
+    const wrongEval = evaluateQuestionSubmission({
+      playerId: "p2",
+      selectedOptionId: "opt-a",
+      correctOptionId: "opt-b",
+      questionStartedAtMs: 1000,
+      submittedAtMs: 5000,
+      questionTimeLimitSec: 20,
+    });
+    assert.equal(wrongEval.isCorrect, false);
+    assert.equal(wrongEval.pointsEarned, 0);
+    assert.equal(wrongEval.stepsToMove, 1);
+
+    // 3. Immediate Game Over at Cell >= 100 + +10 Finish Bonus
+    const created = createRoomOnServer({
+      title: "Finish 100 Room",
+      subject: "วิทยาศาสตร์",
+      totalRounds: 5,
+      questionTimeLimit: 20,
+      teacherId: "teacher-100",
+      hostName: "ครูสมหญิง",
+    });
+    const pin = created.room!.pin;
+    const p1 = executeServerGameCommand(pin, {
+      type: "JOIN_GAME",
+      nickname: "Runner1",
+      avatarId: "fox",
+    }).joinedPlayer!;
+    const p2 = executeServerGameCommand(pin, {
+      type: "JOIN_GAME",
+      nickname: "Runner2",
+      avatarId: "rabbit",
+    }).joinedPlayer!;
+
+    executeServerGameCommand(
+      pin,
+      { type: "START_GAME" },
+      { isTeacherAuthenticated: true },
+    );
+
+    const room = getServerRoom(pin)!;
+    const correctId = room.state.question!.correctOptionId;
+    const wrongId = room.state.question!.options.find((o) => o.id !== correctId)!.id;
+
+    // P2 answers wrong -> should auto-advance from 1 to 2
+    executeServerGameCommand(pin, {
+      type: "SUBMIT_ANSWER",
+      playerId: p2.id,
+      optionId: wrongId,
+    });
+    const p2AfterWrong = room.state.players.find((p) => p.id === p2.id)!;
+    assert.equal(p2AfterWrong.position, 2);
+
+    // Place P1 at 99, answer correctly, and roll D6 -> reaches/exceeds 100 -> immediate Game Over + +10 bonus
+    room.state.players = room.state.players.map((p) =>
+      p.id === p1.id ? { ...p, position: 99 } : p,
+    );
+    executeServerGameCommand(pin, {
+      type: "SUBMIT_ANSWER",
+      playerId: p1.id,
+      optionId: correctId,
+    });
+
+    // Check Post-Question Analytics after both answered (auto-revealed)
+    const analytics = computePostQuestionAnalytics(
+      room.state.question,
+      room.state.players,
+    );
+    assert.ok(analytics);
+    assert.equal(analytics!.totalResponses, 2);
+    assert.equal(analytics!.fastestPlayer?.playerId, p1.id);
+
+    const finishRoll = executeServerGameCommand(pin, {
+      type: "ROLL_DICE",
+      playerId: p1.id,
+    });
+    assert.ok(!finishRoll.error);
+    assert.equal(finishRoll.publicState?.gameStatus, "finished");
+    const winner = finishRoll.publicState?.players.find((p) => p.id === p1.id)!;
+    assert.equal(winner.position, 100);
+    assert.equal(winner.finishRank, 1);
+
+    // 4. Dynamic Grade Normalization based ONLY on questionsPlayed (1 question played: 25 + 7 + 10 = 42 max raw)
+    const maxRaw = calculateMaxPossibleRawScore({
+      questionsPlayed: 1,
+      targetGrade: 10,
+    });
+    assert.equal(maxRaw, 42);
+    const grades = computeNormalizedGrades(
+      [
+        {
+          playerId: p1.id,
+          name: p1.name,
+          avatarId: p1.avatarId,
+          score: 21, // half of 42
+          position: 7,
+          finishRank: null,
+          quizPoints: 14,
+        },
+      ],
+      { questionsPlayed: 1, targetGrade: 10 },
+    );
+    assert.equal(grades[0].normalizedGrade, 5);
   });
 });

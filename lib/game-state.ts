@@ -16,8 +16,12 @@ import type {
   GameState,
   LadderLink,
   LeaderboardEntry,
+  NormalizedGradeRow,
+  OptionChoiceId,
   Player,
+  PostQuestionAnalytics,
   Question,
+  QuestionSubmissionResult,
   SnakeLink,
   SpecialCell,
   SpecialEventState,
@@ -112,7 +116,235 @@ export function resetQuestionStates(players: Player[]): Player[] {
     answerState: "idle",
     selectedOptionId: null,
     answeredAt: null,
+    lastSpeedBonus: 0,
+    lastResponseTimeMs: null,
   }));
+}
+
+/* ------------------------------------------------------------------ *
+ * Module 1, 2 & 4: Scoring, Post-Question Analytics & Normalization
+ * ------------------------------------------------------------------ */
+
+export const BASE_CORRECT_POINTS = 20;
+export const MAX_SPEED_BONUS = 5;
+export const INCORRECT_AUTO_MOVE = 1;
+export const FIRST_FINISH_BONUS = 10;
+
+export function roundToTwo(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+export function evaluateQuestionSubmission(params: {
+  playerId: string;
+  selectedOptionId: string | null;
+  correctOptionId: string;
+  questionStartedAtMs: number;
+  submittedAtMs: number;
+  questionTimeLimitSec: number;
+  rngD6?: () => number;
+}): QuestionSubmissionResult {
+  const {
+    playerId,
+    selectedOptionId,
+    correctOptionId,
+    questionStartedAtMs,
+    submittedAtMs,
+    questionTimeLimitSec,
+    rngD6 = () => Math.floor(Math.random() * 6) + 1,
+  } = params;
+
+  const totalDurationMs = Math.max(1, questionTimeLimitSec * 1000);
+  const rawElapsedMs = Math.max(0, submittedAtMs - questionStartedAtMs);
+  const clampedElapsedMs = Math.min(totalDurationMs, rawElapsedMs);
+  const msLeft = Math.max(0, totalDurationMs - clampedElapsedMs);
+
+  const isCorrect =
+    selectedOptionId !== null && selectedOptionId === correctOptionId;
+
+  if (!isCorrect) {
+    return {
+      playerId,
+      isCorrect: false,
+      basePoints: 0,
+      speedBonus: 0,
+      pointsEarned: 0,
+      stepsToMove: INCORRECT_AUTO_MOVE,
+      msLeft,
+      responseTimeMs: clampedElapsedMs,
+    };
+  }
+
+  const rawSpeedBonus = (msLeft / totalDurationMs) * MAX_SPEED_BONUS;
+  const speedBonus = roundToTwo(rawSpeedBonus);
+  const pointsEarned = roundToTwo(BASE_CORRECT_POINTS + speedBonus);
+  const stepsToMove = rngD6();
+
+  return {
+    playerId,
+    isCorrect: true,
+    basePoints: BASE_CORRECT_POINTS,
+    speedBonus,
+    pointsEarned,
+    stepsToMove,
+    msLeft,
+    responseTimeMs: clampedElapsedMs,
+  };
+}
+
+const OPTION_KEYS: OptionChoiceId[] = ["A", "B", "C", "D"];
+
+export function computePostQuestionAnalytics(
+  question: ActiveQuestion | null,
+  players: Player[],
+): PostQuestionAnalytics | null {
+  if (!question) return null;
+
+  const students = players.filter((p) => !p.isHost);
+  const answeredPlayers = students.filter(
+    (p) => p.selectedOptionId !== null && p.selectedOptionId !== "selected",
+  );
+  const totalResponses = students.filter((p) => p.selectedOptionId !== null).length;
+
+  const distribution = OPTION_KEYS.map((key, idx) => {
+    const option = question.options[idx];
+    const rawOptionId = option?.id ?? key;
+    const count = answeredPlayers.filter(
+      (p) => p.selectedOptionId === rawOptionId,
+    ).length;
+    const percentage =
+      answeredPlayers.length > 0
+        ? Math.round((count / answeredPlayers.length) * 100)
+        : 0;
+
+    return {
+      optionId: key,
+      rawOptionId,
+      label: option?.text ?? `ตัวเลือก ${key}`,
+      count,
+      percentage,
+      isCorrect:
+        Boolean(question.correctOptionId) &&
+        rawOptionId === question.correctOptionId,
+    };
+  });
+
+  const startedAtMs = question.startedAt ?? Date.now();
+  const totalDurationMs = Math.max(1, question.timeLimit * 1000);
+
+  const correctResponders = students.filter(
+    (p) =>
+      p.answerState === "correct" ||
+      (question.correctOptionId && p.selectedOptionId === question.correctOptionId),
+  );
+
+  let fastestPlayer: PostQuestionAnalytics["fastestPlayer"] = null;
+  if (correctResponders.length > 0) {
+    const sorted = [...correctResponders].sort((a, b) => {
+      const timeA = a.lastResponseTimeMs ?? ((a.answeredAt ?? Infinity) - startedAtMs);
+      const timeB = b.lastResponseTimeMs ?? ((b.answeredAt ?? Infinity) - startedAtMs);
+      return timeA - timeB;
+    });
+    const fastest = sorted[0];
+    const responseTimeMs =
+      fastest.lastResponseTimeMs ??
+      Math.max(
+        0,
+        Math.min(
+          totalDurationMs,
+          (fastest.answeredAt ?? startedAtMs) - startedAtMs,
+        ),
+      );
+    const msLeft = Math.max(0, totalDurationMs - responseTimeMs);
+    const speedBonus =
+      fastest.lastSpeedBonus ??
+      roundToTwo((msLeft / totalDurationMs) * MAX_SPEED_BONUS);
+
+    fastestPlayer = {
+      playerId: fastest.id,
+      playerName: fastest.name,
+      avatarId: fastest.avatarId,
+      responseTimeMs,
+      speedBonus,
+    };
+  }
+
+  return {
+    questionNumber: question.number,
+    totalResponses,
+    distribution,
+    fastestPlayer,
+  };
+}
+
+export interface GradeNormalizationConfig {
+  questionsPlayed: number;
+  targetGrade: number;
+  finishBonusPts?: number;
+}
+
+/**
+ * Dynamically calculates maxPossibleRawScore based ONLY on `questionsPlayed`:
+ * Max Quiz Pts (25 * questionsPlayed) + Max Board Position Pts (min(100, 1 + 6 * questionsPlayed)) + Finish Bonus (10)
+ */
+export function calculateMaxPossibleRawScore(
+  config: GradeNormalizationConfig,
+): number {
+  const effectiveQuestions = Math.max(1, config.questionsPlayed);
+  const finishBonusPts = config.finishBonusPts ?? FIRST_FINISH_BONUS;
+  const maxQuizPts = effectiveQuestions * (BASE_CORRECT_POINTS + MAX_SPEED_BONUS);
+  const maxBoardPositionPts = Math.min(FINISH_AT, 1 + effectiveQuestions * 6);
+  return roundToTwo(maxQuizPts + maxBoardPositionPts + finishBonusPts);
+}
+
+export function computeNormalizedGrades(
+  players: Array<{
+    playerId: string;
+    name: string;
+    avatarId: Player["avatarId"];
+    score: number;
+    position: number;
+    finishRank?: number | null;
+    finishBonus?: number;
+    quizPoints?: number;
+    correctCount?: number;
+  }>,
+  config: GradeNormalizationConfig,
+): NormalizedGradeRow[] {
+  const maxPossibleRawScore = calculateMaxPossibleRawScore(config);
+  const targetGrade = Math.max(1, config.targetGrade);
+  const finishBonusPts = config.finishBonusPts ?? FIRST_FINISH_BONUS;
+
+  return players.map((p) => {
+    const finishBonus =
+      typeof p.finishBonus === "number"
+        ? p.finishBonus
+        : p.finishRank === 1
+        ? finishBonusPts
+        : 0;
+    const boardPositionScore = p.position;
+    const quizScore =
+      typeof p.quizPoints === "number"
+        ? roundToTwo(p.quizPoints)
+        : roundToTwo(Math.max(0, p.score - boardPositionScore - finishBonus));
+    const rawScore = roundToTwo(p.score);
+    const ratio = maxPossibleRawScore > 0 ? rawScore / maxPossibleRawScore : 0;
+    const normalizedGrade = roundToTwo(
+      Math.min(targetGrade, Math.max(0, ratio * targetGrade)),
+    );
+
+    return {
+      playerId: p.playerId,
+      playerName: p.name,
+      avatarId: p.avatarId,
+      quizScore,
+      boardPositionScore,
+      finishBonus,
+      rawScore,
+      maxPossibleRawScore,
+      targetGrade,
+      normalizedGrade,
+    };
+  });
 }
 
 /* ------------------------------------------------------------------ *

@@ -17,9 +17,13 @@ import {
 } from "../game-data";
 import {
   computeLeaderboard,
+  evaluateQuestionSubmission,
+  FIRST_FINISH_BONUS,
+  INCORRECT_AUTO_MOVE,
   normalizeSpecialsArray,
   resetQuestionStates,
   resolveBoardEffect,
+  roundToTwo,
   toActiveQuestion,
 } from "../game-state";
 import type {
@@ -216,7 +220,12 @@ function syncRoomToHistory(room: ServerRoom): void {
     const playerResults: PlayerReportRow[] = lb.map((entry) => {
       const p = state.players.find((pl) => pl.id === entry.playerId);
       const finishRank = p?.finishRank ?? null;
-      const finishBonus = finishRank ? (state.settings.finishBonuses[finishRank - 1] ?? 0) : 0;
+      const finishBonus =
+        finishRank === 1
+          ? FIRST_FINISH_BONUS
+          : finishRank
+          ? (state.settings.finishBonuses[finishRank - 1] ?? 0)
+          : 0;
       const answered = p?.answeredCount ?? 0;
       const correct = p?.correctCount ?? 0;
       const wrong = p?.wrongCount ?? Math.max(0, answered - correct);
@@ -225,7 +234,7 @@ function syncRoomToHistory(room: ServerRoom): void {
         playerId: entry.playerId,
         name: entry.name,
         avatarId: entry.avatarId,
-        score: entry.score,
+        score: roundToTwo(entry.score),
         position: entry.position,
         isFinished: entry.isFinished,
         finishRank,
@@ -235,6 +244,7 @@ function syncRoomToHistory(room: ServerRoom): void {
         correctCount: correct,
         wrongCount: wrong,
         answeredCount: answered,
+        quizPoints: roundToTwo(p?.quizPoints ?? 0),
         accuracyPercent: answered > 0 ? Math.round((correct / answered) * 100) : null,
       };
     });
@@ -1074,22 +1084,71 @@ export function executeServerGameCommand(
         return { error: "ตัวเลือกคำตอบไม่ถูกต้อง" };
       }
 
-      const isCorrect = submittedOptionId === state.question.correctOptionId;
+      const submittedAtMs = Date.now();
+      const questionStartedAtMs =
+        state.question.startedAt ??
+        submittedAtMs - (state.question.timeLimit - state.question.timeLeft) * 1000;
+
+      const evalResult = evaluateQuestionSubmission({
+        playerId: command.playerId,
+        selectedOptionId: submittedOptionId,
+        correctOptionId: state.question.correctOptionId,
+        questionStartedAtMs,
+        submittedAtMs,
+        questionTimeLimitSec: state.question.timeLimit,
+      });
+
+      const isCorrect = evalResult.isCorrect;
+      let wrongMoveTriggeredFinish = false;
+
       const updatedPlayers = state.players.map((p) => {
         if (p.id !== command.playerId) return p;
         const newCorrect = (p.correctCount ?? 0) + (isCorrect ? 1 : 0);
         const newWrong = (p.wrongCount ?? 0) + (isCorrect ? 0 : 1);
         const newAnswered = (p.answeredCount ?? 0) + 1;
-        const finishBonus = p.finishRank ? (state.settings.finishBonuses[p.finishRank - 1] ?? 0) : 0;
-        const newScore = p.position + (newCorrect * 100) + finishBonus;
+        const newQuizPoints = roundToTwo(
+          (p.quizPoints ?? 0) + evalResult.pointsEarned,
+        );
+
+        // Incorrect answer: 0 pts, auto-move 1 space forward immediately
+        let nextPos = p.position;
+        let nextFinishRank = p.finishRank;
+        if (!isCorrect) {
+          nextPos = Math.min(FINISH_AT, p.position + INCORRECT_AUTO_MOVE);
+          if (nextPos >= FINISH_AT && !nextFinishRank) {
+            nextPos = FINISH_AT;
+            const anyFinishedAlready = state.players.some(
+              (pl) => pl.finishRank !== null,
+            );
+            nextFinishRank = anyFinishedAlready
+              ? state.players.filter((pl) => pl.finishRank !== null).length + 1
+              : 1;
+            wrongMoveTriggeredFinish = true;
+          }
+        }
+
+        const finishBonus =
+          nextFinishRank === 1
+            ? FIRST_FINISH_BONUS
+            : nextFinishRank
+            ? (state.settings.finishBonuses[nextFinishRank - 1] ?? 0)
+            : 0;
+        const newScore = roundToTwo(nextPos + newQuizPoints + finishBonus);
+
         return {
           ...p,
+          position: nextPos,
           selectedOptionId: submittedOptionId,
-          answeredAt: Date.now(),
+          answeredAt: submittedAtMs,
           answerState: isCorrect ? ("correct" as const) : ("wrong" as const),
           answeredCount: newAnswered,
           correctCount: newCorrect,
           wrongCount: newWrong,
+          quizPoints: newQuizPoints,
+          lastSpeedBonus: evalResult.speedBonus,
+          lastResponseTimeMs: evalResult.responseTimeMs,
+          lastRoll: isCorrect ? p.lastRoll : INCORRECT_AUTO_MOVE,
+          finishRank: nextFinishRank,
           score: newScore,
         };
       });
@@ -1098,7 +1157,24 @@ export function executeServerGameCommand(
       const answeredHumans = humanPlayers.filter((p) => p.selectedOptionId !== null).length;
       const answeredTotal = updatedPlayers.filter((p) => p.selectedOptionId !== null).length;
 
-      // Immediately grant roll rights to a student as soon as they answer correctly!
+      // Immediately trigger Game Over if auto-move reached Cell 100
+      if (wrongMoveTriggeredFinish) {
+        room.state = {
+          ...state,
+          gameStatus: "finished",
+          question: state.question ? { ...state.question, revealed: true, timeLeft: 0 } : null,
+          players: updatedPlayers,
+          rollQueue: [],
+          currentPlayerId: null,
+          leaderboard: computeLeaderboard(updatedPlayers),
+          lastEvent: `🏁 ${player.name} เดินหน้า 1 ช่องเข้าเส้นชัยช่อง 100 (+${FIRST_FINISH_BONUS} โบนัส)! จบการแข่งขันทันที`,
+          updatedAt: Date.now(),
+        };
+        syncRoomToHistory(room);
+        return { room, publicState: toPublicGameState(room, command.playerId) };
+      }
+
+      // Immediately grant D6 roll rights to a student as soon as they answer correctly!
       const updatedRollQueue =
         isCorrect && !state.rollQueue.includes(command.playerId)
           ? [...state.rollQueue, command.playerId]
@@ -1112,8 +1188,8 @@ export function executeServerGameCommand(
         currentPlayerId: updatedRollQueue[0] ?? state.currentPlayerId,
         leaderboard: computeLeaderboard(updatedPlayers),
         lastEvent: isCorrect
-          ? `PLAYER · ${player.name} ตอบถูก! (+100 คะแนน) ได้รับสิทธิ์ทอยลูกเต๋าทันที`
-          : `PLAYER · ${player.name} ตอบผิด (${answeredTotal}/${updatedPlayers.length} คน)`,
+          ? `PLAYER · ${player.name} ตอบถูก! (+${evalResult.pointsEarned.toFixed(2)} คะแนน · Speed +${evalResult.speedBonus.toFixed(2)}) ได้สิทธิ์ทอยเต๋า D6`
+          : `PLAYER · ${player.name} ตอบผิด (+0 คะแนน · เดินหน้าอัตโนมัติ 1 ช่อง) (${answeredTotal}/${updatedPlayers.length} คน)`,
         updatedAt: Date.now(),
       };
 
@@ -1325,17 +1401,63 @@ function revealAnswersOnServer(room: ServerRoom): {
   // Preserve anyone already in rollQueue (e.g. bonus roll or not yet rolled) and append newly-correct unrolled players
   const queue = Array.from(new Set([...state.rollQueue, ...unrolledCorrectIds]));
 
+  let timeoutMoveReachedFinish = false;
+  let finishedCount = state.players.filter((pl) => pl.finishRank !== null).length;
+
   const updatedPlayers = state.players.map((p) => {
     const didNotAnswer = p.selectedOptionId === null;
     const newWrong = didNotAnswer ? (p.wrongCount ?? 0) + 1 : (p.wrongCount ?? 0);
     const newAnswered = didNotAnswer ? (p.answeredCount ?? 0) + 1 : (p.answeredCount ?? 0);
+
+    // Unanswered players get 0 pts and auto-move 1 space forward
+    let nextPos = p.position;
+    let nextFinishRank = p.finishRank;
+    if (didNotAnswer && !p.bonusNextTurn) {
+      nextPos = Math.min(FINISH_AT, p.position + INCORRECT_AUTO_MOVE);
+      if (nextPos >= FINISH_AT && !nextFinishRank) {
+        nextPos = FINISH_AT;
+        finishedCount += 1;
+        nextFinishRank = finishedCount;
+        timeoutMoveReachedFinish = true;
+      }
+    }
+
+    const finishBonus =
+      nextFinishRank === 1
+        ? FIRST_FINISH_BONUS
+        : nextFinishRank
+        ? (state.settings.finishBonuses[nextFinishRank - 1] ?? 0)
+        : 0;
+    const newScore = roundToTwo(nextPos + (p.quizPoints ?? 0) + finishBonus);
+
     return {
       ...p,
+      position: nextPos,
+      finishRank: nextFinishRank,
+      score: newScore,
+      answerState: didNotAnswer ? ("wrong" as const) : p.answerState,
       wrongCount: newWrong,
       answeredCount: newAnswered,
       bonusNextTurn: false,
     };
   });
+
+  if (timeoutMoveReachedFinish) {
+    room.state = {
+      ...state,
+      gameStatus: "finished",
+      currentPlayerId: null,
+      question: { ...state.question, revealed: true, timeLeft: 0 },
+      players: updatedPlayers,
+      leaderboard: computeLeaderboard(updatedPlayers),
+      rollQueue: [],
+      activeSpecialEvent: null,
+      lastEvent: `🏁 มีผู้เล่นเข้าเส้นชัยช่อง 100 (+${FIRST_FINISH_BONUS} โบนัส)! จบการแข่งขันทันที`,
+      updatedAt: Date.now(),
+    };
+    syncRoomToHistory(room);
+    return { room, publicState: toPublicGameState(room) };
+  }
 
   // If another player is now in queue to roll, auto-resolve any earlier player's special event so it doesn't block them
   const resolvedSpecialEvent =
@@ -1377,16 +1499,33 @@ function performServerDiceRollAndMove(
   }
 
   const diceValue = nextServerRandomInt(room, state.settings.diceMin, state.settings.diceMax);
-  const path = walkPath(player.position, diceValue, FINISH_AT);
-  const landedPos = path.length > 0 ? path[path.length - 1] : player.position;
 
-  const effect = resolveBoardEffect(
-    landedPos,
-    SNAKES,
-    LADDERS,
-    SPECIAL_CELLS,
-    state.enabledSpecials,
-  );
+  // Module 3: Reaching or exceeding Cell 100 immediately clamps to 100 and triggers Game Over
+  const rawTarget = player.position + diceValue;
+  const path: number[] =
+    rawTarget >= FINISH_AT
+      ? Array.from(
+          { length: Math.max(1, FINISH_AT - player.position) },
+          (_, i) => Math.min(FINISH_AT, player.position + i + 1),
+        )
+      : walkPath(player.position, diceValue, FINISH_AT);
+
+  const landedPos = rawTarget >= FINISH_AT
+    ? FINISH_AT
+    : path.length > 0
+    ? path[path.length - 1]
+    : player.position;
+
+  const effect =
+    landedPos >= FINISH_AT
+      ? null
+      : resolveBoardEffect(
+          landedPos,
+          SNAKES,
+          LADDERS,
+          SPECIAL_CELLS,
+          state.enabledSpecials,
+        );
 
   let finalPos = landedPos;
   let specialEvent: SpecialEventState | null = null;
@@ -1413,7 +1552,7 @@ function performServerDiceRollAndMove(
       bonusRollGranted: false,
     };
   } else if (effect) {
-    finalPos = effect.to;
+    finalPos = Math.min(FINISH_AT, effect.to);
     grantBonusRoll = effect.specialKind === "star";
     grantNextRoundBoost = effect.specialKind === "boost";
     if (effect.specialKind === "shield") {
@@ -1430,7 +1569,7 @@ function performServerDiceRollAndMove(
       avatarId: player.avatarId,
       kind: effect.kind === "special" ? (effect.specialKind ?? "star") : effect.kind,
       from: effect.from,
-      to: effect.to,
+      to: finalPos,
       title: effect.label,
       description: effect.description,
       resolved: false,
@@ -1438,22 +1577,32 @@ function performServerDiceRollAndMove(
     };
   }
 
-  // Check if player reached Finish (100)
-  let newFinishRank = player.finishRank;
-  let finishBonus = newFinishRank ? (state.settings.finishBonuses[newFinishRank - 1] ?? 0) : 0;
-  if (finalPos === FINISH_AT && !newFinishRank) {
-    newFinishRank = state.players.filter((p) => p.finishRank !== null).length + 1;
-    finishBonus = state.settings.finishBonuses[newFinishRank - 1] ?? 0;
+  // Module 3: Game End Condition — Immediately trigger Game Over when ANY player reaches/exceeds Cell 100
+  const reachedFinishNow = finalPos >= FINISH_AT;
+  if (reachedFinishNow) {
+    finalPos = FINISH_AT;
   }
+
+  let newFinishRank = player.finishRank;
+  if (reachedFinishNow && !newFinishRank) {
+    newFinishRank = state.players.filter((p) => p.finishRank !== null).length + 1;
+  }
+  const finishBonus =
+    newFinishRank === 1
+      ? FIRST_FINISH_BONUS
+      : newFinishRank
+      ? (state.settings.finishBonuses[newFinishRank - 1] ?? 0)
+      : 0;
 
   const updatedPlayers = state.players.map((p) => {
     if (p.id !== player.id) return p;
-    const correctPoints = (p.correctCount ?? 0) * 100;
-    const newScore = finalPos + finishBonus + correctPoints + gemPointsAwarded;
+    const accumulatedQuizPts = roundToTwo((p.quizPoints ?? 0) + gemPointsAwarded);
+    const newScore = roundToTwo(finalPos + finishBonus + accumulatedQuizPts);
 
     return {
       ...p,
       position: finalPos,
+      quizPoints: accumulatedQuizPts,
       score: newScore,
       lastRoll: diceValue,
       finishRank: newFinishRank,
@@ -1467,16 +1616,20 @@ function performServerDiceRollAndMove(
     };
   });
 
-  // Update Roll Queue: if STAR bonus roll was granted, player stays at front of rollQueue!
-  const nextQueue = grantBonusRoll
+  // Update Roll Queue: if game ended at 100, clear queue immediately; if STAR bonus roll was granted, player stays at front
+  const nextQueue = reachedFinishNow
+    ? []
+    : grantBonusRoll
     ? state.rollQueue
     : state.rollQueue.filter((id) => id !== player.id);
 
   const fullPath =
-    effect && effect.to !== landedPos ? [...path, effect.to] : path;
+    effect && effect.to !== landedPos ? [...path, finalPos] : path;
 
   const isQuestionStillOpen = Boolean(state.question && !state.question.revealed);
-  const nextStatus = specialEvent
+  const nextStatus = reachedFinishNow
+    ? "finished"
+    : specialEvent
     ? "special_event"
     : isQuestionStillOpen
     ? "answering"
@@ -1484,10 +1637,10 @@ function performServerDiceRollAndMove(
     ? "dice"
     : "reveal";
 
-  const eventSummary = specialEvent
+  const eventSummary = reachedFinishNow
+    ? `${player.name} ทอยได้ ${diceValue} → 🏁 เข้าเส้นชัยช่อง 100 เป็นคนแรก (+${finishBonus} โบนัส)! จบการแข่งขันทันที`
+    : specialEvent
     ? `${player.name} ทอยได้ ${diceValue} → ช่อง ${landedPos} (${specialEvent.title})`
-    : finalPos === FINISH_AT
-    ? `${player.name} ทอยได้ ${diceValue} → 🏁 เข้าเส้นชัยช่อง 100 อันดับที่ ${newFinishRank}!`
     : `${player.name} ทอยได้ ${diceValue} → เดินไปช่อง ${finalPos}`;
 
   room.state = {
@@ -1504,13 +1657,19 @@ function performServerDiceRollAndMove(
     movingPlayerId: player.id,
     movement: {
       playerId: player.id,
-      kind: effect ? (effect.kind === "special" ? "special" : effect.kind) : "walk",
+      kind: reachedFinishNow
+        ? "finish"
+        : effect
+        ? effect.kind === "special"
+          ? "special"
+          : effect.kind
+        : "walk",
       from: player.position,
       to: finalPos,
-      step: fullPath.length - 1,
+      step: Math.max(0, fullPath.length - 1),
       path: fullPath,
     },
-    activeSpecialEvent: specialEvent,
+    activeSpecialEvent: reachedFinishNow ? null : specialEvent,
     rollQueue: nextQueue,
     currentPlayerId: nextQueue[0] ?? null,
     lastEvent: `DICE · ${eventSummary}`,

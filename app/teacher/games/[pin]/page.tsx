@@ -4,7 +4,13 @@ import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useTeacherAuth } from "@/lib/hooks/useTeacherAuth";
-import { createInitialGameState, canTeacherAdvance } from "@/lib/game-state";
+import {
+  createInitialGameState,
+  canTeacherAdvance,
+  computePostQuestionAnalytics,
+  computeNormalizedGrades,
+  calculateMaxPossibleRawScore,
+} from "@/lib/game-state";
 import { createProductionTransport, type GameStateTransport } from "@/lib/transport";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -37,6 +43,9 @@ import {
   QrCode,
   ArrowRight,
   Eye,
+  Zap,
+  AlertTriangle,
+  BarChart3,
 } from "lucide-react";
 
 export default function TeacherLiveControllerPage() {
@@ -80,6 +89,8 @@ export default function TeacherLiveControllerPage() {
   );
   const [commandBusy, setCommandBusy] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(true);
+  const [showEndConfirmModal, setShowEndConfirmModal] = useState(false);
+  const [targetGrade, setTargetGrade] = useState<number>(10);
 
   // Auto open summary modal when game finishes
   useEffect(() => {
@@ -210,6 +221,32 @@ export default function TeacherLiveControllerPage() {
       ? state.players.find((p) => p.id === state.rollQueue[0]) ?? null
       : null;
 
+  const postQuestionAnalytics = computePostQuestionAnalytics(
+    state.question,
+    state.players,
+  );
+  const questionsPlayed = Math.max(1, state.round);
+  const maxPossibleRawScore = calculateMaxPossibleRawScore({
+    questionsPlayed,
+    targetGrade,
+  });
+  const normalizedGradeRows = computeNormalizedGrades(
+    state.players.map((p) => ({
+      playerId: p.id,
+      name: p.name,
+      avatarId: p.avatarId,
+      score: p.score,
+      position: p.position,
+      finishRank: p.finishRank,
+      quizPoints: p.quizPoints,
+      correctCount: p.correctCount,
+    })),
+    { questionsPlayed, targetGrade },
+  );
+  const gradeByPlayerId = new Map(
+    normalizedGradeRows.map((g) => [g.playerId, g]),
+  );
+
   return (
     <div
       className={`min-h-screen font-body flex flex-col ${
@@ -296,10 +333,10 @@ export default function TeacherLiveControllerPage() {
                 variant="destructive"
                 size="sm"
                 disabled={commandBusy}
-                onClick={() => sendTeacherCommand({ type: "END_GAME" })}
+                onClick={() => setShowEndConfirmModal(true)}
                 iconLeft={<XCircle className="w-4 h-4" />}
               >
-                จบเกม
+                จบเกมทันที
               </Button>
             )}
 
@@ -670,6 +707,111 @@ export default function TeacherLiveControllerPage() {
                     );
                   })}
                 </div>
+
+                {/* Module 2: Post-Question State — A/B/C/D Vote Distribution Bar Chart & Fastest Player */}
+                {state.question.revealed && postQuestionAnalytics && (
+                  <div className="pt-3 border-t border-white/15 space-y-3">
+                    {/* Fastest Player Highlight */}
+                    <div className="rounded-2xl bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/20 border border-amber-400/40 p-3 flex items-center justify-between gap-3">
+                      {postQuestionAnalytics.fastestPlayer ? (
+                        <>
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0">
+                              <Zap className="w-4 h-4 fill-current" />
+                            </div>
+                            <Avatar
+                              avatarId={postQuestionAnalytics.fastestPlayer.avatarId}
+                              size="xs"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-display font-bold uppercase tracking-wider text-amber-300">
+                                ⚡ ตอบถูกเร็วที่สุด (Fastest Player)
+                              </p>
+                              <p className="font-display font-extrabold text-sm text-white truncate">
+                                {postQuestionAnalytics.fastestPlayer.playerName}
+                              </p>
+                            </div>
+                          </div>
+                          <Badge variant="gold" size="sm">
+                            {(
+                              postQuestionAnalytics.fastestPlayer.responseTimeMs /
+                              1000
+                            ).toFixed(2)}
+                            s · +
+                            {postQuestionAnalytics.fastestPlayer.speedBonus.toFixed(
+                              2,
+                            )}{" "}
+                            Speed Pts
+                          </Badge>
+                        </>
+                      ) : (
+                        <p className="text-xs font-display font-semibold text-amber-200">
+                          ไม่มีผู้ตอบถูกในข้อนี้ · นักเรียนทุกคนเดินหน้าอัตโนมัติ 1 ช่อง
+                        </p>
+                      )}
+                    </div>
+
+                    {/* A, B, C, D Vote Distribution Bar Chart */}
+                    <div className="rounded-2xl bg-slate-900/75 border border-white/10 p-3.5 space-y-2.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-display font-bold text-blue-200 flex items-center gap-1.5">
+                          <BarChart3 className="w-4 h-4 text-amber-400" />
+                          <span>สัดส่วนการเลือกคำตอบ A, B, C, D</span>
+                        </span>
+                        <span className="text-blue-300/80 font-mono">
+                          ตอบแล้ว {postQuestionAnalytics.totalResponses} คน
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-2.5 pt-1">
+                        {postQuestionAnalytics.distribution.map((item) => (
+                          <div
+                            key={item.optionId}
+                            className="flex flex-col items-center"
+                          >
+                            <div className="mb-1 text-center font-mono text-[11px]">
+                              <span className="font-bold text-white">
+                                {item.count}
+                              </span>
+                              <span className="text-blue-300/80 ml-0.5">
+                                ({item.percentage}%)
+                              </span>
+                            </div>
+
+                            <div className="relative flex h-24 w-full max-w-[48px] items-end justify-center overflow-hidden rounded-t-xl bg-slate-800/90 p-1 border border-white/5">
+                              <div
+                                style={{
+                                  height: `${Math.max(
+                                    item.percentage,
+                                    item.count > 0 ? 10 : 0,
+                                  )}%`,
+                                }}
+                                className={`w-full rounded-t-lg transition-all duration-500 ${
+                                  item.isCorrect
+                                    ? "bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.45)]"
+                                    : "bg-blue-400/80"
+                                }`}
+                              />
+                            </div>
+
+                            <div
+                              className={`mt-1.5 flex w-full items-center justify-center gap-1 rounded-lg px-1.5 py-1 text-xs font-display font-bold ${
+                                item.isCorrect
+                                  ? "bg-emerald-500/30 text-emerald-200 border border-emerald-400/50"
+                                  : "bg-white/10 text-blue-100"
+                              }`}
+                            >
+                              <span>{item.optionId}</span>
+                              {item.isCorrect && (
+                                <CheckCircle2 className="w-3 h-3 text-emerald-300" />
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -788,20 +930,94 @@ export default function TeacherLiveControllerPage() {
             />
           </div>
 
-          {/* Full Leaderboard Table */}
-          <div className="space-y-2">
-            <h4 className="font-display font-bold text-sm text-slate-700 flex items-center justify-between">
-              <span>📊 สรุปอันดับและคะแนนนักเรียนทุกคน ({state.players.length} คน)</span>
-              <span className="text-xs font-normal text-slate-500">
-                คะแนนคำนวณจาก: ตำแหน่งช่อง + จำนวนข้อที่ตอบถูก + โบนัสเข้าเส้นชัย
-              </span>
-            </h4>
-            <div className="max-h-[340px] overflow-y-auto pr-1">
+          {/* Full Leaderboard Table + Dynamic Normalized Grade */}
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3">
+              <div>
+                <h4 className="font-display font-bold text-sm text-slate-800">
+                  📐 คำนวณคะแนนเก็บสุทธิ (Dynamic Grade Normalization)
+                </h4>
+                <p className="text-xs text-slate-500">
+                  คิดจากจำนวนข้อที่เล่นจริง ({questionsPlayed} ข้อ) · คะแนนดิบสูงสุดที่เป็นไปได้ ={" "}
+                  <strong className="font-mono text-blue-700">
+                    {maxPossibleRawScore}
+                  </strong>{" "}
+                  คะแนน
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <label
+                  htmlFor="target-grade-input"
+                  className="text-xs font-display font-bold text-slate-700"
+                >
+                  คะแนนเต็ม (Target Grade):
+                </label>
+                <input
+                  id="target-grade-input"
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={targetGrade}
+                  onChange={(e) =>
+                    setTargetGrade(Math.max(1, Number(e.target.value) || 10))
+                  }
+                  className="w-20 px-2.5 py-1.5 rounded-xl border border-slate-300 bg-white font-mono font-bold text-sm text-slate-900 text-center"
+                />
+              </div>
+            </div>
+
+            <div className="max-h-[340px] overflow-y-auto pr-1 space-y-2">
               <Leaderboard
                 entries={state.leaderboard}
                 mode="full"
                 theme="light"
               />
+              {normalizedGradeRows.length > 0 && (
+                <div className="rounded-2xl border border-slate-200 overflow-hidden mt-3">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-200 font-display font-bold text-slate-600">
+                        <th className="py-2 px-3">ชื่อนักเรียน</th>
+                        <th className="py-2 px-3 text-right">คะแนนคำถาม</th>
+                        <th className="py-2 px-3 text-right">ตำแหน่งช่อง</th>
+                        <th className="py-2 px-3 text-right">โบนัสเส้นชัย</th>
+                        <th className="py-2 px-3 text-right">คะแนนดิบรวม</th>
+                        <th className="py-2 px-3 text-right text-blue-700">
+                          เกรดสุทธิ (/{targetGrade})
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {state.leaderboard.map((entry) => {
+                        const g = gradeByPlayerId.get(entry.playerId);
+                        if (!g) return null;
+                        return (
+                          <tr key={entry.playerId} className="hover:bg-slate-50">
+                            <td className="py-2 px-3 font-display font-bold text-slate-800">
+                              #{entry.rank} {g.playerName}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-slate-700">
+                              {g.quizScore.toFixed(2)}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-slate-700">
+                              {g.boardPositionScore}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-emerald-600 font-bold">
+                              +{g.finishBonus}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
+                              {g.rawScore.toFixed(2)} / {g.maxPossibleRawScore}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono font-extrabold text-sm text-blue-700">
+                              {g.normalizedGrade.toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
 
@@ -829,6 +1045,49 @@ export default function TeacherLiveControllerPage() {
                 </Button>
               </Link>
             </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Module 2: Force End Game Confirmation Modal */}
+      <Modal
+        isOpen={showEndConfirmModal}
+        onClose={() => setShowEndConfirmModal(false)}
+        title="ยืนยันการจบเกมทันที (Force End Game)"
+        description="คุณต้องการยุติการแข่งขันและสรุปคะแนนของนักเรียนทุกคนจากจำนวนข้อที่เล่นไปแล้วใช่หรือไม่?"
+        theme="light"
+        size="md"
+        showClose={true}
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm">
+            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              ระบบจะหยุดเกมทันทีและคำนวณเกรดสุทธิ (Normalized Grade) โดยอ้างอิงจากจำนวนข้อที่เล่นจริง ({questionsPlayed} ข้อ) เท่านั้น นักเรียนจะไม่เสียเปรียบจากข้อที่ยังไม่ได้เล่น
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2.5 pt-2">
+            <Button
+              variant="secondary"
+              size="md"
+              disabled={commandBusy}
+              onClick={() => setShowEndConfirmModal(false)}
+            >
+              ยกเลิก
+            </Button>
+            <Button
+              variant="destructive"
+              size="md"
+              disabled={commandBusy}
+              onClick={async () => {
+                setShowEndConfirmModal(false);
+                await sendTeacherCommand({ type: "END_GAME" });
+              }}
+              iconLeft={<XCircle className="w-4 h-4" />}
+            >
+              ยืนยันจบเกมทันที
+            </Button>
           </div>
         </div>
       </Modal>
