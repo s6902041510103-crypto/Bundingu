@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { deleteServerRoom } from "@/lib/server/game-engine";
+import { deleteRoomFromRedis } from "@/lib/server/redis";
 import {
+  flushStoreToRedis,
   getGameHistoryByPinOrId,
   listGameHistory,
-  verifyTeacherSessionToken,
+  overwriteLocalStoreFromRedis,
+  resolveTeacherSession,
+  syncStoreFromRedis,
 } from "@/lib/server/repository";
 
 export async function GET(request: Request) {
+  await syncStoreFromRedis();
+
   const { searchParams } = new URL(request.url);
   const pinOrId = searchParams.get("id") || searchParams.get("pin");
 
@@ -21,20 +27,43 @@ export async function GET(request: Request) {
 
   const cookieStore = await cookies();
   const token = cookieStore.get("ks_teacher_token")?.value;
-  const session = verifyTeacherSessionToken(token);
+  const teacherIdHeader = request.headers.get("x-teacher-id");
+  const teacherEmailHeader = request.headers.get("x-teacher-email");
+
+  const session = resolveTeacherSession({
+    token,
+    teacherId: teacherIdHeader,
+    email: teacherEmailHeader,
+  });
 
   if (!session) {
     return NextResponse.json({ history: [] });
   }
 
   const history = listGameHistory(session.teacherId);
-  return NextResponse.json({ history });
+  const response = NextResponse.json({ history });
+  response.cookies.set("ks_teacher_token", session.token, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+  return response;
 }
 
 export async function DELETE(request: Request) {
+  await overwriteLocalStoreFromRedis();
+
   const cookieStore = await cookies();
   const token = cookieStore.get("ks_teacher_token")?.value;
-  const session = verifyTeacherSessionToken(token);
+  const teacherIdHeader = request.headers.get("x-teacher-id");
+  const teacherEmailHeader = request.headers.get("x-teacher-email");
+
+  const session = resolveTeacherSession({
+    token,
+    teacherId: teacherIdHeader,
+    email: teacherEmailHeader,
+  });
 
   if (!session) {
     return NextResponse.json(
@@ -53,6 +82,11 @@ export async function DELETE(request: Request) {
   }
 
   const deleted = deleteServerRoom(pinOrId, session.teacherId);
+  await Promise.all([
+    deleteRoomFromRedis(pinOrId),
+    flushStoreToRedis(),
+  ]);
+
   if (!deleted) {
     return NextResponse.json(
       { error: "ไม่พบห้องเกมที่ต้องการลบ หรือไม่มีสิทธิ์ลบห้องนี้" },
@@ -60,5 +94,12 @@ export async function DELETE(request: Request) {
     );
   }
 
-  return NextResponse.json({ ok: true, deleted: true });
+  const response = NextResponse.json({ ok: true, deleted: true });
+  response.cookies.set("ks_teacher_token", session.token, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+  return response;
 }

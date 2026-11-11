@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import os from "os";
+import { getStoreFromRedis, saveStoreToRedis } from "./redis";
 import { QUESTIONS, MOCK_PLAYERS } from "../game-data";
 import type {
   AvatarId,
@@ -181,6 +182,116 @@ export function getStorageAdapter(): StorageAdapter {
   return globalForRepo.__ksStorageAdapter;
 }
 
+/**
+ * Synchronize the local store with Upstash Redis before reading in serverless routes.
+ * Merges questions, history, teachers, and sessions so no data is lost across Vercel containers.
+ */
+export async function syncStoreFromRedis(): Promise<StorageSchema> {
+  const adapter = getStorageAdapter();
+  const local = adapter.read();
+  if (process.env.KS_TEST_MODE === "1") {
+    return local;
+  }
+
+  try {
+    const remote = await getStoreFromRedis();
+    if (!remote) {
+      return local;
+    }
+
+    // Merge questions by id (prefer newer or remote custom questions)
+    const questionMap = new Map<string, Question>();
+    for (const q of local.questions || []) {
+      questionMap.set(q.id, q);
+    }
+    for (const q of remote.questions || []) {
+      questionMap.set(q.id, q);
+    }
+    // If remote had deleted a default question or custom question, respect remote list if remote has questions
+    const mergedQuestions =
+      Array.isArray(remote.questions) && remote.questions.length > 0
+        ? Array.from(
+            new Map(
+              [...remote.questions, ...local.questions.filter((lq) => !remote.questions.some((rq) => rq.id === lq.id) && (lq.createdAt ?? 0) > Date.now() - 10000)].map((q) => [q.id, q]),
+            ).values(),
+          )
+        : Array.from(questionMap.values());
+
+    // Merge history by pin (prefer remote or newer createdAt/finishedAt)
+    const historyMap = new Map<string, GameHistoryRecord>();
+    for (const h of remote.history || []) {
+      if (h && h.pin) historyMap.set(h.pin.toUpperCase(), h);
+    }
+    for (const h of local.history || []) {
+      if (h && h.pin) {
+        const key = h.pin.toUpperCase();
+        const existing = historyMap.get(key);
+        if (!existing || (h.finishedAt ?? h.createdAt ?? 0) > (existing.finishedAt ?? existing.createdAt ?? 0)) {
+          historyMap.set(key, h);
+        }
+      }
+    }
+    const mergedHistory = Array.from(historyMap.values()).sort(
+      (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0),
+    );
+
+    // Merge teachers by email
+    const teacherMap = new Map<string, TeacherAccount>();
+    for (const t of [...(local.teachers || []), ...(remote.teachers || [])]) {
+      if (t && t.email) {
+        teacherMap.set(t.email.toLowerCase(), t);
+      }
+    }
+
+    // Merge active sessions by token
+    const now = Date.now();
+    const sessionMap = new Map<string, TeacherSession>();
+    for (const s of [...(remote.sessions || []), ...(local.sessions || [])]) {
+      if (s && s.token && s.expiresAt > now) {
+        sessionMap.set(s.token, s);
+      }
+    }
+
+    const merged: StorageSchema = {
+      questions: mergedQuestions,
+      history: mergedHistory,
+      teachers: Array.from(teacherMap.values()),
+      sessions: Array.from(sessionMap.values()).slice(0, 50),
+    };
+
+    adapter.write(merged);
+    return merged;
+  } catch {
+    return local;
+  }
+}
+
+  /**
+   *Directly overwrite local cache from an authoritative remote store (e.g. after delete in Redis)
+   */
+export async function overwriteLocalStoreFromRedis(): Promise<StorageSchema> {
+  const adapter = getStorageAdapter();
+  const local = adapter.read();
+  if (process.env.KS_TEST_MODE === "1") return local;
+  try {
+    const remote = await getStoreFromRedis();
+    if (remote && Array.isArray(remote.questions) && Array.isArray(remote.history)) {
+      adapter.write(remote);
+      return remote;
+    }
+  } catch {}
+  return local;
+}
+export async function flushStoreToRedis(): Promise<void> {
+  if (process.env.KS_TEST_MODE === "1") return;
+  try {
+    const store = getStorageAdapter().read();
+    await saveStoreToRedis(store);
+  } catch {
+    // ignore
+  }
+}
+
 /* ------------------------------------------------------------------ *
  * Question Repository
  * ------------------------------------------------------------------ */
@@ -231,11 +342,7 @@ export function listQuestions(filters?: {
   let items = [...store.questions];
 
   if (filters?.teacherId) {
-    if (process.env.KS_TEST_MODE === "1") {
-      items = items.filter((q) => !q.teacherId || q.teacherId === filters.teacherId);
-    } else {
-      items = items.filter((q) => q.teacherId === filters.teacherId);
-    }
+    items = items.filter((q) => !q.teacherId || q.teacherId === filters.teacherId);
   }
 
   if (filters?.subject && filters.subject !== "ทั้งหมด" && filters.subject !== "all") {
@@ -340,7 +447,9 @@ export function deleteQuestionRecord(id: string): { deleted: boolean; error?: st
 export function listGameHistory(teacherId?: string): GameHistoryRecord[] {
   const store = getStorageAdapter().read();
   const list = teacherId
-    ? store.history.filter((h) => h.teacherId === teacherId)
+    ? store.history.filter(
+        (h) => !h.teacherId || h.teacherId === teacherId || h.teacherId === "teacher-default",
+      )
     : [...store.history];
   return list.sort((a, b) => b.createdAt - a.createdAt);
 }

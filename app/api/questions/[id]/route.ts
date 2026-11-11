@@ -2,14 +2,19 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
   deleteQuestionRecord,
-  updateQuestionRecord,
+  flushStoreToRedis,
+  overwriteLocalStoreFromRedis,
   resolveTeacherSession,
+  syncStoreFromRedis,
+  updateQuestionRecord,
 } from "@/lib/server/repository";
 
 export async function PUT(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  await syncStoreFromRedis();
+
   const cookieStore = await cookies();
   const token = cookieStore.get("ks_teacher_token")?.value;
   const teacherIdHeader = request.headers.get("x-teacher-id");
@@ -51,6 +56,8 @@ export async function PUT(
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
+    await flushStoreToRedis();
+
     const response = NextResponse.json({ ok: true, question: result.question });
     response.cookies.set("ks_teacher_token", session.token, {
       httpOnly: true,
@@ -71,6 +78,8 @@ export async function DELETE(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  await overwriteLocalStoreFromRedis();
+
   const cookieStore = await cookies();
   const token = cookieStore.get("ks_teacher_token")?.value;
   const teacherIdHeader = request.headers.get("x-teacher-id");
@@ -94,6 +103,8 @@ export async function DELETE(
   if (!result.deleted) {
     return NextResponse.json({ error: result.error }, { status: 404 });
   }
+
+  await flushStoreToRedis();
 
   return NextResponse.json({ ok: true });
 }

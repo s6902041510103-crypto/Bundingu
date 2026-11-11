@@ -531,11 +531,11 @@ export function deleteServerRoom(pin: string, teacherId?: string): boolean {
   const map = getRoomMap();
   const normalized = String(pin ?? "").trim().toUpperCase();
   const room = map.get(normalized);
-  if (room && (!teacherId || room.teacherId === teacherId)) {
+  if (room) {
     map.delete(normalized);
   }
   deleteRoomFromDisk(normalized);
-  const deletedFromStore = deleteGameHistoryRecord(normalized, teacherId);
+  const deletedFromStore = deleteGameHistoryRecord(normalized);
   return Boolean(room || deletedFromStore);
 }
 
@@ -559,7 +559,9 @@ export function listActiveServerRooms(teacherId?: string): ServerRoom[] {
 
   const rooms = Array.from(map.values());
   if (teacherId) {
-    return rooms.filter((r) => r.teacherId === teacherId);
+    return rooms.filter(
+      (r) => !r.teacherId || r.teacherId === teacherId || r.teacherId === "teacher-default",
+    );
   }
   return rooms;
 }
@@ -1520,7 +1522,7 @@ function performServerDiceRollAndMove(
 }
 
 /**
- * Asynchronously fetch room from Upstash Redis and update in-memory cache if newer
+ * Asynchronously fetch room from Upstash Redis and update in-memory cache + history if newer
  */
 export async function syncRoomWithRedis(pin: string): Promise<ServerRoom | null> {
   const normalized = String(pin ?? "").trim().toUpperCase();
@@ -1531,8 +1533,10 @@ export async function syncRoomWithRedis(pin: string): Promise<ServerRoom | null>
     const current = map.get(normalized);
     if (!current || (redisRoom.state.updatedAt ?? 0) >= (current.state.updatedAt ?? 0)) {
       map.set(normalized, redisRoom);
+      syncRoomToHistory(redisRoom);
       return redisRoom;
     }
+    return current;
   }
   return null;
 }

@@ -5,15 +5,21 @@ import {
   createRoomOnServer,
   deleteServerRoom,
   listActiveServerRooms,
+  syncRoomWithRedis,
   toPublicGameState,
 } from "@/lib/server/game-engine";
 import {
+  flushStoreToRedis,
   listGameHistory,
   listQuestions,
+  overwriteLocalStoreFromRedis,
   resolveTeacherSession,
+  syncStoreFromRedis,
 } from "@/lib/server/repository";
 
 export async function GET(request: Request) {
+  await syncStoreFromRedis();
+
   const cookieStore = await cookies();
   const token = cookieStore.get("ks_teacher_token")?.value;
   const teacherIdHeader = request.headers.get("x-teacher-id");
@@ -33,15 +39,25 @@ export async function GET(request: Request) {
     });
   }
 
+  const history = listGameHistory(session.teacherId);
+
+  // Sync any recent active rooms from Redis so dashboard always shows live rooms across containers
+  const recentActiveCandidates = history
+    .filter((h) => h.status === "lobby" || h.status === "playing")
+    .slice(0, 5);
+  await Promise.all(
+    recentActiveCandidates.map((h) => syncRoomWithRedis(h.pin)),
+  );
+
   const questions = listQuestions({ teacherId: session.teacherId });
   const activeRooms = listActiveServerRooms(session.teacherId).map((r) =>
     toPublicGameState(r),
   );
-  const history = listGameHistory(session.teacherId);
+  const updatedHistory = listGameHistory(session.teacherId);
 
   const response = NextResponse.json({
     activeRooms,
-    history,
+    history: updatedHistory,
     questionsCount: questions.length,
   });
   response.cookies.set("ks_teacher_token", session.token, {
@@ -54,6 +70,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  await syncStoreFromRedis();
+
   const cookieStore = await cookies();
   const token = cookieStore.get("ks_teacher_token")?.value;
   const teacherIdHeader = request.headers.get("x-teacher-id");
@@ -100,7 +118,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: result.error || "สร้างเกมไม่สำเร็จ" }, { status: 400 });
     }
 
-    await saveRoomToRedis(result.room);
+    await Promise.all([
+      saveRoomToRedis(result.room),
+      flushStoreToRedis(),
+    ]);
 
     const response = NextResponse.json(
       {
@@ -117,7 +138,7 @@ export async function POST(request: Request) {
       maxAge: 60 * 60 * 24 * 7,
     });
     return response;
-  } catch (err) {
+  } catch {
     return NextResponse.json(
       { error: "ข้อมูลการสร้างเกมไม่ถูกต้อง" },
       { status: 400 },
@@ -126,6 +147,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  await overwriteLocalStoreFromRedis();
+
   const cookieStore = await cookies();
   const token = cookieStore.get("ks_teacher_token")?.value;
   const teacherIdHeader = request.headers.get("x-teacher-id");
@@ -154,14 +177,17 @@ export async function DELETE(request: Request) {
   }
 
   const deleted = deleteServerRoom(pinOrId, session.teacherId);
+  await Promise.all([
+    deleteRoomFromRedis(pinOrId),
+    flushStoreToRedis(),
+  ]);
+
   if (!deleted) {
     return NextResponse.json(
       { error: "ไม่พบห้องเกมที่ต้องการลบ หรือไม่มีสิทธิ์ลบห้องนี้" },
       { status: 404 },
     );
-  } 
-
-  await deleteRoomFromRedis(pinOrId);
+  }
 
   const response = NextResponse.json({ success: true, ok: true, deleted: true });
   response.cookies.set("ks_teacher_token", session.token, {

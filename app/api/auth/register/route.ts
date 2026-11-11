@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
-import { registerTeacherAccount } from "@/lib/server/repository";
+import {
+  flushStoreToRedis,
+  registerTeacherAccount,
+  syncStoreFromRedis,
+} from "@/lib/server/repository";
 
 export async function POST(request: Request) {
   try {
+    await syncStoreFromRedis();
+
     const body = await request.json();
     const name = String(body?.name ?? "").trim();
     const email = String(body?.email ?? "").trim();
@@ -30,6 +36,8 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    await flushStoreToRedis();
 
     const { session } = result;
     const response = NextResponse.json({

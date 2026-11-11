@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { executeServerGameCommand, syncRoomWithRedis } from "@/lib/server/game-engine";
 import { saveRoomToRedis } from "@/lib/server/redis";
-import { resolveTeacherSession } from "@/lib/server/repository";
+import {
+  flushStoreToRedis,
+  resolveTeacherSession,
+  syncStoreFromRedis,
+} from "@/lib/server/repository";
 import type { ServerGameCommand } from "@/lib/types";
 
 export async function POST(
@@ -15,25 +19,34 @@ export async function POST(
   const teacherIdHeader = request.headers.get("x-teacher-id");
   const teacherEmailHeader = request.headers.get("x-teacher-email");
 
-  const session = resolveTeacherSession({
-    token,
-    teacherId: teacherIdHeader,
-    email: teacherEmailHeader,
-  });
-
   try {
-    await syncRoomWithRedis(pin);
     const command = (await request.json()) as ServerGameCommand;
+
+    // For non-tick commands, ensure persistent store is synced from Redis
+    if (command.type !== "TIMER_TICK") {
+      await syncStoreFromRedis();
+    }
+
+    const session = resolveTeacherSession({
+      token,
+      teacherId: teacherIdHeader,
+      email: teacherEmailHeader,
+    });
+
+    await syncRoomWithRedis(pin);
     const result = executeServerGameCommand(pin, command, {
       isTeacherAuthenticated: Boolean(session),
     });
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 400 });
-    } 
+    }
 
     if (result.room) {
       await saveRoomToRedis(result.room);
+      if (command.type !== "TIMER_TICK") {
+        await flushStoreToRedis();
+      }
     }
 
     const response = NextResponse.json({

@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { resolveTeacherSession } from "@/lib/server/repository";
+import {
+  flushStoreToRedis,
+  resolveTeacherSession,
+  syncStoreFromRedis,
+} from "@/lib/server/repository";
 
 export async function GET(request: Request) {
+  await syncStoreFromRedis();
+
   const cookieStore = await cookies();
   const token = cookieStore.get("ks_teacher_token")?.value;
   const teacherIdHeader = request.headers.get("x-teacher-id");
@@ -17,6 +23,8 @@ export async function GET(request: Request) {
   if (!session) {
     return NextResponse.json({ authenticated: false, teacher: null }, { status: 401 });
   }
+
+  await flushStoreToRedis();
 
   const response = NextResponse.json({
     authenticated: true,

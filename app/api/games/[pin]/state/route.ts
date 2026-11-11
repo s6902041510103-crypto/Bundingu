@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerRoom, syncRoomWithRedis, toPublicGameState } from "@/lib/server/game-engine";
+import { syncStoreFromRedis } from "@/lib/server/repository";
 
 export async function GET(
   request: Request,
@@ -9,7 +10,10 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const playerId = searchParams.get("playerId");
 
-  await syncRoomWithRedis(pin);
+  const redisRoom = await syncRoomWithRedis(pin);
+  if (!redisRoom) {
+    await syncStoreFromRedis();
+  }
   const room = getServerRoom(pin);
   if (!room) {
     return NextResponse.json(

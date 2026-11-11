@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
-import { authenticateTeacherAccount } from "@/lib/server/repository";
+import {
+  authenticateTeacherAccount,
+  flushStoreToRedis,
+  syncStoreFromRedis,
+} from "@/lib/server/repository";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(request: Request) {
   try {
+    await syncStoreFromRedis();
+
     const body = await request.json();
     const email = String(body?.email ?? "").trim();
     const password = String(body?.password ?? "");
@@ -39,6 +45,8 @@ export async function POST(request: Request) {
         { status: 401 },
       );
     }
+
+    await flushStoreToRedis();
 
     const session = authResult.session;
 
